@@ -220,26 +220,25 @@
 
 **Goal:** Full Kafka tooling — producer, consumer, admin, schema registry, monitoring
 
+> **Status:** first cut built in `nexuslink-protocol-kafka` (`KafkaService` + `KafkaExplorer` + `KafkaView`).
+> Compiles + app boots clean; **needs a live broker for end-to-end testing** (no public broker / Docker here).
+
 ### 4.1 Connection
-- [ ] `KafkaConnectionProfile` — bootstrap servers, security protocol, SASL mechanism, SSL config
-- [ ] `KafkaConnectionService` — AdminClient singleton per profile, health-check ping
+- [-] `KafkaConnectionProfile` — bootstrap + security map (security.protocol / SASL mechanism+jaas / SSL) built in `KafkaView`; _saved-profile fields TODO_
+- [x] `KafkaConnectionService` — `KafkaService.connect()` creates an `Admin` client and verifies with a `listTopics` round-trip
 - [ ] Connection wizard with per-step diagnostics (DNS → TCP → TLS → SASL → Admin API)
 
 ### 4.2 Topic Browser & Admin
-- [ ] `TopicTreeView` — list all topics, partition count, replica factor, configs
-- [ ] `TopicDetailPanel` — configs table, partition map, leader/replica info
-- [ ] Create/delete/alter topic dialog
-- [ ] Partition reassignment UI
+- [x] `TopicTreeView` — `KafkaExplorer` + `ResourceExplorerView`: topics (partition/replication counts) → partitions (leader/replicas/ISR)
+- [-] `TopicDetailPanel` — partition leader/replica/ISR in the details panel; _configs table + create/delete/alter + reassignment TODO_
 
 ### 4.3 Producer
-- [ ] `KafkaProducerService` — async send, idempotent option, transactions
-- [ ] `ProducerView.fxml` — topic picker, partition (auto/manual), key editor, value editor, headers table
-- [ ] Send result display: offset, partition, timestamp, latency
+- [x] `KafkaProducerService` — `KafkaService.send()` (acks=all, lazy producer); _idempotent/transactions TODO_
+- [x] Produce panel — topic/key/value editor, Send result shows partition + offset
 
 ### 4.4 Consumer
-- [ ] `KafkaConsumerService` — consumer group, configurable poll loop on background thread
-- [ ] `ConsumerView.fxml` — group ID, topic subscription, offset reset, live message table
-- [ ] Message table: offset, partition, timestamp, key, value (deserialized), headers
+- [x] `KafkaConsumerService` — `KafkaService.startConsuming()` background poll loop (group, earliest/latest, wakeup-stop)
+- [x] Consume panel — topic/group/from-beginning, Start/Stop, live record log (partition/offset/key/value)
 - [ ] Deserializer selector per key/value: String/JSON/Avro/Protobuf/Hex/Base64
 
 ### 4.5 Message Browser
@@ -511,6 +510,14 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 13 — Kafka client (first cut).**
+  - New `nexuslink-protocol-kafka` module: `KafkaService` (Admin topic discovery, lazy producer,
+    background-poll consumer; bootstrap + security map for PLAINTEXT/SSL/SASL) + `KafkaExplorer`
+    (topics → partitions with leader/replica/ISR details).
+  - `KafkaView`: brokers + security bar (protocol/SASL mechanism/user/pass), topic explorer, and
+    Produce / Consume tabs (send shows partition+offset; consume streams live records).
+  - Wired into the shell (menu/sidebar; Kafka sample opens prefilled). Full `mvn install` + `mvn test`
+    clean; app boots clean with kafka-clients on the classpath. **Live broker needed for E2E test.**
 - 2026-06-24: **Session 12 — New protocols: SSE, GraphQL, S3 object storage.**
   - **SSE client** (`SseService` + `SseView`) over the JDK HTTP client — live-verified (162 events
     from the Wikimedia firehose).

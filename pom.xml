@@ -21,6 +21,7 @@
         <module>nexuslink-protocol-db</module>
         <module>nexuslink-protocol-mongo</module>
         <module>nexuslink-protocol-s3</module>
+        <module>nexuslink-protocol-kafka</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -139,6 +140,11 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
