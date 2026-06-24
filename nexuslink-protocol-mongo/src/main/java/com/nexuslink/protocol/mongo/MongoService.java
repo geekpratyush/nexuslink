@@ -115,6 +115,18 @@ public final class MongoService implements AutoCloseable {
         return collection(collection).deleteMany(parseFilter(filterJson)).getDeletedCount();
     }
 
+    /** Creates a new (empty) collection in the current database. */
+    public void createCollection(String name) {
+        db().createCollection(name);
+    }
+
+    /** Creates an index from a keys spec like {@code {"field": 1}}; returns the index name. */
+    public String createIndex(String collection, String keysJson, boolean unique) {
+        org.bson.Document keys = org.bson.Document.parse(keysJson);
+        com.mongodb.client.model.IndexOptions opts = new com.mongodb.client.model.IndexOptions().unique(unique);
+        return collection(collection).createIndex(keys, opts);
+    }
+
     /** Lists indexes on a collection as shell-style JSON (one entry per index). */
     public List<String> listIndexes(String collection) {
         List<String> out = new ArrayList<>();

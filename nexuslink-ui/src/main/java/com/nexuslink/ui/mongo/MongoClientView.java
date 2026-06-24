@@ -65,6 +65,62 @@ public final class MongoClientView extends BorderPane {
         if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
     }
 
+    private void createCollectionDialog() {
+        if (activeDb == null) { statusLabel.setText("Select a database in the tree first"); return; }
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Create collection");
+        dialog.setHeaderText("New collection in database '" + activeDb + "'");
+        dialog.setContentText("Name:");
+        dialog.initOwner(getScene() == null ? null : getScene().getWindow());
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.isBlank()) return;
+            runStructure(() -> { service.useDatabase(activeDb); service.createCollection(name.trim()); return "Created collection " + name.trim(); });
+        });
+    }
+
+    private void createIndexDialog() {
+        if (activeCollection == null) { statusLabel.setText("Select a collection in the tree first"); return; }
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Create index");
+        d.setHeaderText("New index on '" + activeCollection + "'");
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
+        TextField keys = new TextField("{ \"field\": 1 }");
+        CheckBox unique = new CheckBox("Unique");
+        GridPane g = new GridPane();
+        g.setHgap(10); g.setVgap(8); g.setPadding(new Insets(12, 4, 4, 4));
+        g.addRow(0, new Label("Keys (JSON):"), keys);
+        g.add(unique, 1, 1);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            if (keys.getText().isBlank()) return;
+            runStructure(() -> {
+                if (activeDb != null) service.useDatabase(activeDb);
+                return "Created index " + service.createIndex(activeCollection, keys.getText().trim(), unique.isSelected());
+            });
+        });
+    }
+
+    private void runStructure(java.util.concurrent.Callable<String> action) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Working…");
+        Task<String> task = new Task<>() {
+            @Override protected String call() throws Exception { return action.call(); }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText(task.getValue());
+            logger.accept("Mongo: " + task.getValue());
+            explorer.load();
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("✖ " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
     private void saveCurrent() {
         String conn = connField.getText().trim();
         if (conn.isEmpty()) { statusLabel.setText("Enter a connection string before saving"); return; }
@@ -94,13 +150,21 @@ public final class MongoClientView extends BorderPane {
         saveBtn.getStyleClass().add("btn-secondary");
         saveBtn.setOnAction(e -> saveCurrent());
 
+        MenuButton structureBtn = new MenuButton("Structure");
+        structureBtn.getStyleClass().add("btn-secondary");
+        MenuItem createColl = new MenuItem("Create Collection…");
+        createColl.setOnAction(e -> createCollectionDialog());
+        MenuItem createIndex = new MenuItem("Create Index…");
+        createIndex.setOnAction(e -> createIndexDialog());
+        structureBtn.getItems().addAll(createColl, createIndex);
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 

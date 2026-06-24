@@ -514,6 +514,15 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 19 — FTP, per-user protocol visibility, interactive ER diagram, DB structure helpers.**
+  - **FTP/FTPS** client (`nexuslink-protocol-ftp`, Apache Commons Net) — verified live vs. test.rebex.net.
+  - **Per-user protocol enable/disable** — data-driven catalog + View ▸ Protocols… dialog, persisted
+    (`ProtocolPrefs`), so each user shows only the connectors they use.
+  - **Interactive ER diagram** (`DiagramView`) — Mermaid v11 in a WebView with **svg-pan-zoom**
+    (mouse-wheel zoom + drag-pan) and a toolbar to toggle layout (TB/LR), theme, and fit/reset.
+    Verified via standalone probe.
+  - **DB structure helpers** — SQL: Create Table… / Create Index… (DDL builder + run + refresh);
+    Mongo: Create Collection… / Create Index… (`MongoService.createCollection/createIndex`).
 - 2026-06-24: **Session 18 — SFTP client.**
   - New `nexuslink-protocol-sftp` module (Apache MINA SSHD): `SftpService` (password + SSH-key auth,
     list dir, read file, permission strings) + `SftpExplorer` (lazy remote directory tree) + `SftpView`.

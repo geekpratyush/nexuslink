@@ -115,6 +115,14 @@ public final class SqlClientView extends BorderPane {
         erBtn.setTooltip(new Tooltip("Generate an entity-relationship diagram of the schema"));
         erBtn.setOnAction(e -> showErDiagram());
 
+        MenuButton structureBtn = new MenuButton("Structure");
+        structureBtn.getStyleClass().add("btn-secondary");
+        MenuItem createTable = new MenuItem("Create Table…");
+        createTable.setOnAction(e -> createTableDialog());
+        MenuItem createIndex = new MenuItem("Create Index…");
+        createIndex.setOnAction(e -> createIndexDialog());
+        structureBtn.getItems().addAll(createTable, createIndex);
+
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
         dbCombo.getItems().setAll(JdbcDriverRegistry.all());
         dbCombo.setButtonCell(driverCell());
@@ -133,7 +141,7 @@ public final class SqlClientView extends BorderPane {
 
         Label lbl = new Label("Database:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, erBtn, helpBtn);
+        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, erBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -282,6 +290,92 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("ER diagram failed: " + task.getException().getMessage());
         });
         runBg(task);
+    }
+
+    private void createTableDialog() {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        Dialog<ButtonType> d = themedDialog("Create table", "Define a new table");
+        TextField name = new TextField();
+        name.setPromptText("table_name");
+        TextArea cols = new TextArea("id INTEGER PRIMARY KEY,\nname TEXT,\ncreated_at TEXT");
+        cols.setPrefRowCount(6);
+        GridPane g = formGrid();
+        g.addRow(0, new Label("Name:"), name);
+        g.add(new Label("Columns:"), 0, 1);
+        g.add(cols, 1, 1);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            if (name.getText().isBlank()) return;
+            String body = cols.getText().replaceAll("\\s+", " ").trim().replaceAll(",\\s*$", "");
+            runDdl("CREATE TABLE " + name.getText().trim() + " (" + body + ")");
+        });
+    }
+
+    private void createIndexDialog() {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        Dialog<ButtonType> d = themedDialog("Create index", "Define a new index");
+        TextField name = new TextField();
+        name.setPromptText("idx_table_col");
+        TextField table = new TextField();
+        table.setPromptText("table");
+        TextField columns = new TextField();
+        columns.setPromptText("col1, col2");
+        CheckBox unique = new CheckBox("Unique");
+        GridPane g = formGrid();
+        g.addRow(0, new Label("Name:"), name);
+        g.addRow(1, new Label("Table:"), table);
+        g.addRow(2, new Label("Columns:"), columns);
+        g.add(unique, 1, 3);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            if (name.getText().isBlank() || table.getText().isBlank() || columns.getText().isBlank()) return;
+            runDdl("CREATE " + (unique.isSelected() ? "UNIQUE " : "") + "INDEX " + name.getText().trim()
+                    + " ON " + table.getText().trim() + " (" + columns.getText().trim() + ")");
+        });
+    }
+
+    private void runDdl(String ddl) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Running DDL…");
+        sqlEditor.setText(ddl + ";");
+        logger.accept("SQL DDL → " + ddl);
+        Task<QueryResult> task = new Task<>() {
+            @Override protected QueryResult call() { return service.execute(ddl); }
+        };
+        task.setOnSucceeded(e -> {
+            QueryResult r = task.getValue();
+            if (r.failed()) {
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("✖ " + r.errorMessage());
+            } else {
+                statusLabel.getStyleClass().setAll("status-2xx");
+                statusLabel.setText("Done");
+                refreshExplorer();
+            }
+        });
+        task.setOnFailed(e -> statusLabel.setText("Error: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
+    private Dialog<ButtonType> themedDialog(String title, String header) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle(title);
+        d.setHeaderText(header);
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        return d;
+    }
+
+    private GridPane formGrid() {
+        GridPane g = new GridPane();
+        g.setHgap(10);
+        g.setVgap(8);
+        g.setPadding(new Insets(12, 4, 4, 4));
+        return g;
     }
 
     private void saveCurrent() {
