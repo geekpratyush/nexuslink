@@ -5,6 +5,7 @@ import com.nexuslink.core.connection.ConnectionStore;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
 import com.nexuslink.ui.connection.ConnectionsPanel;
+import com.nexuslink.ui.graphql.GraphQLView;
 import com.nexuslink.ui.help.HelpDialog;
 import com.nexuslink.ui.icons.Icons;
 import com.nexuslink.ui.llm.LlmTesterView;
@@ -118,6 +119,8 @@ public final class MainWindow {
         newWs.setOnAction(e -> openWebSocketTab());
         MenuItem newSse = new MenuItem("New SSE Stream", Icons.of("topic", 14));
         newSse.setOnAction(e -> openSseTab());
+        MenuItem newGql = new MenuItem("New GraphQL Query", Icons.of("rest", 14));
+        newGql.setOnAction(e -> openGraphQLTab());
         MenuItem newSql = new MenuItem("New SQL Client", Icons.of("sql", 14));
         newSql.setOnAction(e -> openSqlTab());
         MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
@@ -128,7 +131,7 @@ public final class MainWindow {
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -196,12 +199,13 @@ public final class MainWindow {
         Button addBtn = sidebarButton("New REST Request", "rest", this::openRestTab);
         Button wsBtn = sidebarButton("WebSocket", "ws", this::openWebSocketTab);
         Button sseBtn = sidebarButton("SSE Stream", "topic", this::openSseTab);
+        Button gqlBtn = sidebarButton("GraphQL", "rest", this::openGraphQLTab);
         Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
         Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -301,6 +305,13 @@ public final class MainWindow {
         return view;
     }
 
+    private GraphQLView openGraphQLTab() {
+        GraphQLView view = new GraphQLView();
+        view.setLogger(this::log);
+        addTab("GraphQL " + (++newTabCounter), view);
+        return view;
+    }
+
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
@@ -346,6 +357,7 @@ public final class MainWindow {
             case REST -> openRestTab().applyProfile(d);
             case WEBSOCKET -> openWebSocketTab().prefill(d.target);
             case SSE -> openSseTab().prefill(d.target);
+            case GRAPHQL -> openGraphQLTab().prefill(d.target);
             case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
             case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));

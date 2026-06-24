@@ -316,11 +316,12 @@
 - [ ] Streaming panel: live message list, send message (client/bidi), end stream
 
 ### 6.2 GraphQL Client
-- [ ] `GraphQLService` — HTTP + WebSocket (subscriptions)
-- [ ] Schema introspection + type explorer tree
-- [ ] Query/mutation editor with schema-aware auto-complete (CodeMirror port or RichTextFX)
-- [ ] Variables JSON editor with schema validation
+- [-] `GraphQLService` — HTTP POST ({query, variables}) done, pretty JSON response. **Verified live vs. Countries GraphQL.** _WebSocket subscriptions TODO._
+- [x] Schema introspection — one-click `Introspect` button (built-in introspection query)
+- [-] Query/mutation editor — plain editor + variables JSON; _schema-aware auto-complete TODO_
+- [x] Variables JSON editor
 - [ ] Subscription live stream panel
+- [x] `GraphQLView` wired into the shell (File menu + sidebar + GraphQL samples)
 
 ---
 
