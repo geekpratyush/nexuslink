@@ -334,8 +334,11 @@
 - [x] Permissions display (rwx string in details); _remote chmod TODO_
 
 ### 7.2 FTP / FTPS
-- [ ] `FtpService` — Apache Commons Net, active/passive, ASCII/binary, FTPS
-- [ ] Integrated into dual-pane browser
+- [x] `FtpService` — Apache Commons Net (password/anonymous, passive mode, FTPS, list, read). `FtpExplorer` + `FtpView`. **Verified live vs. test.rebex.net.**
+- [-] Integrated into a tree browser (shared explorer); _dual-pane + transfer TODO_
+
+### 7.x Connection-type visibility (per-user)
+- [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
 ### 7.3 Object Storage
 - [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play.** _Upload / presigned URLs / versioning TODO._

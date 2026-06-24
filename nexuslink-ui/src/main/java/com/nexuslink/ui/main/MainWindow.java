@@ -58,6 +58,10 @@ public final class MainWindow {
     private HistoryPanel historyPanel;
     private TabPane bottomTabs;
     private MenuItem themeItem;
+    private Menu fileMenu;
+    private MenuItem quitItem;
+    private VBox protocolButtons;
+    private final ProtocolPrefs protocolPrefs = new ProtocolPrefs();
     private final ConnectionStore connectionStore = new ConnectionStore();
     private ConnectionsPanel connectionsPanel;
 
@@ -67,6 +71,7 @@ public final class MainWindow {
         root.setTop(buildTopBar());
         root.setBottom(buildStatusBar());   // build status bar first — center init references it
         root.setCenter(buildCenter());
+        rebuildProtocols();                  // populate File menu + sidebar from enabled protocols
         openRestTab();                       // open the initial tab after all panels exist
 
         Scene scene = new Scene(root, 1180, 760);
@@ -120,42 +125,11 @@ public final class MainWindow {
 
     private VBox buildTopBar() {
         MenuBar menuBar = new MenuBar();
-        Menu file = new Menu("File", Icons.of("file", 14));
-        MenuItem newRest = new MenuItem("New REST Request", Icons.of("rest", 14));
-        newRest.setOnAction(e -> openRestTab());
-        MenuItem newWs = new MenuItem("New WebSocket", Icons.of("ws", 14));
-        newWs.setOnAction(e -> openWebSocketTab());
-        MenuItem newSse = new MenuItem("New SSE Stream", Icons.of("topic", 14));
-        newSse.setOnAction(e -> openSseTab());
-        MenuItem newGql = new MenuItem("New GraphQL Query", Icons.of("rest", 14));
-        newGql.setOnAction(e -> openGraphQLTab());
-        MenuItem newGrpc = new MenuItem("New gRPC Client", Icons.of("mcp", 14));
-        newGrpc.setOnAction(e -> openGrpcTab());
-        MenuItem newSql = new MenuItem("New SQL Client", Icons.of("sql", 14));
-        newSql.setOnAction(e -> openSqlTab());
-        MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
-        newMongo.setOnAction(e -> openMongoTab());
-        MenuItem newS3 = new MenuItem("New S3 / Object Storage", Icons.of("collection", 14));
-        newS3.setOnAction(e -> openS3Tab());
-        MenuItem newAzure = new MenuItem("New Azure Blob", Icons.of("collection", 14));
-        newAzure.setOnAction(e -> openAzureTab());
-        MenuItem newGcs = new MenuItem("New Google Cloud Storage", Icons.of("collection", 14));
-        newGcs.setOnAction(e -> openGcsTab());
-        MenuItem newSftp = new MenuItem("New SFTP Browser", Icons.of("server", 14));
-        newSftp.setOnAction(e -> openSftpTab());
-        MenuItem newFtp = new MenuItem("New FTP Browser", Icons.of("server", 14));
-        newFtp.setOnAction(e -> openFtpTab());
-        MenuItem newKafka = new MenuItem("New Kafka Client", Icons.of("topic", 14));
-        newKafka.setOnAction(e -> openKafkaTab());
-        MenuItem newRedis = new MenuItem("New Redis Client", Icons.of("database", 14));
-        newRedis.setOnAction(e -> openRedisTab());
-        MenuItem newMcp = new MenuItem("New MCP Inspector", Icons.of("mcp", 14));
-        newMcp.setOnAction(e -> openMcpTab());
-        MenuItem newLlm = new MenuItem("New AI Agent / LLM Tester", Icons.of("ai", 14));
-        newLlm.setOnAction(e -> openLlmTab());
-        MenuItem quit = new MenuItem("Quit");
-        quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newGql, newGrpc, newSql, newMongo, newS3, newAzure, newGcs, newSftp, newFtp, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        fileMenu = new Menu("File", Icons.of("file", 14));
+        quitItem = new MenuItem("Quit");
+        quitItem.setOnAction(e -> javafx.application.Platform.exit());
+        // File menu protocol items are populated (and filtered by enabled protocols) in rebuildProtocols()
+        Menu file = fileMenu;
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -167,10 +141,12 @@ public final class MainWindow {
         Menu view = new Menu("View", Icons.of("view", 14));
         MenuItem toggleLog = new MenuItem("Toggle Log Panel");
         toggleLog.setOnAction(e -> toggleLog());
+        MenuItem protocolsItem = new MenuItem("Protocols…");
+        protocolsItem.setOnAction(e -> showProtocolsDialog());
         themeItem = new MenuItem(themeMenuLabel());
         themeItem.setOnAction(e -> toggleTheme());
         ThemeManager.get().addListener(() -> themeItem.setText(themeMenuLabel()));
-        view.getItems().addAll(toggleLog, new SeparatorMenuItem(), themeItem);
+        view.getItems().addAll(toggleLog, protocolsItem, new SeparatorMenuItem(), themeItem);
 
         Menu tools = new Menu("Tools", Icons.of("tools", 14));
         MenuItem unlockVault = new MenuItem("Unlock Vault…");
@@ -220,27 +196,15 @@ public final class MainWindow {
         connectionsPanel.setOnOpen(this::openProfile);
         VBox.setVgrow(connectionsPanel, Priority.ALWAYS);
 
-        Button addBtn = sidebarButton("New REST Request", "rest", this::openRestTab);
-        Button wsBtn = sidebarButton("WebSocket", "ws", this::openWebSocketTab);
-        Button sseBtn = sidebarButton("SSE Stream", "topic", this::openSseTab);
-        Button gqlBtn = sidebarButton("GraphQL", "rest", this::openGraphQLTab);
-        Button grpcBtn = sidebarButton("gRPC", "mcp", this::openGrpcTab);
-        Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
-        Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
-        Button s3Btn = sidebarButton("S3 / Object Storage", "collection", this::openS3Tab);
-        Button azureBtn = sidebarButton("Azure Blob", "collection", this::openAzureTab);
-        Button gcsBtn = sidebarButton("Google Cloud Storage", "collection", this::openGcsTab);
-        Button sftpBtn = sidebarButton("SFTP", "server", this::openSftpTab);
-        Button ftpBtn = sidebarButton("FTP", "server", this::openFtpTab);
-        Button kafkaBtn = sidebarButton("Kafka", "topic", this::openKafkaTab);
-        Button redisBtn = sidebarButton("Redis", "database", this::openRedisTab);
-        Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
-        Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
+        protocolButtons = new VBox(6);
+        VBox.setMargin(protocolButtons, new Insets(8));
+        ScrollPane buttonScroll = new ScrollPane(protocolButtons);
+        buttonScroll.setFitToWidth(true);
+        buttonScroll.getStyleClass().add("protocol-scroll");
+        buttonScroll.setMaxHeight(320);
+        // Buttons are populated (and filtered by enabled protocols) in rebuildProtocols()
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, grpcBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, gcsBtn, sftpBtn, ftpBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
-        VBox.setMargin(buttons, new Insets(8));
-
-        VBox sidebar = new VBox(title, connectionsPanel, buttons);
+        VBox sidebar = new VBox(title, connectionsPanel, buttonScroll);
         sidebar.getStyleClass().add("sidebar");
         sidebar.setMinWidth(180);
         return sidebar;
@@ -531,6 +495,83 @@ public final class MainWindow {
         b.setGraphicTextGap(8);
         b.setOnAction(e -> action.run());
         return b;
+    }
+
+    // ---- Protocol catalog (data-driven so it can be enabled/disabled per user) ----
+
+    private record ProtocolDef(String id, String label, String menuLabel, String icon, Runnable opener) {}
+
+    private java.util.List<ProtocolDef> protocolDefs() {
+        return java.util.List.of(
+                new ProtocolDef("rest", "New REST Request", "New REST Request", "rest", this::openRestTab),
+                new ProtocolDef("ws", "WebSocket", "New WebSocket", "ws", this::openWebSocketTab),
+                new ProtocolDef("sse", "SSE Stream", "New SSE Stream", "topic", this::openSseTab),
+                new ProtocolDef("graphql", "GraphQL", "New GraphQL Query", "rest", this::openGraphQLTab),
+                new ProtocolDef("grpc", "gRPC", "New gRPC Client", "mcp", this::openGrpcTab),
+                new ProtocolDef("sql", "SQL Client", "New SQL Client", "sql", this::openSqlTab),
+                new ProtocolDef("mongo", "MongoDB Client", "New MongoDB Client", "mongo", this::openMongoTab),
+                new ProtocolDef("s3", "S3 / Object Storage", "New S3 / Object Storage", "collection", this::openS3Tab),
+                new ProtocolDef("azure", "Azure Blob", "New Azure Blob", "collection", this::openAzureTab),
+                new ProtocolDef("gcs", "Google Cloud Storage", "New Google Cloud Storage", "collection", this::openGcsTab),
+                new ProtocolDef("sftp", "SFTP", "New SFTP Browser", "server", this::openSftpTab),
+                new ProtocolDef("ftp", "FTP", "New FTP Browser", "server", this::openFtpTab),
+                new ProtocolDef("kafka", "Kafka", "New Kafka Client", "topic", this::openKafkaTab),
+                new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
+                new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
+                new ProtocolDef("llm", "AI Agent / LLM", "New AI Agent / LLM Tester", "ai", this::openLlmTab));
+    }
+
+    /** Rebuilds the File menu + sidebar buttons from the enabled protocols. */
+    private void rebuildProtocols() {
+        java.util.List<ProtocolDef> enabled = protocolDefs().stream()
+                .filter(d -> protocolPrefs.isEnabled(d.id())).toList();
+
+        fileMenu.getItems().clear();
+        for (ProtocolDef d : enabled) {
+            MenuItem mi = new MenuItem(d.menuLabel(), Icons.of(d.icon(), 14));
+            mi.setOnAction(e -> d.opener().run());
+            fileMenu.getItems().add(mi);
+        }
+        fileMenu.getItems().addAll(new SeparatorMenuItem(), quitItem);
+
+        protocolButtons.getChildren().clear();
+        for (ProtocolDef d : enabled) {
+            protocolButtons.getChildren().add(sidebarButton(d.label(), d.icon(), d.opener()));
+        }
+    }
+
+    /** Lets the user choose which connection types are shown (persisted). */
+    private void showProtocolsDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (owner() != null) dialog.initOwner(owner());
+        dialog.setTitle("Protocols");
+        dialog.setHeaderText("Choose which connection types to show.\nUnchecked ones are hidden from the menu and sidebar.");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        VBox box = new VBox(6);
+        box.setPadding(new Insets(12, 4, 4, 4));
+        java.util.Map<String, CheckBox> checks = new java.util.LinkedHashMap<>();
+        for (ProtocolDef d : protocolDefs()) {
+            CheckBox cb = new CheckBox(d.label());
+            cb.setSelected(protocolPrefs.isEnabled(d.id()));
+            checks.put(d.id(), cb);
+            box.getChildren().add(cb);
+        }
+        ScrollPane scroll = new ScrollPane(box);
+        scroll.setFitToWidth(true);
+        scroll.setPrefHeight(360);
+        dialog.getDialogPane().setContent(scroll);
+        dialog.setOnShown(ev -> {
+            if (dialog.getDialogPane().getScene() != null) ThemeManager.get().register(dialog.getDialogPane().getScene());
+        });
+
+        if (dialog.showAndWait().filter(b -> b == ButtonType.OK).isPresent()) {
+            java.util.Set<String> disabled = new java.util.LinkedHashSet<>();
+            checks.forEach((id, cb) -> { if (!cb.isSelected()) disabled.add(id); });
+            protocolPrefs.setDisabled(disabled);
+            rebuildProtocols();
+            log("Protocol visibility updated (" + (protocolDefs().size() - disabled.size()) + " enabled).");
+        }
     }
 
     private void recordHistory(HistoryEntry entry) {
