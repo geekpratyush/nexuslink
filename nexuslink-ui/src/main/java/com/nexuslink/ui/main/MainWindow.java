@@ -4,6 +4,7 @@ import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.connection.ConnectionStore;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
+import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.graphql.GraphQLView;
 import com.nexuslink.ui.help.HelpDialog;
@@ -130,6 +131,8 @@ public final class MainWindow {
         newMongo.setOnAction(e -> openMongoTab());
         MenuItem newS3 = new MenuItem("New S3 / Object Storage", Icons.of("collection", 14));
         newS3.setOnAction(e -> openS3Tab());
+        MenuItem newAzure = new MenuItem("New Azure Blob", Icons.of("collection", 14));
+        newAzure.setOnAction(e -> openAzureTab());
         MenuItem newKafka = new MenuItem("New Kafka Client", Icons.of("topic", 14));
         newKafka.setOnAction(e -> openKafkaTab());
         MenuItem newRedis = new MenuItem("New Redis Client", Icons.of("database", 14));
@@ -140,7 +143,7 @@ public final class MainWindow {
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newS3, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newS3, newAzure, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -212,12 +215,13 @@ public final class MainWindow {
         Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
         Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
         Button s3Btn = sidebarButton("S3 / Object Storage", "collection", this::openS3Tab);
+        Button azureBtn = sidebarButton("Azure Blob", "collection", this::openAzureTab);
         Button kafkaBtn = sidebarButton("Kafka", "topic", this::openKafkaTab);
         Button redisBtn = sidebarButton("Redis", "database", this::openRedisTab);
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, s3Btn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -345,6 +349,13 @@ public final class MainWindow {
         return view;
     }
 
+    private AzureBlobView openAzureTab() {
+        AzureBlobView view = new AzureBlobView();
+        view.setLogger(this::log);
+        addTab("Azure " + (++newTabCounter), view);
+        return view;
+    }
+
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
@@ -396,6 +407,7 @@ public final class MainWindow {
             case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));
             case KAFKA -> openKafkaTab().prefill(d.target);
             case REDIS -> openRedisTab().prefill(d.target);
+            case AZURE_BLOB -> openAzureTab().prefill(d.target);
             case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));
             case LLM -> openLlmTab();
             default -> {

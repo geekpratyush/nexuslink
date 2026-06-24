@@ -55,6 +55,9 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-db         ← JDBC SQL client + on-demand driver manager
 ├── nexuslink-protocol-mongo      ← MongoDB client
 ├── nexuslink-protocol-s3         ← S3 / object storage (AWS SDK v2)
+├── nexuslink-protocol-kafka      ← Kafka (admin/producer/consumer)
+├── nexuslink-protocol-redis      ← Redis (Lettuce)
+├── nexuslink-protocol-azure      ← Azure Blob Storage
 ├── nexuslink-ui                  ← shell (MainWindow), all protocol views, Help system
 └── nexuslink-app                 ← JavaFX entry point (the ONLY runnable module)
     + planned: protocol-messaging, protocol-file, protocol-enterprise

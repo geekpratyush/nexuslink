@@ -88,6 +88,16 @@ public final class SampleCatalog {
                         + "Object-storage browser is on the roadmap.")
                 .asSample().withId("sample-s3-minio-play"));
 
+        // ---- Azure Blob (local Azurite emulator — well-known public dev credentials) ----
+        s.add(new ConnectionProfile("Azurite (local Azure Blob emulator)", AZURE_BLOB,
+                    "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+                  + "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+                  + "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;")
+                .withAuth(AuthMethod.CONNECTION_STRING)
+                .withNotes("Local Azurite emulator with the standard public dev credentials. "
+                        + "Swap in your own connection string for a real account.")
+                .asSample().withId("sample-azure-azurite"));
+
         // ---- File transfer (public demo servers) ----
         s.add(new ConnectionProfile("Rebex — public SFTP demo", SFTP, "sftp://test.rebex.net:22")
                 .withUser("demo").withAuth(AuthMethod.BASIC).authProp("password", "password")

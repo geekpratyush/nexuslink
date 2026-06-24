@@ -340,9 +340,9 @@
 ### 7.3 Object Storage
 - [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play.** _Upload / presigned URLs / versioning TODO._
 - [x] `S3Explorer` + `S3View` — bucket → object tree with size/modified/etag details (reuses `ResourceExplorerView`); wired into the shell (new `nexuslink-protocol-s3` module, S3 sample opens prefilled)
-- [ ] `AzureBlobService` — Azure SDK, SAS tokens, tiering
+- [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. _SAS tokens / tiering / upload TODO. Needs an account/emulator for E2E._
 - [ ] `GcsService` — Google Cloud Storage client, signed URLs
-- [-] Shared bucket/container browser view — S3 done; Azure/GCS share the same explorer pattern
+- [x] Shared bucket/container browser view — S3 + Azure use the same `ResourceExplorerView` BUCKET→OBJECT pattern; GCS will slot in the same way
 
 ---
 
@@ -511,6 +511,12 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 15 — Azure Blob Storage.**
+  - New `nexuslink-protocol-azure` module (Azure SDK): `AzureBlobService` (connection string / shared
+    key; listContainers, listBlobs) + `AzureBlobExplorer` (container → blob tree, reusing the S3-style
+    BUCKET/OBJECT pattern) + `AzureBlobView`. Azurite local-emulator sample added.
+  - Wired into the shell (menu/sidebar/profile case). Full `mvn install` + `mvn test` clean; boots
+    clean with the Azure SDK on the classpath. _Needs an account/Azurite for E2E test._
 - 2026-06-24: **Session 14 — Redis client + explorer lazy-details.**
   - New `nexuslink-protocol-redis` module (Lettuce): `RedisService` (connect, SCAN keys, typed value
     read for string/hash/list/set/zset/stream, ~20-command console runner) + `RedisExplorer`.
