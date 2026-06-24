@@ -221,7 +221,7 @@ public final class MongoClientView extends BorderPane {
         });
 
         // Right: query editor + result
-        modeCombo.getItems().addAll("find", "aggregate", "insertOne", "updateMany", "deleteMany");
+        modeCombo.getItems().addAll("find", "sql", "aggregate", "insertOne", "updateMany", "deleteMany");
         modeCombo.setValue("find");
         modeCombo.valueProperty().addListener((o, ov, m) -> updateEditorHint(m));
 
@@ -279,15 +279,22 @@ public final class MongoClientView extends BorderPane {
 
     private void updateEditorHint(String mode) {
         queryEditor.setPromptText(switch (mode) {
-            case "find" -> "{ }  — filter, e.g. { \"role\": \"developer\" }";
+            case "find" -> "{ }  — Mongo filter, e.g. { \"role\": \"developer\" }";
+            case "sql" -> "SELECT * FROM <collection> WHERE role = 'developer' ORDER BY name LIMIT 20";
             case "aggregate" -> "[ { \"$group\": { \"_id\": \"$role\", \"n\": { \"$sum\": 1 } } } ]";
             case "insertOne" -> "{ \"name\": \"Alice\", \"role\": \"admin\" }  — document to insert";
             case "updateMany" -> "filter ||| update    e.g.  { \"name\":\"Alice\" } ||| { \"$set\": { \"role\":\"x\" } }";
             case "deleteMany" -> "{ }  — filter for documents to delete";
             default -> "";
         });
-        if (queryEditor.getText().isBlank()) {
-            queryEditor.setText(mode.equals("aggregate") ? "[]" : "{}");
+        String t = queryEditor.getText().trim();
+        boolean isDefault = t.isBlank() || t.equals("{}") || t.equals("[]") || t.toUpperCase().startsWith("SELECT");
+        if (isDefault) {
+            queryEditor.setText(switch (mode) {
+                case "aggregate" -> "[]";
+                case "sql" -> "SELECT * FROM ";
+                default -> "{}";
+            });
         }
     }
 
@@ -318,19 +325,28 @@ public final class MongoClientView extends BorderPane {
     }
 
     private void run() {
-        if (activeCollection == null) { resultStatus.setText("Select a collection in the tree first"); return; }
-        if (activeDb != null) service.useDatabase(activeDb);
-        String collection = activeCollection;
         String mode = modeCombo.getValue();
         String body = queryEditor.getText().trim();
+        // SQL mode parses its own collection from the FROM clause; it only needs a database.
+        if ("sql".equals(mode)) {
+            if (activeDb == null) { resultStatus.setText("Select a database in the tree first"); return; }
+            service.useDatabase(activeDb);
+        } else if (activeCollection == null) {
+            resultStatus.setText("Select a collection in the tree first");
+            return;
+        } else if (activeDb != null) {
+            service.useDatabase(activeDb);
+        }
+        String collection = activeCollection;
         int limit = parseLimit();
         resultStatus.setText("Running " + mode + "…");
-        logger.accept("Mongo " + mode + " → " + collection);
+        logger.accept("Mongo " + mode + (collection == null ? "" : " → " + collection));
 
         Task<String> task = new Task<>() {
             @Override protected String call() {
                 return switch (mode) {
                     case "find" -> renderDocs(service.find(collection, body, limit));
+                    case "sql" -> renderDocs(service.executeSql(body));
                     case "aggregate" -> renderDocs(service.aggregate(collection, body));
                     case "insertOne" -> "Inserted _id: " + service.insertOne(collection, body);
                     case "updateMany" -> {

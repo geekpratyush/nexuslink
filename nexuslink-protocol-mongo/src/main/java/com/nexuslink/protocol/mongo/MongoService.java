@@ -115,6 +115,95 @@ public final class MongoService implements AutoCloseable {
         return collection(collection).deleteMany(parseFilter(filterJson)).getDeletedCount();
     }
 
+    private static final java.util.regex.Pattern SELECT_SQL = java.util.regex.Pattern.compile(
+            "(?is)^SELECT\\s+(.+?)\\s+FROM\\s+([\\w.]+)" +
+            "(?:\\s+WHERE\\s+(.+?))?(?:\\s+ORDER\\s+BY\\s+(.+?))?(?:\\s+LIMIT\\s+(\\d+))?\\s*;?$");
+    private static final java.util.regex.Pattern CONDITION = java.util.regex.Pattern.compile(
+            "(?i)^\\s*([\\w.]+)\\s*(>=|<=|!=|=|>|<|LIKE)\\s*(.+?)\\s*$");
+
+    /**
+     * Runs a SQL-like SELECT against a collection and returns matching documents. Supported:
+     * {@code SELECT <cols|*> FROM <collection> [WHERE c AND c …] [ORDER BY f [ASC|DESC]] [LIMIT n]}
+     * with operators = != &gt; &lt; &gt;= &lt;= LIKE.
+     */
+    public MongoQueryResult executeSql(String sql) {
+        long start = System.nanoTime();
+        try {
+            java.util.regex.Matcher m = SELECT_SQL.matcher(sql.trim());
+            if (!m.matches()) {
+                return MongoQueryResult.error(
+                        "Unsupported SQL. Use: SELECT <cols|*> FROM <collection> [WHERE …] [ORDER BY …] [LIMIT n]",
+                        ms(start));
+            }
+            String coll = m.group(2).trim();
+            Bson filter = m.group(3) == null ? new Document() : parseWhere(m.group(3));
+            Document projection = parseProjection(m.group(1).trim());
+            Document sort = m.group(4) == null ? null : parseOrder(m.group(4));
+            int limit = m.group(5) == null ? 100 : Integer.parseInt(m.group(5));
+
+            var find = collection(coll).find(filter);
+            if (projection != null) find = find.projection(projection);
+            if (sort != null) find = find.sort(sort);
+            List<String> docs = new ArrayList<>();
+            for (Document d : find.limit(limit)) docs.add(d.toJson(SHELL));
+            return MongoQueryResult.ok(docs, ms(start));
+        } catch (Exception e) {
+            return MongoQueryResult.error(e.getMessage(), ms(start));
+        }
+    }
+
+    static Document parseProjection(String cols) {
+        if (cols.equals("*")) return null;
+        Document p = new Document();
+        for (String c : cols.split(",")) if (!c.isBlank()) p.put(c.trim(), 1);
+        return p;
+    }
+
+    static Document parseWhere(String where) {
+        Document filter = new Document();
+        for (String clause : where.split("(?i)\\s+AND\\s+")) {
+            java.util.regex.Matcher m = CONDITION.matcher(clause);
+            if (!m.matches()) throw new IllegalArgumentException("Bad condition: " + clause.trim());
+            String field = m.group(1);
+            String op = m.group(2).toUpperCase();
+            Object value = parseValue(m.group(3));
+            switch (op) {
+                case "=" -> filter.put(field, value);
+                case "!=" -> filter.put(field, new Document("$ne", value));
+                case ">" -> filter.put(field, new Document("$gt", value));
+                case "<" -> filter.put(field, new Document("$lt", value));
+                case ">=" -> filter.put(field, new Document("$gte", value));
+                case "<=" -> filter.put(field, new Document("$lte", value));
+                case "LIKE" -> filter.put(field, new Document("$regex",
+                        "^" + java.util.regex.Pattern.quote(String.valueOf(value)).replace("%", "\\E.*\\Q") + "$")
+                        .append("$options", "i"));
+                default -> throw new IllegalArgumentException("Unsupported operator: " + op);
+            }
+        }
+        return filter;
+    }
+
+    static Document parseOrder(String order) {
+        Document sort = new Document();
+        for (String part : order.split(",")) {
+            String[] tk = part.trim().split("\\s+");
+            sort.put(tk[0], tk.length > 1 && tk[1].equalsIgnoreCase("DESC") ? -1 : 1);
+        }
+        return sort;
+    }
+
+    private static Object parseValue(String raw) {
+        String v = raw.trim();
+        if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith("\"") && v.endsWith("\""))) {
+            return v.substring(1, v.length() - 1);
+        }
+        try { return Integer.parseInt(v); } catch (NumberFormatException ignored) { }
+        try { return Long.parseLong(v); } catch (NumberFormatException ignored) { }
+        try { return Double.parseDouble(v); } catch (NumberFormatException ignored) { }
+        if (v.equalsIgnoreCase("true") || v.equalsIgnoreCase("false")) return Boolean.parseBoolean(v);
+        return v;
+    }
+
     /**
      * Infers a schema for each collection in {@code database} by sampling documents, then renders a
      * Mermaid {@code erDiagram} — entities = collections (fields + inferred BSON types), with
