@@ -1,0 +1,23 @@
+/* REST client view specifics */
+
+.rest-client-view {
+    -fx-background-color: #020617;
+}
+
+.rest-client-view .combo-box {
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-weight: bold;
+}
+
+.rest-client-view .split-pane { -fx-background-color: #020617; }
+.rest-client-view .split-pane-divider { -fx-background-color: #1E293B; -fx-padding: 0 1 0 1; }
+
+.log-titled > .title {
+    -fx-background-color: #0F172A;
+    -fx-text-fill: #94A3B8;
+    -fx-font-size: 11px;
+}
+.log-titled > .content { -fx-background-color: #020617; -fx-border-color: transparent; }
+
+.progress-bar > .bar { -fx-background-color: #06B6D4; -fx-background-insets: 0; }
+.progress-bar > .track { -fx-background-color: #1E293B; }

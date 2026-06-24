@@ -1,0 +1,305 @@
+package com.nexuslink.ui.mcp;
+
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nexuslink.protocol.ai.mcp.*;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+
+import java.util.List;
+import java.util.function.Consumer;
+
+import static com.nexuslink.protocol.ai.mcp.JsonRpc.MAPPER;
+
+/**
+ * MCP Inspector tab — connect to a Model Context Protocol server (HTTP or stdio),
+ * then browse and exercise its tools, resources, and prompts.
+ */
+public final class McpInspectorView extends BorderPane {
+
+    private final ComboBox<String> transportCombo = new ComboBox<>();
+    private final TextField targetField = new TextField();
+    private final Button connectBtn = new Button("Connect");
+    private final Label statusLabel = new Label("Not connected");
+
+    private final ListView<McpTypes.Tool> toolList = new ListView<>();
+    private final TextArea toolArgs = new TextArea();
+    private final TextArea toolResult = new TextArea();
+
+    private final ListView<McpTypes.Resource> resourceList = new ListView<>();
+    private final TextArea resourceContent = new TextArea();
+
+    private final ListView<McpTypes.Prompt> promptList = new ListView<>();
+    private final TextArea promptArgs = new TextArea();
+    private final TextArea promptResult = new TextArea();
+
+    private McpClient client;
+    private Consumer<String> logger = s -> {};
+
+    public McpInspectorView() {
+        getStyleClass().add("mcp-view");
+        setTop(buildConnectionBar());
+        setCenter(buildTabs());
+    }
+
+    public void setLogger(Consumer<String> logger) {
+        this.logger = logger == null ? s -> {} : logger;
+    }
+
+    // ---- connection ----
+
+    private VBox buildConnectionBar() {
+        transportCombo.getItems().addAll("HTTP (Streamable)", "stdio (subprocess)");
+        transportCombo.setValue("stdio (subprocess)");
+        transportCombo.valueProperty().addListener((o, ov, nv) -> updatePrompt());
+
+        targetField.getStyleClass().add("nl-field");
+        HBox.setHgrow(targetField, Priority.ALWAYS);
+        updatePrompt();
+
+        connectBtn.getStyleClass().add("btn-primary");
+        connectBtn.setOnAction(e -> connect());
+
+        Button helpBtn = new Button("?");
+        helpBtn.getStyleClass().add("btn-secondary");
+        helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("plugins"));
+
+        HBox row = new HBox(8, transportCombo, targetField, connectBtn, helpBtn);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(10));
+
+        statusLabel.getStyleClass().add("meta-label");
+        HBox statusRow = new HBox(statusLabel);
+        statusRow.setPadding(new Insets(0, 10, 6, 10));
+
+        return new VBox(row, statusRow);
+    }
+
+    private void updatePrompt() {
+        boolean http = transportCombo.getValue().startsWith("HTTP");
+        targetField.setPromptText(http
+                ? "https://mcp.example.com/mcp"
+                : "npx -y @modelcontextprotocol/server-everything");
+    }
+
+    private void connect() {
+        String target = targetField.getText().trim();
+        if (target.isEmpty()) { statusLabel.setText("Enter a server target first"); return; }
+
+        connectBtn.setDisable(true);
+        statusLabel.setText("Connecting…");
+        boolean http = transportCombo.getValue().startsWith("HTTP");
+        logger.accept("MCP connect → " + target);
+
+        Task<McpTypes.ServerInfo> task = new Task<>() {
+            @Override protected McpTypes.ServerInfo call() {
+                McpTransport transport = http
+                        ? new HttpMcpTransport(target, java.util.Map.of())
+                        : new StdioMcpTransport(List.of(target.split("\\s+")));
+                client = new McpClient(transport);
+                return client.connect();
+            }
+        };
+        task.setOnSucceeded(e -> {
+            McpTypes.ServerInfo info = task.getValue();
+            statusLabel.setText("Connected: " + info.name() + " v" + info.version()
+                    + "  (protocol " + info.protocolVersion() + ")");
+            logger.accept("MCP connected: " + info.name() + " v" + info.version());
+            connectBtn.setDisable(false);
+            loadAll();
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Connect failed: " + task.getException().getMessage());
+            logger.accept("MCP connect FAILED: " + task.getException().getMessage());
+            connectBtn.setDisable(false);
+        });
+        runBg(task);
+    }
+
+    private void loadAll() {
+        runList(() -> client.listTools(), toolList::getItems);
+        runList(() -> client.listResources(), resourceList::getItems);
+        runList(() -> client.listPrompts(), promptList::getItems);
+    }
+
+    private <T> void runList(java.util.concurrent.Callable<List<T>> supplier,
+                             java.util.function.Supplier<javafx.collections.ObservableList<T>> target) {
+        Task<List<T>> task = new Task<>() {
+            @Override protected List<T> call() throws Exception { return supplier.call(); }
+        };
+        task.setOnSucceeded(e -> target.get().setAll(task.getValue()));
+        task.setOnFailed(e -> logger.accept("MCP list failed: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
+    // ---- tabs ----
+
+    private TabPane buildTabs() {
+        TabPane tabs = new TabPane();
+        tabs.getStyleClass().add("editor-tabs");
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabs.getTabs().addAll(
+                new Tab("Tools", buildToolsPane()),
+                new Tab("Resources", buildResourcesPane()),
+                new Tab("Prompts", buildPromptsPane()));
+        return tabs;
+    }
+
+    private SplitPane buildToolsPane() {
+        toolList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(McpTypes.Tool t, boolean empty) {
+                super.updateItem(t, empty);
+                setText(empty || t == null ? null : t.name());
+            }
+        });
+        toolArgs.getStyleClass().add("code-area");
+        toolArgs.setPromptText("{ }  — JSON arguments");
+        toolResult.getStyleClass().add("code-area");
+        toolResult.setEditable(false);
+
+        Label desc = new Label();
+        desc.getStyleClass().add("meta-label");
+        desc.setWrapText(true);
+        toolList.getSelectionModel().selectedItemProperty().addListener((o, ov, t) -> {
+            if (t != null) {
+                desc.setText(t.description());
+                toolArgs.setText(t.inputSchema() != null && t.inputSchema().has("properties")
+                        ? "{\n  \n}" : "{}");
+            }
+        });
+
+        Button callBtn = new Button("Call Tool");
+        callBtn.getStyleClass().add("btn-primary");
+        callBtn.setOnAction(e -> callSelectedTool());
+
+        VBox right = new VBox(8, desc, new Label("Arguments (JSON):"), toolArgs, callBtn,
+                new Label("Result:"), toolResult);
+        right.setPadding(new Insets(8));
+        VBox.setVgrow(toolArgs, Priority.ALWAYS);
+        VBox.setVgrow(toolResult, Priority.ALWAYS);
+        styleSmallLabels(right);
+
+        SplitPane sp = new SplitPane(toolList, right);
+        sp.setDividerPositions(0.3);
+        return sp;
+    }
+
+    private void callSelectedTool() {
+        McpTypes.Tool tool = toolList.getSelectionModel().getSelectedItem();
+        if (tool == null || client == null) return;
+        toolResult.setText("Calling…");
+        logger.accept("MCP tools/call → " + tool.name());
+        Task<McpTypes.ToolResult> task = new Task<>() {
+            @Override protected McpTypes.ToolResult call() throws Exception {
+                ObjectNode args = (ObjectNode) MAPPER.readTree(
+                        toolArgs.getText().isBlank() ? "{}" : toolArgs.getText());
+                return client.callTool(tool.name(), args);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            McpTypes.ToolResult r = task.getValue();
+            StringBuilder sb = new StringBuilder(r.isError() ? "⚠ tool reported error:\n" : "");
+            r.content().forEach(c -> sb.append(c.text()).append('\n'));
+            toolResult.setText(sb.toString());
+        });
+        task.setOnFailed(e -> toolResult.setText("Error: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
+    private SplitPane buildResourcesPane() {
+        resourceList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(McpTypes.Resource r, boolean empty) {
+                super.updateItem(r, empty);
+                setText(empty || r == null ? null : r.name() + "  (" + r.uri() + ")");
+            }
+        });
+        resourceContent.getStyleClass().add("code-area");
+        resourceContent.setEditable(false);
+
+        Button readBtn = new Button("Read Resource");
+        readBtn.getStyleClass().add("btn-primary");
+        readBtn.setOnAction(e -> {
+            McpTypes.Resource r = resourceList.getSelectionModel().getSelectedItem();
+            if (r == null || client == null) return;
+            resourceContent.setText("Reading…");
+            Task<List<McpTypes.Content>> task = new Task<>() {
+                @Override protected List<McpTypes.Content> call() { return client.readResource(r.uri()); }
+            };
+            task.setOnSucceeded(ev -> {
+                StringBuilder sb = new StringBuilder();
+                task.getValue().forEach(c -> sb.append(c.text()).append('\n'));
+                resourceContent.setText(sb.toString());
+            });
+            task.setOnFailed(ev -> resourceContent.setText("Error: " + task.getException().getMessage()));
+            runBg(task);
+        });
+
+        VBox right = new VBox(8, readBtn, resourceContent);
+        right.setPadding(new Insets(8));
+        VBox.setVgrow(resourceContent, Priority.ALWAYS);
+        SplitPane sp = new SplitPane(resourceList, right);
+        sp.setDividerPositions(0.35);
+        return sp;
+    }
+
+    private SplitPane buildPromptsPane() {
+        promptList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(McpTypes.Prompt p, boolean empty) {
+                super.updateItem(p, empty);
+                setText(empty || p == null ? null : p.name());
+            }
+        });
+        promptArgs.getStyleClass().add("code-area");
+        promptArgs.setPromptText("{ }  — prompt arguments");
+        promptResult.getStyleClass().add("code-area");
+        promptResult.setEditable(false);
+
+        Button getBtn = new Button("Get Prompt");
+        getBtn.getStyleClass().add("btn-primary");
+        getBtn.setOnAction(e -> {
+            McpTypes.Prompt p = promptList.getSelectionModel().getSelectedItem();
+            if (p == null || client == null) return;
+            Task<List<McpTypes.Content>> task = new Task<>() {
+                @Override protected List<McpTypes.Content> call() throws Exception {
+                    ObjectNode args = (ObjectNode) MAPPER.readTree(
+                            promptArgs.getText().isBlank() ? "{}" : promptArgs.getText());
+                    return client.getPrompt(p.name(), args);
+                }
+            };
+            task.setOnSucceeded(ev -> {
+                StringBuilder sb = new StringBuilder();
+                task.getValue().forEach(c -> sb.append("[").append(c.type()).append("]\n")
+                        .append(c.text()).append("\n\n"));
+                promptResult.setText(sb.toString());
+            });
+            task.setOnFailed(ev -> promptResult.setText("Error: " + task.getException().getMessage()));
+            runBg(task);
+        });
+
+        VBox right = new VBox(8, new Label("Arguments (JSON):"), promptArgs, getBtn,
+                new Label("Rendered:"), promptResult);
+        right.setPadding(new Insets(8));
+        VBox.setVgrow(promptArgs, Priority.ALWAYS);
+        VBox.setVgrow(promptResult, Priority.ALWAYS);
+        styleSmallLabels(right);
+        SplitPane sp = new SplitPane(promptList, right);
+        sp.setDividerPositions(0.3);
+        return sp;
+    }
+
+    private void styleSmallLabels(VBox box) {
+        box.getChildren().forEach(n -> {
+            if (n instanceof Label l) l.getStyleClass().add("meta-label");
+        });
+    }
+
+    private void runBg(Task<?> task) {
+        Thread t = new Thread(task, "mcp-task");
+        t.setDaemon(true);
+        t.start();
+    }
+}

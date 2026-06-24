@@ -1,0 +1,34 @@
+# Build output
+target/
+*.class
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+dependency-reduced-pom.xml
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+nbproject/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / runtime
+*.log
+hs_err_pid*
+
+# App-local data (runtime, not source)
+.nexuslink/
+
+# Claude Code workspace
+.claude/
