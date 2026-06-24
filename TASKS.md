@@ -398,6 +398,7 @@
 - [ ] Pub/Sub subscriber panel
 
 ### 8.3 MongoDB Client (separate driver — not JDBC)
+> **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.
 - [x] `MongoService` — `org.mongodb:mongodb-driver-sync` (Apache-2.0) in its own `nexuslink-protocol-mongo` module: connect, list dbs/collections, find, aggregate, count, insertOne, updateMany, deleteMany (Extended-JSON in/out) + `MongoQueryResult`
 - [x] `MongoClientView` UI — connection bar, database picker + collection list, operation selector (find/aggregate/insert/update/delete), Extended-JSON editor (Ctrl+Enter), result pane; wired into `MainWindow` (File menu + sidebar + tab opener)
 - [-] Document CRUD, aggregation pipeline builder — CRUD + raw-JSON aggregation done; _visual pipeline builder TODO_
@@ -514,6 +515,16 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-25: **Session 20 — MongoDB power features (toward "beyond Studio 3T").**
+  - **Schema diagram from Mongo** — `MongoService.inferDiagram` samples documents per collection,
+    infers BSON field types, guesses relationships (`<name>_id`/`Id`) → Mermaid; rendered in the
+    interactive `DiagramView`. Verified rendering via probe.
+  - **SQL-like queries** — `MongoService.executeSql` (SELECT/WHERE/ORDER BY/LIMIT, = != > < >= <= LIKE)
+    → `find()`; a `sql` operation mode beside `find` (JSON filter). Both options available.
+    `MongoSqlTest` 6/6.
+  - **Compass-like result views** — JSON / **Table** (flattened grid) / **Schema** (field → type(s) +
+    count + % present) selector on query results.
+  - Full `mvn install` + `mvn test` clean; boots clean.
 - 2026-06-24: **Session 19 — FTP, per-user protocol visibility, interactive ER diagram, DB structure helpers.**
   - **FTP/FTPS** client (`nexuslink-protocol-ftp`, Apache Commons Net) — verified live vs. test.rebex.net.
   - **Per-user protocol enable/disable** — data-driven catalog + View ▸ Protocols… dialog, persisted

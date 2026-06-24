@@ -38,6 +38,12 @@ public final class MongoClientView extends BorderPane {
     private final TextArea resultArea = new TextArea();
     private final Label resultStatus = new Label();
 
+    // Compass-like result views
+    private final ComboBox<String> viewCombo = new ComboBox<>();
+    private final TableView<org.bson.Document> docTable = new TableView<>();
+    private final TableView<String[]> schemaTable = new TableView<>();
+    private final java.util.List<org.bson.Document> lastDocs = new java.util.ArrayList<>();
+
     private String activeDb;
     private String activeCollection;
 
@@ -233,7 +239,14 @@ public final class MongoClientView extends BorderPane {
         runBtn.getStyleClass().add("btn-primary");
         runBtn.setOnAction(e -> run());
 
-        HBox controls = new HBox(8, new Label("Operation:"), modeCombo, limitLbl, limitField, runBtn, resultStatus);
+        viewCombo.getItems().addAll("JSON", "Table", "Schema");
+        viewCombo.setValue("JSON");
+        viewCombo.valueProperty().addListener((o, ov, nv) -> renderView());
+        Label viewLbl = new Label("View:");
+        viewLbl.getStyleClass().add("meta-label");
+
+        HBox controls = new HBox(8, new Label("Operation:"), modeCombo, limitLbl, limitField, runBtn,
+                viewLbl, viewCombo, resultStatus);
         ((Label) controls.getChildren().get(0)).getStyleClass().add("meta-label");
         controls.setAlignment(Pos.CENTER_LEFT);
         controls.setPadding(new Insets(6));
@@ -249,10 +262,18 @@ public final class MongoClientView extends BorderPane {
         resultArea.getStyleClass().add("code-area");
         resultArea.setEditable(false);
         resultArea.setPromptText("Documents appear here…");
+        docTable.getStyleClass().add("details-table");
+        docTable.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
+        docTable.setPlaceholder(new Label("Run a find/SQL query, then switch to Table view"));
+        buildSchemaTable();
 
-        VBox right = new VBox(6, controls, queryEditor, resultArea);
+        StackPane resultStack = new StackPane(resultArea, docTable, schemaTable);
+        docTable.setVisible(false);
+        schemaTable.setVisible(false);
+
+        VBox right = new VBox(6, controls, queryEditor, resultStack);
         right.setPadding(new Insets(8));
-        VBox.setVgrow(resultArea, Priority.ALWAYS);
+        VBox.setVgrow(resultStack, Priority.ALWAYS);
 
         SplitPane sp = new SplitPane(explorer, right);
         sp.setDividerPositions(0.28);
@@ -359,15 +380,19 @@ public final class MongoClientView extends BorderPane {
                 };
             }
         };
+        boolean docMode = mode.equals("find") || mode.equals("sql") || mode.equals("aggregate");
         task.setOnSucceeded(e -> {
             resultArea.setText(task.getValue());
             resultStatus.getStyleClass().setAll("meta-label");
             resultStatus.setText("ok");
+            if (docMode) renderView();      // refresh Table/Schema/JSON for the new docs
+            else { lastDocs.clear(); showNode(resultArea); }
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
             resultStatus.setText("✖ " + task.getException().getMessage());
             resultArea.setText("Error: " + task.getException().getMessage());
+            showNode(resultArea);
         });
         runBg(task);
     }
@@ -375,7 +400,107 @@ public final class MongoClientView extends BorderPane {
     private String renderDocs(MongoQueryResult r) {
         if (!r.success()) throw new RuntimeException(r.error());
         Platform.runLater(() -> resultStatus.setText(r.count() + " doc(s) · " + r.durationMs() + " ms"));
+        synchronized (lastDocs) {
+            lastDocs.clear();
+            for (String json : r.documents()) {
+                try { lastDocs.add(org.bson.Document.parse(json)); } catch (Exception ignored) { }
+            }
+        }
         return r.documents().isEmpty() ? "(no documents)" : String.join("\n", r.documents());
+    }
+
+    // ---- Compass-like result views ----
+
+    private void renderView() {
+        String v = viewCombo.getValue();
+        switch (v == null ? "JSON" : v) {
+            case "Table" -> { buildDocTable(); showNode(docTable); }
+            case "Schema" -> { buildSchema(); showNode(schemaTable); }
+            default -> {
+                if (!lastDocs.isEmpty()) {
+                    java.util.List<String> json = new java.util.ArrayList<>();
+                    for (org.bson.Document d : lastDocs) json.add(d.toJson());
+                    resultArea.setText(String.join("\n", json));
+                }
+                showNode(resultArea);
+            }
+        }
+    }
+
+    private void showNode(javafx.scene.Node visible) {
+        resultArea.setVisible(visible == resultArea);
+        docTable.setVisible(visible == docTable);
+        schemaTable.setVisible(visible == schemaTable);
+    }
+
+    private void buildDocTable() {
+        docTable.getColumns().clear();
+        java.util.LinkedHashSet<String> keys = new java.util.LinkedHashSet<>();
+        for (org.bson.Document d : lastDocs) keys.addAll(d.keySet());
+        for (String k : keys) {
+            TableColumn<org.bson.Document, String> col = new TableColumn<>(k);
+            col.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(cellString(cd.getValue().get(k))));
+            col.setPrefWidth(150);
+            docTable.getColumns().add(col);
+        }
+        docTable.setItems(javafx.collections.FXCollections.observableArrayList(lastDocs));
+    }
+
+    private void buildSchemaTable() {
+        schemaTable.getStyleClass().add("details-table");
+        schemaTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        schemaTable.setPlaceholder(new Label("Run a find/SQL query, then switch to Schema view"));
+        String[] heads = {"Field", "Type(s)", "Count", "Present"};
+        for (int i = 0; i < heads.length; i++) {
+            final int idx = i;
+            TableColumn<String[], String> c = new TableColumn<>(heads[i]);
+            c.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    idx < cd.getValue().length ? cd.getValue()[idx] : ""));
+            schemaTable.getColumns().add(c);
+        }
+    }
+
+    private void buildSchema() {
+        java.util.LinkedHashMap<String, java.util.TreeSet<String>> types = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Integer> counts = new java.util.LinkedHashMap<>();
+        for (org.bson.Document d : lastDocs) {
+            for (String k : d.keySet()) {
+                types.computeIfAbsent(k, x -> new java.util.TreeSet<>()).add(typeName(d.get(k)));
+                counts.merge(k, 1, Integer::sum);
+            }
+        }
+        int total = lastDocs.size();
+        var rows = javafx.collections.FXCollections.<String[]>observableArrayList();
+        for (String k : types.keySet()) {
+            int cnt = counts.get(k);
+            rows.add(new String[]{k, String.join(", ", types.get(k)), String.valueOf(cnt),
+                    total == 0 ? "" : Math.round(100.0 * cnt / total) + "%"});
+        }
+        schemaTable.setItems(rows);
+    }
+
+    private static String cellString(Object v) {
+        if (v == null) return "null";
+        if (v instanceof org.bson.Document d) return d.toJson();
+        if (v instanceof java.util.List<?> l) return l.toString();
+        return v.toString();
+    }
+
+    private static String typeName(Object v) {
+        if (v == null) return "null";
+        if (v instanceof org.bson.Document d) {
+            if (d.containsKey("$oid")) return "objectId";
+            if (d.containsKey("$date")) return "date";
+            if (d.containsKey("$numberDecimal")) return "decimal";
+            return "object";
+        }
+        if (v instanceof String) return "string";
+        if (v instanceof Integer) return "int";
+        if (v instanceof Long) return "long";
+        if (v instanceof Double) return "double";
+        if (v instanceof Boolean) return "bool";
+        if (v instanceof java.util.List) return "array";
+        return v.getClass().getSimpleName().toLowerCase();
     }
 
     private int parseLimit() {
