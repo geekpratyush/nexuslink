@@ -45,6 +45,9 @@ public final class MongoClientView extends BorderPane {
     private final java.util.List<org.bson.Document> lastDocs = new java.util.ArrayList<>();
     private String lastCollection;   // source collection for the cached docs (editable when set)
 
+    private final MenuButton recentBtn = new MenuButton("Recent");
+    private final java.util.LinkedList<String[]> recentQueries = new java.util.LinkedList<>();
+
     private String activeDb;
     private String activeCollection;
 
@@ -406,8 +409,10 @@ public final class MongoClientView extends BorderPane {
         Label viewLbl = new Label("View:");
         viewLbl.getStyleClass().add("meta-label");
 
+        recentBtn.getStyleClass().add("btn-secondary");
+        recentBtn.setDisable(true);
         HBox controls = new HBox(8, new Label("Operation:"), modeCombo, limitLbl, limitField, runBtn,
-                viewLbl, viewCombo, resultStatus);
+                recentBtn, viewLbl, viewCombo, resultStatus);
         ((Label) controls.getChildren().get(0)).getStyleClass().add("meta-label");
         controls.setAlignment(Pos.CENTER_LEFT);
         controls.setPadding(new Insets(6));
@@ -564,6 +569,7 @@ public final class MongoClientView extends BorderPane {
             resultStatus.setText("ok");
             if (docMode) renderView();      // refresh Table/Schema/JSON for the new docs
             else { lastDocs.clear(); showNode(resultArea); }
+            if (docMode || mode.equals("explain")) rememberQuery(mode, body);
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
@@ -584,6 +590,21 @@ public final class MongoClientView extends BorderPane {
             }
         }
         return r.documents().isEmpty() ? "(no documents)" : String.join("\n", r.documents());
+    }
+
+    private void rememberQuery(String mode, String body) {
+        if (body == null || body.isBlank()) return;
+        recentQueries.removeIf(q -> q[0].equals(mode) && q[1].equals(body));
+        recentQueries.addFirst(new String[]{mode, body});
+        while (recentQueries.size() > 15) recentQueries.removeLast();
+        recentBtn.getItems().clear();
+        for (String[] q : recentQueries) {
+            String oneLine = q[1].replaceAll("\\s+", " ").trim();
+            MenuItem mi = new MenuItem(q[0] + ":  " + (oneLine.length() > 60 ? oneLine.substring(0, 60) + "…" : oneLine));
+            mi.setOnAction(e -> { modeCombo.setValue(q[0]); queryEditor.setText(q[1]); });
+            recentBtn.getItems().add(mi);
+        }
+        recentBtn.setDisable(recentQueries.isEmpty());
     }
 
     // ---- Compass-like result views ----

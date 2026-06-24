@@ -401,7 +401,9 @@
 > **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.
 - [x] `MongoService` — `org.mongodb:mongodb-driver-sync` (Apache-2.0) in its own `nexuslink-protocol-mongo` module: connect, list dbs/collections, find, aggregate, count, insertOne, updateMany, deleteMany (Extended-JSON in/out) + `MongoQueryResult`
 - [x] `MongoClientView` UI — connection bar, database picker + collection list, operation selector (find/aggregate/insert/update/delete), Extended-JSON editor (Ctrl+Enter), result pane; wired into `MainWindow` (File menu + sidebar + tab opener)
-- [-] Document CRUD, aggregation pipeline builder — CRUD + raw-JSON aggregation done; _visual pipeline builder TODO_
+- [x] Document CRUD + **visual aggregation pipeline builder** (stage-by-stage, run or load into editor); in-grid edit/delete (matched by _id) from the Table view
+- [x] **SQL-like queries** (`executeSql`) beside the JSON filter — both options; **explain plan**; **export** results to JSON/CSV; **query history** (recall recent)
+- [x] **Schema diagram** (inferred ER from sampled docs) + **Compass-like views** (JSON / Table / Schema with field type %)
 - [x] **Object explorer** (`MongoExplorer` + `ResourceExplorerView`): databases → collections → indexes tree with collStats + index definitions in the details panel
 - [-] Collection stats + index manager — stats + index listing surfaced in the explorer; _create/drop index UI TODO_
 - [-] Auth: SCRAM / x.509 / LDAP / Kerberos / TLS — supported via connection string (`mongodb+srv://`, TLS, SCRAM); _dedicated auth UI TODO_
@@ -524,7 +526,13 @@
     `MongoSqlTest` 6/6.
   - **Compass-like result views** — JSON / **Table** (flattened grid) / **Schema** (field → type(s) +
     count + % present) selector on query results.
-  - Full `mvn install` + `mvn test` clean; boots clean.
+  - **Export** results to JSON/CSV (`toJsonArray`/`toCsv`, tested) + **explain plan**.
+  - **In-grid edit/delete** from the Table view (context menu + double-click; `replaceById`/`deleteById`).
+  - **Visual aggregation pipeline builder** (add/remove stages → run or load into editor).
+  - **Query history** — recall recent find/SQL/aggregate queries.
+  - Full `mvn install` + `mvn test` clean (MongoSqlTest 8/8); boots clean. The Mongo client now spans
+    explorer + find/SQL/aggregate/explain/CRUD + schema diagram + Compass views + export + pipeline
+    builder + in-grid edit — aiming beyond Studio 3T.
 - 2026-06-24: **Session 19 — FTP, per-user protocol visibility, interactive ER diagram, DB structure helpers.**
   - **FTP/FTPS** client (`nexuslink-protocol-ftp`, Apache Commons Net) — verified live vs. test.rebex.net.
   - **Per-user protocol enable/disable** — data-driven catalog + View ▸ Protocols… dialog, persisted
