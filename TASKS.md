@@ -132,18 +132,11 @@
 ### 2.1 Help Content Structure
 - [x] `help/` resource directory with Markdown files per topic
 - [x] Topics registered in `HelpService` (17 topics with keywords)
-- [ ] Help topics to author (Markdown):
-  - [x] `getting-started.md` — first-run guide, connection wizard walkthrough
-  - [ ] `rest-client.md` — all request/response features
-  - [ ] `kafka-client.md` — producer, consumer, admin, schema registry
-  - [ ] `security.md` — TLS, mTLS, OAuth, Kerberos, vault
-  - [ ] `environment-vars.md` — variable substitution, .env files
-  - [ ] `certificate-manager.md` — import, generate, expiry
-  - [x] `keyboard-shortcuts.md` — all shortcuts, searchable cheat sheet
-  - [ ] `code-generation.md` — how to use code gen per protocol
-  - [ ] `plugins.md` — writing custom protocol plugins
-  - [ ] `troubleshooting.md` — common errors with fix suggestions
-  - [ ] `mqtt.md`, `grpc.md`, `graphql.md`, `sftp.md`, `databases.md`, `ldap.md`, `snmp.md`
+- [x] **All 17 registered help topics authored** (Markdown) — fixed the "Help file missing" errors:
+  - [x] `getting-started`, `keyboard-shortcuts`, `rest-client`, `code-generation`, `security`,
+        `databases`, `kafka-client`, `grpc`, `graphql`, `sftp`, `troubleshooting`, `plugins`
+  - [x] Roadmap-protocol topics written as accurate "on the roadmap" notes: `mqtt`, `ldap`, `snmp`,
+        `certificate-manager`, `environment-vars`
 
 ### 2.2 Help Engine
 - [x] `HelpIndex` — in-memory inverted index with multi-term AND search + prefix fuzzy matching
