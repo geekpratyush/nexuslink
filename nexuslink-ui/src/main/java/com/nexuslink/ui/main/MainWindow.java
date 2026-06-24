@@ -274,6 +274,7 @@ public final class MainWindow {
         RestClientView view = new RestClientView();
         view.setLogger(this::log);
         view.setHistoryRecorder(this::recordHistory);
+        view.setOnSave(this::saveConnection);
         Tab tab = new Tab("REST " + (++newTabCounter), view);
         tab.setClosable(true);
         workspace.getTabs().add(tab);
@@ -329,12 +330,13 @@ public final class MainWindow {
 
     /** Opens a saved/sample connection in the appropriate protocol tab, pre-filled. */
     private void openProfile(ConnectionProfile p) {
+        ConnectionProfile d = decrypted(p);   // resolve any vault refs into plaintext authProps
         switch (p.protocol) {
-            case REST -> openRestTab().prefill(p.target);
-            case WEBSOCKET -> openWebSocketTab().prefill(p.target);
-            case SQL -> openSqlTab().prefill(p.target, p.username, secret(p, "passwordRef", "password"));
-            case MONGO -> openMongoTab().prefill(mongoTarget(p));
-            case MCP -> openMcpTab().prefill(p.target, p.properties.get("transport"));
+            case REST -> openRestTab().applyProfile(d);
+            case WEBSOCKET -> openWebSocketTab().prefill(d.target);
+            case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
+            case MONGO -> openMongoTab().prefill(mongoTarget(d));
+            case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));
             case LLM -> openLlmTab();
             default -> {
                 log(p.protocol + " connector is on the roadmap — '" + p.name + "' can't be opened yet.");
@@ -344,14 +346,19 @@ public final class MainWindow {
         log("Opened connection: " + p.name);
     }
 
+    /** authProps keys whose values are secrets and must be stored in the vault, not plaintext. */
+    private static final java.util.List<String> SECRET_KEYS =
+            java.util.List.of("password", "token", "apiKeyValue", "clientSecret");
+
     /** Saves a connection, moving any plaintext secrets into the encrypted vault first. */
     private void saveConnection(ConnectionProfile p) {
-        // SQL password → vault ref
-        String pass = p.authProps.remove("password");
-        if (pass != null && !pass.isBlank()) {
-            String ref = VaultSession.get().storeSecret("sql-pass", pass, owner());
-            if (ref != null) p.authProps.put("passwordRef", ref);
-            else { p.authProps.put("password", pass); log("Vault locked — '" + p.name + "' saved without protecting the password."); }
+        for (String key : SECRET_KEYS) {
+            String value = p.authProps.remove(key);
+            if (value != null && !value.isBlank()) {
+                String ref = VaultSession.get().storeSecret("nl-" + key, value, owner());
+                if (ref != null) p.authProps.put(key + "Ref", ref);
+                else { p.authProps.put(key, value); log("Vault locked — '" + p.name + "' saved with " + key + " unprotected."); }
+            }
         }
         // Mongo connection string containing credentials → vault ref + masked display target
         if (p.protocol == ConnectionProfile.Protocol.MONGO && hasInlineCredentials(p.target)) {
@@ -362,11 +369,20 @@ public final class MainWindow {
         log("Saved connection: " + p.name);
     }
 
-    /** Resolves a secret: vault ref if present, else the plaintext value (samples). */
-    private String secret(ConnectionProfile p, String refKey, String plainKey) {
-        String ref = p.authProps.get(refKey);
-        if (ref != null) return VaultSession.get().resolve(ref, owner()).orElse(null);
-        return p.authProps.get(plainKey);
+    /** Returns a copy of {@code p} with every {@code *Ref} secret resolved into its plaintext key. */
+    private ConnectionProfile decrypted(ConnectionProfile p) {
+        ConnectionProfile c = new ConnectionProfile(p.name, p.protocol, p.target);
+        c.id = p.id;
+        c.username = p.username;
+        c.auth = p.auth;
+        c.sample = p.sample;
+        c.properties.putAll(p.properties);
+        c.authProps.putAll(p.authProps);
+        for (String key : SECRET_KEYS) {
+            String ref = c.authProps.remove(key + "Ref");
+            if (ref != null) VaultSession.get().resolve(ref, owner()).ifPresent(v -> c.authProps.put(key, v));
+        }
+        return c;
     }
 
     private String mongoTarget(ConnectionProfile p) {

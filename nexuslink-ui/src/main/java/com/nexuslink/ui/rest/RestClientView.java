@@ -3,6 +3,8 @@ package com.nexuslink.ui.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nexuslink.core.connection.AuthMethod;
+import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
@@ -69,6 +71,7 @@ public final class RestClientView extends BorderPane {
 
     /** Optional sink for log lines (wired to the app log panel). */
     private Consumer<String> logger = s -> {};
+    private Consumer<ConnectionProfile> onSave = p -> {};
 
     /** Optional sink for completed-request history entries. */
     private Consumer<HistoryEntry> historyRecorder = e -> {};
@@ -91,6 +94,81 @@ public final class RestClientView extends BorderPane {
     /** Pre-fills the request URL (used when opening a saved/sample connection). */
     public void prefill(String url) {
         if (url != null && !url.isBlank()) urlField.setText(url);
+    }
+
+    /** Notified when the user saves the current request as a connection. */
+    public void setOnSave(Consumer<ConnectionProfile> onSave) {
+        this.onSave = onSave == null ? p -> {} : onSave;
+    }
+
+    private void saveCurrent() {
+        String url = urlField.getText().trim();
+        if (url.isEmpty()) { statusLabel.setText("Enter a URL before saving"); return; }
+        TextInputDialog dialog = new TextInputDialog(url);
+        dialog.setTitle("Save connection");
+        dialog.setHeaderText("Save this request as a connection");
+        dialog.setContentText("Name:");
+        dialog.initOwner(getScene() == null ? null : getScene().getWindow());
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.isBlank()) return;
+            onSave.accept(toProfile(name.trim()));
+            logger.accept("Saved REST connection: " + name.trim());
+        });
+    }
+
+    /** Builds a connection profile from the current request (secrets in plaintext authProps;
+     *  the caller is expected to move them into the vault). */
+    private ConnectionProfile toProfile(String name) {
+        syncModel();
+        ConnectionProfile p = new ConnectionProfile(name, ConnectionProfile.Protocol.REST, request.getUrl());
+        switch (request.getAuthType()) {
+            case BASIC -> p.withUser(request.getAuthUsername()).withAuth(AuthMethod.BASIC)
+                    .authProp("password", request.getAuthPassword());
+            case BEARER -> p.withAuth(AuthMethod.BEARER_TOKEN).authProp("token", request.getAuthToken());
+            case API_KEY -> p.withAuth(AuthMethod.API_KEY)
+                    .authProp("apiKeyName", request.getApiKeyName())
+                    .authProp("apiKeyValue", request.getApiKeyValue())
+                    .authProp("apiKeyIn", request.getApiKeyLocation().name());
+            case OAUTH2 -> p.withAuth(AuthMethod.OAUTH2)
+                    .authProp("tokenUrl", request.getOauthTokenUrl())
+                    .authProp("clientId", request.getOauthClientId())
+                    .authProp("clientSecret", request.getOauthClientSecret())
+                    .authProp("scope", request.getOauthScope());
+            case NONE -> p.withAuth(AuthMethod.NONE);
+        }
+        return p;
+    }
+
+    /** Applies a saved connection profile (URL + auth) to the editor. Secrets are expected to be
+     *  already resolved into plaintext authProps by the caller. */
+    public void applyProfile(ConnectionProfile p) {
+        if (p.target != null) urlField.setText(p.target);
+        var a = p.authProps;
+        switch (p.auth) {
+            case BASIC -> {
+                authTypeCombo.setValue(RestRequest.AuthType.BASIC);
+                authUser.setText(p.username);
+                authPass.setText(a.getOrDefault("password", ""));
+            }
+            case BEARER_TOKEN -> {
+                authTypeCombo.setValue(RestRequest.AuthType.BEARER);
+                authToken.setText(a.getOrDefault("token", ""));
+            }
+            case API_KEY -> {
+                authTypeCombo.setValue(RestRequest.AuthType.API_KEY);
+                apiKeyName.setText(a.getOrDefault("apiKeyName", "X-API-Key"));
+                apiKeyValue.setText(a.getOrDefault("apiKeyValue", ""));
+                apiKeyLocation.setValue(RestRequest.ApiKeyLocation.valueOf(a.getOrDefault("apiKeyIn", "HEADER")));
+            }
+            case OAUTH2 -> {
+                authTypeCombo.setValue(RestRequest.AuthType.OAUTH2);
+                oauthTokenUrl.setText(a.getOrDefault("tokenUrl", ""));
+                oauthClientId.setText(a.getOrDefault("clientId", ""));
+                oauthClientSecret.setText(a.getOrDefault("clientSecret", ""));
+                oauthScope.setText(a.getOrDefault("scope", ""));
+            }
+            default -> authTypeCombo.setValue(RestRequest.AuthType.NONE);
+        }
     }
 
     // ---- Method bar ----
@@ -121,11 +199,16 @@ public final class RestClientView extends BorderPane {
             CodeGenDialog.show(getScene() == null ? null : getScene().getWindow(), request);
         });
 
+        Button saveBtn = new Button("Save");
+        saveBtn.getStyleClass().add("btn-secondary");
+        saveBtn.setTooltip(new Tooltip("Save this request as a connection"));
+        saveBtn.setOnAction(e -> saveCurrent());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, helpBtn);
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, saveBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 
