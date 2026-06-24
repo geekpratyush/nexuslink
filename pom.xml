@@ -25,6 +25,7 @@
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
+        <module>nexuslink-protocol-grpc</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -93,6 +94,8 @@
         <lettuce.version>6.3.2.RELEASE</lettuce.version>
         <azure.storage.version>12.27.0</azure.storage.version>
         <gcs.version>2.43.2</gcs.version>
+        <grpc.version>1.67.1</grpc.version>
+        <protobuf.version>3.25.5</protobuf.version>
         <testcontainers.version>1.20.4</testcontainers.version>
 
         <!-- Testing -->
@@ -188,6 +191,38 @@
                 <groupId>com.google.cloud</groupId>
                 <artifactId>google-cloud-storage</artifactId>
                 <version>${gcs.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-grpc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- gRPC (dynamic, reflection-based) — versions aligned with the GCS SDK -->
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty-shaded</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-protobuf</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-stub</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-services</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
+                <version>${protobuf.version}</version>
             </dependency>
 
             <!-- AWS SDK v2 — S3 (object storage), lightweight URL-connection HTTP client -->

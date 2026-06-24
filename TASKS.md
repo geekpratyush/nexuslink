@@ -307,11 +307,11 @@
 ## PHASE 6 — ADVANCED HTTP PROTOCOLS
 
 ### 6.1 gRPC Client
-- [ ] `ProtoFileLoader` — parse `.proto` files, resolve imports, extract services/methods
-- [ ] `GrpcChannelService` — managed channel per connection, TLS/mTLS
-- [ ] `GrpcInvokerService` — unary, server stream, client stream, bidi stream
-- [ ] `GrpcView.fxml` — service picker, method picker, request JSON editor, response panel
-- [ ] Server reflection support (auto-discover services without proto file)
+- [x] **Server reflection** — `GrpcService` auto-discovers services/methods + resolves descriptors via reflection (recursive dependency resolution); no `.proto` upload needed. **Verified live vs. grpcb.in.**
+- [x] `GrpcChannelService` — managed channel per connection (plaintext/TLS)
+- [-] `GrpcInvokerService` — **unary** done (DynamicMessage ↔ JSON via JsonFormat + ProtoUtils marshallers); _server/client/bidi streaming TODO_
+- [x] `GrpcView` — host/port/TLS bar, service picker, method picker (streaming-flagged), request JSON editor, response panel; wired into the shell (gRPC sample = grpcb.in)
+- [ ] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection)
 - [ ] Streaming panel: live message list, send message (client/bidi), end stream
 
 ### 6.2 GraphQL Client
@@ -511,6 +511,14 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 17 — gRPC client (dynamic, reflection-based).**
+  - New `nexuslink-protocol-grpc` module (grpc-java + protobuf, versions aligned with the GCS SDK):
+    `GrpcService` — connect (plaintext/TLS), list services/methods via **server reflection**
+    (recursive descriptor resolution), and invoke **unary** methods with JSON ↔ `DynamicMessage`.
+  - `GrpcView` — host/port/TLS bar, service + method pickers (streaming-flagged), JSON request editor,
+    response panel. Wired into the shell; grpcb.in sample opens prefilled.
+  - **VERIFIED LIVE vs. grpcb.in:** listed 4 services, detected unary/streaming methods, invoked
+    `grpcbin.GRPCBin/Index` → real JSON response. Full `mvn install` + `mvn test` clean; boots clean.
 - 2026-06-24: **Session 16 — Google Cloud Storage (object-storage trio complete).**
   - New `nexuslink-protocol-gcs` module (Google Cloud Storage SDK): `GcsService` (project +
     service-account JSON key / ADC; listBuckets, listObjects) + `GcsExplorer` + `GcsView` (project +

@@ -8,6 +8,7 @@ import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.gcs.GcsView;
 import com.nexuslink.ui.graphql.GraphQLView;
+import com.nexuslink.ui.grpc.GrpcView;
 import com.nexuslink.ui.help.HelpDialog;
 import com.nexuslink.ui.icons.Icons;
 import com.nexuslink.ui.kafka.KafkaView;
@@ -126,6 +127,8 @@ public final class MainWindow {
         newSse.setOnAction(e -> openSseTab());
         MenuItem newGql = new MenuItem("New GraphQL Query", Icons.of("rest", 14));
         newGql.setOnAction(e -> openGraphQLTab());
+        MenuItem newGrpc = new MenuItem("New gRPC Client", Icons.of("mcp", 14));
+        newGrpc.setOnAction(e -> openGrpcTab());
         MenuItem newSql = new MenuItem("New SQL Client", Icons.of("sql", 14));
         newSql.setOnAction(e -> openSqlTab());
         MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
@@ -146,7 +149,7 @@ public final class MainWindow {
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newS3, newAzure, newGcs, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newGql, newGrpc, newSql, newMongo, newS3, newAzure, newGcs, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -215,6 +218,7 @@ public final class MainWindow {
         Button wsBtn = sidebarButton("WebSocket", "ws", this::openWebSocketTab);
         Button sseBtn = sidebarButton("SSE Stream", "topic", this::openSseTab);
         Button gqlBtn = sidebarButton("GraphQL", "rest", this::openGraphQLTab);
+        Button grpcBtn = sidebarButton("gRPC", "mcp", this::openGrpcTab);
         Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
         Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
         Button s3Btn = sidebarButton("S3 / Object Storage", "collection", this::openS3Tab);
@@ -225,7 +229,7 @@ public final class MainWindow {
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, gcsBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, grpcBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, gcsBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -332,6 +336,13 @@ public final class MainWindow {
         return view;
     }
 
+    private GrpcView openGrpcTab() {
+        GrpcView view = new GrpcView();
+        view.setLogger(this::log);
+        addTab("gRPC " + (++newTabCounter), view);
+        return view;
+    }
+
     private S3View openS3Tab() {
         S3View view = new S3View();
         view.setLogger(this::log);
@@ -413,6 +424,7 @@ public final class MainWindow {
             case WEBSOCKET -> openWebSocketTab().prefill(d.target);
             case SSE -> openSseTab().prefill(d.target);
             case GRAPHQL -> openGraphQLTab().prefill(d.target);
+            case GRPC -> openGrpcTab().prefill(d.target);
             case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
             case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));

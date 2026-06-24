@@ -59,6 +59,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-redis      ← Redis (Lettuce)
 ├── nexuslink-protocol-azure      ← Azure Blob Storage
 ├── nexuslink-protocol-gcs        ← Google Cloud Storage
+├── nexuslink-protocol-grpc       ← gRPC (dynamic, reflection-based)
 ├── nexuslink-ui                  ← shell (MainWindow), all protocol views, Help system
 └── nexuslink-app                 ← JavaFX entry point (the ONLY runnable module)
     + planned: protocol-messaging, protocol-file, protocol-enterprise
