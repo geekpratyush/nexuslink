@@ -115,6 +115,83 @@ public final class MongoService implements AutoCloseable {
         return collection(collection).deleteMany(parseFilter(filterJson)).getDeletedCount();
     }
 
+    /**
+     * Infers a schema for each collection in {@code database} by sampling documents, then renders a
+     * Mermaid {@code erDiagram} — entities = collections (fields + inferred BSON types), with
+     * relationships guessed from {@code <name>_id} / {@code <name>Id} fields that match a collection.
+     */
+    public String inferDiagram(String database, int sampleSize) {
+        useDatabase(database);
+        List<String> collections = listCollectionNames();
+        java.util.Map<String, java.util.LinkedHashMap<String, String>> schema = new java.util.LinkedHashMap<>();
+        for (String c : collections) {
+            java.util.LinkedHashMap<String, String> fields = new java.util.LinkedHashMap<>();
+            for (Document d : collection(c).find().limit(Math.max(1, sampleSize))) {
+                for (String k : d.keySet()) fields.putIfAbsent(k, bsonType(d.get(k)));
+            }
+            schema.put(c, fields);
+        }
+
+        StringBuilder sb = new StringBuilder("erDiagram\n");
+        java.util.LinkedHashSet<String> rels = new java.util.LinkedHashSet<>();
+        for (var entry : schema.entrySet()) {
+            String child = entry.getKey();
+            for (String field : entry.getValue().keySet()) {
+                String base = referenceBase(field);
+                if (base == null) continue;
+                String target = matchCollection(base, collections);
+                if (target != null && !target.equals(child)) {
+                    rels.add(safe(target) + " ||--o{ " + safe(child) + " : ref");
+                }
+            }
+        }
+        for (String r : rels) sb.append("  ").append(r).append('\n');
+        for (var entry : schema.entrySet()) {
+            sb.append("  ").append(safe(entry.getKey())).append(" {\n");
+            for (var f : entry.getValue().entrySet()) {
+                String key = "_id".equals(f.getKey()) ? " PK" : referenceBase(f.getKey()) != null ? " FK" : "";
+                sb.append("    ").append(f.getValue()).append(' ').append(safe(f.getKey())).append(key).append('\n');
+            }
+            sb.append("  }\n");
+        }
+        return sb.toString();
+    }
+
+    private static String bsonType(Object v) {
+        if (v == null) return "null";
+        if (v instanceof org.bson.types.ObjectId) return "objectId";
+        if (v instanceof String) return "string";
+        if (v instanceof Integer) return "int";
+        if (v instanceof Long) return "long";
+        if (v instanceof Double || v instanceof java.math.BigDecimal) return "double";
+        if (v instanceof Boolean) return "bool";
+        if (v instanceof java.util.Date) return "date";
+        if (v instanceof List) return "array";
+        if (v instanceof Document) return "object";
+        return "mixed";
+    }
+
+    /** Returns the referenced base name for a foreign-key-style field, or null. */
+    private static String referenceBase(String field) {
+        if (field.equals("_id")) return null;
+        if (field.endsWith("_id")) return field.substring(0, field.length() - 3);
+        if (field.length() > 2 && field.endsWith("Id")) return field.substring(0, field.length() - 2);
+        return null;
+    }
+
+    private static String matchCollection(String base, List<String> collections) {
+        for (String suffix : new String[]{"", "s", "es"}) {
+            String candidate = base + suffix;
+            for (String c : collections) if (c.equalsIgnoreCase(candidate)) return c;
+        }
+        return null;
+    }
+
+    private static String safe(String name) {
+        String s = name.replaceAll("[^A-Za-z0-9_]", "_");
+        return s.isEmpty() ? "_" : s;
+    }
+
     /** Creates a new (empty) collection in the current database. */
     public void createCollection(String name) {
         db().createCollection(name);

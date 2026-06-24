@@ -65,6 +65,34 @@ public final class MongoClientView extends BorderPane {
         if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
     }
 
+    private void showDiagram() {
+        if (activeDb == null) { statusLabel.setText("Select a database in the tree first"); return; }
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Inferring schema…");
+        String db = activeDb;
+        Task<String> task = new Task<>() {
+            @Override protected String call() { return service.inferDiagram(db, 200); }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.setText("Schema diagram ready");
+            com.nexuslink.ui.markdown.DiagramView view = new com.nexuslink.ui.markdown.DiagramView();
+            view.setDiagram(task.getValue());
+            javafx.scene.Scene scene = new javafx.scene.Scene(view, 960, 720);
+            com.nexuslink.ui.theme.ThemeManager.get().register(scene);
+            javafx.stage.Stage stage = new javafx.stage.Stage();
+            if (getScene() != null) stage.initOwner(getScene().getWindow());
+            stage.setTitle("MongoDB schema — " + db + "  (scroll to zoom, drag to pan)");
+            stage.setScene(scene);
+            stage.show();
+            logger.accept("Mongo schema diagram generated for " + db);
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("✖ " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
     private void createCollectionDialog() {
         if (activeDb == null) { statusLabel.setText("Select a database in the tree first"); return; }
         TextInputDialog dialog = new TextInputDialog();
@@ -150,6 +178,11 @@ public final class MongoClientView extends BorderPane {
         saveBtn.getStyleClass().add("btn-secondary");
         saveBtn.setOnAction(e -> saveCurrent());
 
+        Button diagramBtn = new Button("Diagram");
+        diagramBtn.getStyleClass().add("btn-secondary");
+        diagramBtn.setTooltip(new Tooltip("Infer a schema diagram from sampled documents"));
+        diagramBtn.setOnAction(e -> showDiagram());
+
         MenuButton structureBtn = new MenuButton("Structure");
         structureBtn.getStyleClass().add("btn-secondary");
         MenuItem createColl = new MenuItem("Create Collection…");
@@ -164,7 +197,7 @@ public final class MongoClientView extends BorderPane {
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, structureBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
