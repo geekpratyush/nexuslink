@@ -26,6 +26,7 @@
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
         <module>nexuslink-protocol-grpc</module>
+        <module>nexuslink-protocol-sftp</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -196,6 +197,11 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-grpc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-sftp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- gRPC (dynamic, reflection-based) — versions aligned with the GCS SDK -->

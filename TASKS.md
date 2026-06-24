@@ -327,11 +327,11 @@
 ## PHASE 7 — FILE TRANSFER
 
 ### 7.1 SFTP / SCP
-- [ ] `SftpService` — Apache MINA SSHD, all auth methods
-- [ ] `DualPaneBrowser.fxml` — local tree (left) + remote tree (right), drag-and-drop transfer
+- [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list dir, read file. **Verified live vs. test.rebex.net.**
+- [-] `SftpExplorer` + `SftpView` — remote directory tree (lazy folders → files) with size/modified/permissions; _local pane + drag-and-drop transfer TODO_
 - [ ] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle
 - [ ] `SyncService` — bidirectional sync with conflict resolution (hash compare)
-- [ ] Remote chmod + permissions display
+- [x] Permissions display (rwx string in details); _remote chmod TODO_
 
 ### 7.2 FTP / FTPS
 - [ ] `FtpService` — Apache Commons Net, active/passive, ASCII/binary, FTPS
@@ -511,6 +511,11 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 18 — SFTP client.**
+  - New `nexuslink-protocol-sftp` module (Apache MINA SSHD): `SftpService` (password + SSH-key auth,
+    list dir, read file, permission strings) + `SftpExplorer` (lazy remote directory tree) + `SftpView`.
+  - Wired into the shell; Rebex SFTP sample opens prefilled. **Verified live vs. test.rebex.net**
+    (listed root, read readme.txt). Full `mvn install` + `mvn test` clean; boots clean.
 - 2026-06-24: **Session 17 — gRPC client (dynamic, reflection-based).**
   - New `nexuslink-protocol-grpc` module (grpc-java + protobuf, versions aligned with the GCS SDK):
     `GrpcService` — connect (plaintext/TLS), list services/methods via **server reflection**

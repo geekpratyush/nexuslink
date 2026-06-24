@@ -58,6 +58,10 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-sftp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-security</artifactId>
         </dependency>
         <dependency>
