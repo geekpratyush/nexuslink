@@ -215,7 +215,11 @@ public final class McpInspectorView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             McpTypes.ToolResult r = task.getValue();
-            StringBuilder sb = new StringBuilder(r.isError() ? "⚠ tool reported error:\n" : "");
+            // isError=true is the SERVER's tool response (e.g. missing params, guidance) — not a
+            // connection/transport failure. Make that distinction clear.
+            StringBuilder sb = new StringBuilder(r.isError()
+                    ? "⚠ The server returned a tool error (the call succeeded; this is the tool's response):\n\n"
+                    : "");
             r.content().forEach(c -> sb.append(c.text()).append('\n'));
             toolResult.setText(sb.toString());
         });

@@ -162,7 +162,7 @@ public final class MainWindow {
         shortcuts.setOnAction(e -> HelpDialog.open("keyboard-shortcuts"));
         help.getItems().addAll(helpIndex, shortcuts);
 
-        menuBar.getMenus().addAll(file, new Menu("Edit", Icons.of("edit", 14)), view,
+        menuBar.getMenus().addAll(file, buildEditMenu(), view,
                 new Menu("Connection", Icons.of("connection", 14)), tools, ai, help);
         HBox.setHgrow(menuBar, Priority.ALWAYS);
 
@@ -485,6 +485,47 @@ public final class MainWindow {
 
     private javafx.stage.Window owner() {
         return root.getScene() == null ? null : root.getScene().getWindow();
+    }
+
+    // ---- Edit menu: clipboard actions routed to the focused text control ----
+
+    private Menu buildEditMenu() {
+        Menu edit = new Menu("Edit", Icons.of("edit", 14));
+        edit.getItems().addAll(
+                editItem("Undo", "Shortcut+Z", "undo"),
+                editItem("Redo", "Shortcut+Shift+Z", "redo"),
+                new SeparatorMenuItem(),
+                editItem("Cut", "Shortcut+X", "cut"),
+                editItem("Copy", "Shortcut+C", "copy"),
+                editItem("Paste", "Shortcut+V", "paste"),
+                new SeparatorMenuItem(),
+                editItem("Select All", "Shortcut+A", "selectAll"));
+        return edit;
+    }
+
+    private MenuItem editItem(String label, String accelerator, String action) {
+        MenuItem mi = new MenuItem(label);
+        mi.setAccelerator(KeyCombination.keyCombination(accelerator));
+        mi.setOnAction(e -> editAction(action));
+        return mi;
+    }
+
+    private void editAction(String action) {
+        javafx.scene.Node focused = root.getScene() == null ? null : root.getScene().getFocusOwner();
+        if (focused instanceof TextInputControl t) {
+            switch (action) {
+                case "undo" -> { if (t.isUndoable()) t.undo(); }
+                case "redo" -> { if (t.isRedoable()) t.redo(); }
+                case "cut" -> t.cut();
+                case "copy" -> t.copy();
+                case "paste" -> t.paste();
+                case "selectAll" -> t.selectAll();
+                default -> { }
+            }
+        } else if (focused instanceof javafx.scene.web.WebView wv) {
+            // For rendered Help/diagrams: copy the current selection from the page.
+            try { wv.getEngine().executeScript("document.execCommand('" + action + "')"); } catch (Exception ignored) { }
+        }
     }
 
     private Button sidebarButton(String label, String icon, Runnable action) {
