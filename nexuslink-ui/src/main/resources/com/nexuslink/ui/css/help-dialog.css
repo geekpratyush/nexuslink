@@ -1,15 +1,15 @@
-/* NexusLink Help Dialog Styles */
+/* NexusLink Help Dialog Styles — uses -nl-* palette from theme-dark/theme-light. */
 
 /* ---------- Root ---------- */
 .help-dialog-root {
-    -fx-background-color: #0F172A;
+    -fx-background-color: -nl-surface;
     -fx-font-family: "Inter", "Segoe UI", system;
 }
 
 /* ---------- Header ---------- */
 .help-header {
-    -fx-background-color: #1E293B;
-    -fx-border-color: #1E1B4B;
+    -fx-background-color: -nl-surface-2;
+    -fx-border-color: -nl-accent-soft;
     -fx-border-width: 0 0 1 0;
     -fx-alignment: CENTER_LEFT;
 }
@@ -17,49 +17,49 @@
 .help-icon {
     -fx-font-size: 20px;
     -fx-font-weight: bold;
-    -fx-text-fill: #06B6D4;
-    -fx-background-color: #1E1B4B;
+    -fx-text-fill: -nl-accent;
+    -fx-background-color: -nl-accent-soft;
     -fx-padding: 4 10 4 10;
     -fx-background-radius: 6;
 }
 
 .help-search-field {
-    -fx-background-color: #020617;
-    -fx-border-color: #334155;
+    -fx-background-color: -nl-bg;
+    -fx-border-color: -nl-border-2;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
-    -fx-text-fill: #F1F5F9;
-    -fx-prompt-text-fill: #64748B;
+    -fx-text-fill: -nl-text-strong;
+    -fx-prompt-text-fill: -nl-text-faint;
     -fx-font-size: 14px;
     -fx-padding: 8 12 8 12;
 }
 
 .help-search-field:focused {
-    -fx-border-color: #06B6D4;
+    -fx-border-color: -nl-accent;
 }
 
 .help-close-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #64748B;
+    -fx-text-fill: -nl-text-muted;
     -fx-font-size: 16px;
     -fx-cursor: hand;
     -fx-padding: 4 8 4 8;
 }
 
 .help-close-btn:hover {
-    -fx-text-fill: #F43F5E;
+    -fx-text-fill: -nl-danger;
 }
 
 /* ---------- Body ---------- */
 .help-body {
-    -fx-background-color: #0F172A;
-    -fx-divider-color: #1E293B;
+    -fx-background-color: -nl-surface;
+    -fx-divider-color: -nl-border;
 }
 
 /* ---------- Left Panel (Topic Tree) ---------- */
 .help-left-pane {
-    -fx-background-color: #0F172A;
-    -fx-border-color: #1E293B;
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
     -fx-border-width: 0 1 0 0;
 }
 
@@ -71,97 +71,97 @@
 
 .help-topic-tree .tree-cell {
     -fx-background-color: transparent;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text-muted;
     -fx-padding: 4 8 4 8;
 }
 
 .help-topic-tree .tree-cell:selected {
-    -fx-background-color: #1E1B4B;
-    -fx-text-fill: #06B6D4;
+    -fx-background-color: -nl-accent-soft;
+    -fx-text-fill: -nl-accent;
 }
 
 .help-topic-tree .tree-cell:hover {
-    -fx-background-color: #1E293B;
-    -fx-text-fill: #F1F5F9;
+    -fx-background-color: -nl-surface-2;
+    -fx-text-fill: -nl-text-strong;
 }
 
 .help-tree-category {
     -fx-font-weight: bold;
-    -fx-text-fill: #475569 !important;
+    -fx-text-fill: -nl-text-faint !important;
     -fx-font-size: 11px;
     -fx-padding: 10 8 2 8;
 }
 
 /* ---------- Content Area ---------- */
 .help-content-scroll {
-    -fx-background-color: #020617;
-    -fx-background: #020617;
+    -fx-background-color: -nl-bg;
+    -fx-background: -nl-bg;
     -fx-border-color: transparent;
 }
 
 .help-content {
-    -fx-background-color: #020617;
+    -fx-background-color: -nl-bg;
     -fx-spacing: 10;
 }
 
 .help-h1 {
     -fx-font-size: 26px;
     -fx-font-weight: bold;
-    -fx-text-fill: #F1F5F9;
+    -fx-text-fill: -nl-text-strong;
     -fx-padding: 0 0 8 0;
 }
 
 .help-h2 {
     -fx-font-size: 19px;
     -fx-font-weight: bold;
-    -fx-text-fill: #CBD5E1;
+    -fx-text-fill: -nl-text;
     -fx-padding: 16 0 4 0;
-    -fx-border-color: #1E293B;
+    -fx-border-color: -nl-border;
     -fx-border-width: 0 0 1 0;
 }
 
 .help-h3 {
     -fx-font-size: 15px;
     -fx-font-weight: bold;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text-muted;
     -fx-padding: 10 0 2 0;
 }
 
 .help-body-text {
     -fx-font-size: 13px;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text;
     -fx-line-spacing: 3;
 }
 
 .help-subtitle {
     -fx-font-size: 14px;
-    -fx-text-fill: #475569;
+    -fx-text-fill: -nl-text-faint;
     -fx-padding: 0 0 16 0;
 }
 
 .help-bullet {
     -fx-font-size: 13px;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text;
     -fx-padding: 1 0 1 12;
 }
 
 .help-highlight {
-    -fx-fill: #F59E0B;
+    -fx-fill: -nl-warn;
     -fx-font-weight: bold;
 }
 
 .help-error {
     -fx-font-size: 14px;
-    -fx-text-fill: #F43F5E;
+    -fx-text-fill: -nl-danger;
     -fx-padding: 16;
-    -fx-background-color: #1E0A0D;
+    -fx-background-color: -nl-surface-2;
     -fx-background-radius: 6;
 }
 
 /* ---------- Search Results ---------- */
 .help-search-result-card {
-    -fx-background-color: #0F172A;
-    -fx-border-color: #1E293B;
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
     -fx-border-width: 1;
@@ -170,51 +170,52 @@
 }
 
 .help-search-result-card:hover {
-    -fx-background-color: #1E293B;
-    -fx-border-color: #06B6D4;
+    -fx-background-color: -nl-surface-2;
+    -fx-border-color: -nl-accent;
 }
 
 .help-result-title {
     -fx-font-size: 14px;
     -fx-font-weight: bold;
-    -fx-text-fill: #06B6D4;
+    -fx-text-fill: -nl-accent;
 }
 
 .help-result-category {
     -fx-font-size: 11px;
-    -fx-text-fill: #8B5CF6;
-    -fx-background-color: #1E1B4B;
+    -fx-text-fill: -nl-accent-2;
+    -fx-background-color: -nl-accent-soft;
     -fx-background-radius: 10;
     -fx-padding: 1 8 1 8;
 }
 
 .help-result-excerpt {
     -fx-font-size: 12px;
+    -fx-text-fill: -nl-text-muted;
 }
 
 /* ---------- Section Nav (right panel) ---------- */
 .help-nav-scroll {
-    -fx-background-color: #0F172A;
-    -fx-background: #0F172A;
-    -fx-border-color: #1E293B;
+    -fx-background-color: -nl-surface;
+    -fx-background: -nl-surface;
+    -fx-border-color: -nl-border;
     -fx-border-width: 0 0 0 1;
 }
 
 .help-section-nav {
-    -fx-background-color: #0F172A;
+    -fx-background-color: -nl-surface;
     -fx-spacing: 2;
 }
 
 .help-section-nav-title {
     -fx-font-size: 11px;
     -fx-font-weight: bold;
-    -fx-text-fill: #475569;
+    -fx-text-fill: -nl-text-faint;
     -fx-padding: 0 0 8 0;
 }
 
 .help-nav-link-1 {
     -fx-font-size: 12px;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text-muted;
     -fx-border-color: transparent;
     -fx-background-color: transparent;
     -fx-padding: 2 0 2 0;
@@ -222,26 +223,26 @@
 
 .help-nav-link-2 {
     -fx-font-size: 12px;
-    -fx-text-fill: #64748B;
+    -fx-text-fill: -nl-text-faint;
     -fx-border-color: transparent;
     -fx-background-color: transparent;
     -fx-padding: 2 0 2 12;
 }
 
 .help-nav-link-1:hover, .help-nav-link-2:hover {
-    -fx-text-fill: #06B6D4;
+    -fx-text-fill: -nl-accent;
 }
 
 /* ---------- Tip Bar ---------- */
 .help-tip-bar {
-    -fx-background-color: #1E1B4B;
-    -fx-border-color: #1E293B;
+    -fx-background-color: -nl-accent-soft;
+    -fx-border-color: -nl-border;
     -fx-border-width: 1 0 0 0;
     -fx-alignment: CENTER_LEFT;
 }
 
 .help-tip-text {
     -fx-font-size: 12px;
-    -fx-text-fill: #94A3B8;
+    -fx-text-fill: -nl-text;
     -fx-font-style: italic;
 }

@@ -1,0 +1,32 @@
+/* NexusLink — DARK palette.
+ * Only defines looked-up colors; all structural rules live in theme-base.css.
+ * Defined on .root AND popup roots (.context-menu / .combo-box-popup) so menu
+ * dropdowns and combo popups resolve the same variables. */
+
+.root, .context-menu, .combo-box-popup {
+    -nl-bg:           #020617;   /* deepest background          */
+    -nl-surface:      #0F172A;   /* panels, menu bar, sidebar   */
+    -nl-surface-2:    #1E293B;   /* raised chips, headers       */
+    -nl-surface-3:    #334155;   /* hover / pressed surfaces    */
+    -nl-accent-soft:  #1E1B4B;   /* selected / active (indigo)  */
+
+    -nl-border:       #1E293B;
+    -nl-border-2:     #3B4A63;
+
+    -nl-text-strong:  #F8FAFC;   /* headings, active text       */
+    -nl-text:         #E2E8F0;   /* body text (brightened)      */
+    -nl-text-muted:   #94A3B8;   /* secondary                   */
+    -nl-text-faint:   #7A8AA3;   /* labels (lifted for contrast)*/
+
+    -nl-accent:       #22D3EE;   /* cyan, primary accent        */
+    -nl-accent-press: #06B6D4;
+    -nl-accent-2:     #A78BFA;   /* violet                      */
+    -nl-on-accent:    #042F2E;   /* text on accent fills        */
+
+    -nl-ok:           #34D399;
+    -nl-info:         #38BDF8;
+    -nl-warn:         #FBBF24;
+    -nl-danger:       #FB7185;
+
+    -nl-shadow:       rgba(0, 0, 0, 0.50);
+}

@@ -1,0 +1,31 @@
+/* NexusLink — LIGHT palette.
+ * Mirror of theme-dark.css with the same variable names mapped to a light,
+ * high-contrast scheme. Structural rules live in theme-base.css. */
+
+.root, .context-menu, .combo-box-popup {
+    -nl-bg:           #F1F5F9;   /* app background              */
+    -nl-surface:      #FFFFFF;   /* panels, menu bar, sidebar   */
+    -nl-surface-2:    #EEF2F7;   /* raised chips, headers       */
+    -nl-surface-3:    #E2E8F0;   /* hover / pressed surfaces    */
+    -nl-accent-soft:  #E0E7FF;   /* selected / active (indigo)  */
+
+    -nl-border:       #D8E0EA;
+    -nl-border-2:     #C2CCDA;
+
+    -nl-text-strong:  #0B1220;   /* headings, active text       */
+    -nl-text:         #1E293B;   /* body text                   */
+    -nl-text-muted:   #475569;   /* secondary                   */
+    -nl-text-faint:   #64748B;   /* labels                      */
+
+    -nl-accent:       #0E7490;   /* deep cyan for contrast      */
+    -nl-accent-press: #0891B2;
+    -nl-accent-2:     #7C3AED;   /* violet                      */
+    -nl-on-accent:    #FFFFFF;   /* text on accent fills        */
+
+    -nl-ok:           #047857;
+    -nl-info:         #0369A1;
+    -nl-warn:         #B45309;
+    -nl-danger:       #BE123C;
+
+    -nl-shadow:       rgba(15, 23, 42, 0.18);
+}

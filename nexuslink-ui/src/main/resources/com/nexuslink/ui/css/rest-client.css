@@ -1,7 +1,7 @@
-/* REST client view specifics */
+/* REST client view specifics — uses -nl-* palette from theme-dark/theme-light. */
 
 .rest-client-view {
-    -fx-background-color: #020617;
+    -fx-background-color: -nl-bg;
 }
 
 .rest-client-view .combo-box {
@@ -9,15 +9,15 @@
     -fx-font-weight: bold;
 }
 
-.rest-client-view .split-pane { -fx-background-color: #020617; }
-.rest-client-view .split-pane-divider { -fx-background-color: #1E293B; -fx-padding: 0 1 0 1; }
+.rest-client-view .split-pane { -fx-background-color: -nl-bg; }
+.rest-client-view .split-pane-divider { -fx-background-color: -nl-border; -fx-padding: 0 1 0 1; }
 
 .log-titled > .title {
-    -fx-background-color: #0F172A;
-    -fx-text-fill: #94A3B8;
+    -fx-background-color: -nl-surface;
+    -fx-text-fill: -nl-text-muted;
     -fx-font-size: 11px;
 }
-.log-titled > .content { -fx-background-color: #020617; -fx-border-color: transparent; }
+.log-titled > .content { -fx-background-color: -nl-bg; -fx-border-color: transparent; }
 
-.progress-bar > .bar { -fx-background-color: #06B6D4; -fx-background-insets: 0; }
-.progress-bar > .track { -fx-background-color: #1E293B; }
+.progress-bar > .bar { -fx-background-color: -nl-accent; -fx-background-insets: 0; }
+.progress-bar > .track { -fx-background-color: -nl-surface-2; }

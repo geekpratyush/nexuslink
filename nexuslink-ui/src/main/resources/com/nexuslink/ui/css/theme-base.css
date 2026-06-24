@@ -1,0 +1,264 @@
+/* NexusLink — structural theme (palette-agnostic).
+ * References looked-up colors (-nl-*) supplied by theme-dark.css / theme-light.css.
+ * Swap the palette file to retheme the whole app. */
+
+.root {
+    -fx-background-color: -nl-bg;
+    -fx-font-family: "Inter", "Segoe UI", system;
+    -fx-font-size: 13px;
+}
+
+/* ---------- Menu bar (top-level) ---------- */
+.menu-bar {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 2 4 2 4;
+}
+.menu-bar > .container > .menu-button { -fx-background-radius: 5; -fx-padding: 3 4 3 4; }
+.menu-bar .label { -fx-text-fill: -nl-text; }
+.menu-bar > .container > .menu-button:hover,
+.menu-bar > .container > .menu-button:focused,
+.menu-bar > .container > .menu-button:showing {
+    -fx-background-color: -nl-accent-soft;
+}
+.menu-bar > .container > .menu-button:hover .label,
+.menu-bar > .container > .menu-button:showing .label {
+    -fx-text-fill: -nl-text-strong;
+}
+
+/* ---------- Dropdown / context menus (THE contrast fix) ---------- */
+.context-menu {
+    -fx-background-color: -nl-surface-2;
+    -fx-border-color: -nl-border-2;
+    -fx-border-width: 1;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-padding: 5;
+    -fx-effect: dropshadow(gaussian, -nl-shadow, 18, 0, 0, 7);
+}
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 5;
+    -fx-padding: 6 14 6 14;
+}
+.menu-item .label { -fx-text-fill: -nl-text; }
+.menu-item:focused, .menu-item:hovered, .menu-item:showing {
+    -fx-background-color: -nl-accent-soft;
+}
+.menu-item:focused .label, .menu-item:hovered .label, .menu-item:showing .label {
+    -fx-text-fill: -nl-text-strong;
+}
+.menu-item:disabled .label { -fx-text-fill: -nl-text-faint; }
+.menu-up-arrow, .menu-down-arrow { -fx-background-color: -nl-text-muted; }
+.context-menu .separator .line {
+    -fx-border-color: -nl-border;
+    -fx-border-width: 1 0 0 0;
+}
+
+/* ---------- Top search ---------- */
+.global-search {
+    -fx-background-color: -nl-bg;
+    -fx-border-color: -nl-border-2;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: -nl-text-strong;
+    -fx-prompt-text-fill: -nl-text-faint;
+    -fx-padding: 5 10 5 10;
+}
+.global-search:focused { -fx-border-color: -nl-accent; }
+
+/* ---------- Connection tree (left) ---------- */
+.sidebar {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
+    -fx-border-width: 0 1 0 0;
+}
+.sidebar-title {
+    -fx-text-fill: -nl-text-faint;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 10 12 6 12;
+}
+.connection-tree { -fx-background-color: transparent; }
+.connection-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -nl-text;
+    -fx-padding: 3 8 3 8;
+}
+.connection-tree .tree-cell:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+.connection-tree .tree-cell:hover { -fx-background-color: -nl-surface-2; }
+
+/* ---------- Workspace tabs (center) ---------- */
+.workspace-tabs .tab-header-background { -fx-background-color: -nl-surface; }
+.workspace-tabs .tab {
+    -fx-background-color: -nl-surface;
+    -fx-background-radius: 0;
+    -fx-padding: 4 12 4 12;
+}
+.workspace-tabs .tab:selected { -fx-background-color: -nl-bg; -fx-border-color: -nl-accent; -fx-border-width: 2 0 0 0; }
+.workspace-tabs .tab .tab-label { -fx-text-fill: -nl-text-muted; }
+.workspace-tabs .tab:selected .tab-label { -fx-text-fill: -nl-text-strong; }
+.workspace-tabs .tab:hover .tab-label { -fx-text-fill: -nl-text; }
+.tab-close-button { -fx-background-color: -nl-text-muted; }
+.tab-close-button:hover { -fx-background-color: -nl-danger; }
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+    -fx-background-color: -nl-accent;
+    -fx-text-fill: -nl-on-accent;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 7 18 7 18;
+    -fx-cursor: hand;
+}
+.btn-primary:hover { -fx-background-color: -nl-accent-press; }
+.btn-secondary {
+    -fx-background-color: -nl-surface-2;
+    -fx-text-fill: -nl-text;
+    -fx-background-radius: 6;
+    -fx-padding: 6 14 6 14;
+    -fx-cursor: hand;
+}
+.btn-secondary:hover { -fx-background-color: -nl-surface-3; -fx-text-fill: -nl-text-strong; }
+
+/* ---------- Inputs ---------- */
+.nl-field, .text-field, .text-area {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border-2;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-text-fill: -nl-text-strong;
+    -fx-prompt-text-fill: -nl-text-faint;
+}
+.nl-field:focused, .text-field:focused, .text-area:focused { -fx-border-color: -nl-accent; }
+.text-area .content { -fx-background-color: -nl-surface; }
+
+.combo-box {
+    -fx-background-color: -nl-surface-2;
+    -fx-background-radius: 4;
+}
+.combo-box .list-cell { -fx-text-fill: -nl-text; -fx-background-color: -nl-surface-2; }
+.combo-box .arrow { -fx-background-color: -nl-text-muted; }
+.combo-box-popup .list-view { -fx-background-color: -nl-surface-2; -fx-border-color: -nl-border-2; }
+.combo-box-popup .list-cell { -fx-text-fill: -nl-text; -fx-background-color: -nl-surface-2; -fx-padding: 5 10 5 10; }
+.combo-box-popup .list-cell:filled:hover { -fx-background-color: -nl-surface-3; -fx-text-fill: -nl-text-strong; }
+.combo-box-popup .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+
+/* ---------- Method colours (REST) ---------- */
+.method-get    { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
+.method-post   { -fx-text-fill: -nl-warn;   -fx-font-weight: bold; }
+.method-put    { -fx-text-fill: -nl-info;   -fx-font-weight: bold; }
+.method-delete { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+
+/* ---------- Status badges ---------- */
+.status-2xx { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
+.status-3xx { -fx-text-fill: -nl-info;   -fx-font-weight: bold; }
+.status-4xx { -fx-text-fill: -nl-warn;   -fx-font-weight: bold; }
+.status-5xx { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+.status-err { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+
+/* ---------- Response / code areas ---------- */
+.code-area {
+    -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-background-color: -nl-bg;
+    -fx-text-fill: -nl-text;
+    -fx-border-color: -nl-border;
+    -fx-border-radius: 4;
+}
+.code-area .content { -fx-background-color: -nl-bg; }
+
+.meta-label { -fx-text-fill: -nl-text-muted; -fx-font-size: 12px; }
+
+/* ---------- Tab panes inside request editor ---------- */
+.editor-tabs .tab-header-background { -fx-background-color: transparent; }
+.editor-tabs .tab { -fx-background-color: transparent; -fx-padding: 3 10 3 10; }
+.editor-tabs .tab:selected { -fx-border-color: -nl-accent; -fx-border-width: 0 0 2 0; }
+.editor-tabs .tab .tab-label { -fx-text-fill: -nl-text-muted; }
+.editor-tabs .tab:selected .tab-label { -fx-text-fill: -nl-text-strong; }
+
+/* ---------- Tables ---------- */
+.table-view {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
+}
+.table-view .column-header-background { -fx-background-color: -nl-surface-2; }
+.table-view .column-header .label { -fx-text-fill: -nl-text-muted; }
+.table-view .table-row-cell { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
+.table-view .table-row-cell:odd { -fx-background-color: derive(-nl-surface, 4%); }
+.table-view .table-row-cell:selected { -fx-background-color: -nl-accent-soft; }
+.table-view .table-cell { -fx-text-fill: -nl-text; }
+
+/* ---------- Scroll bars ---------- */
+.scroll-bar { -fx-background-color: transparent; }
+.scroll-bar .track { -fx-background-color: transparent; }
+.scroll-bar .thumb { -fx-background-color: -nl-surface-3; -fx-background-radius: 6; }
+.scroll-bar .thumb:hover { -fx-background-color: -nl-border-2; }
+.scroll-bar .increment-button, .scroll-bar .decrement-button { -fx-background-color: transparent; -fx-padding: 0; }
+.scroll-bar .increment-arrow, .scroll-bar .decrement-arrow { -fx-background-color: -nl-text-faint; -fx-padding: 3; }
+.corner { -fx-background-color: transparent; }
+
+/* ---------- Tooltips ---------- */
+.tooltip {
+    -fx-background-color: -nl-surface-2;
+    -fx-text-fill: -nl-text-strong;
+    -fx-border-color: -nl-border-2;
+    -fx-border-width: 1;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-font-size: 12px;
+    -fx-effect: dropshadow(gaussian, -nl-shadow, 12, 0, 0, 4);
+}
+
+/* ---------- Log panel ---------- */
+.log-panel {
+    -fx-background-color: -nl-bg;
+    -fx-border-color: -nl-border;
+    -fx-border-width: 1 0 0 0;
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: -nl-text;
+}
+
+/* ---------- History panel ---------- */
+.history-panel { -fx-background-color: -nl-bg; }
+.history-panel .list-view { -fx-background-color: -nl-bg; -fx-border-color: transparent; }
+.history-panel .list-cell {
+    -fx-background-color: -nl-bg;
+    -fx-padding: 4 8 4 8;
+    -fx-border-color: -nl-border;
+    -fx-border-width: 0 0 1 0;
+}
+.history-panel .list-cell:filled:hover { -fx-background-color: -nl-surface; }
+.history-panel .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; }
+.history-summary { -fx-text-fill: -nl-text; -fx-font-size: 12px; }
+
+/* ---------- Protocol views (MCP + LLM + SQL + WS + Mongo) ---------- */
+.mcp-view, .llm-view, .sql-view, .ws-view, .mongo-view { -fx-background-color: -nl-bg; }
+.sql-view .list-view, .sql-view .table-view,
+.mongo-view .list-view {
+    -fx-background-color: -nl-surface; -fx-border-color: -nl-border;
+}
+.sql-view .list-cell, .mongo-view .list-cell {
+    -fx-background-color: -nl-surface; -fx-text-fill: -nl-text; -fx-padding: 3 8 3 8;
+}
+.sql-view .list-cell:filled:hover, .mongo-view .list-cell:filled:hover { -fx-background-color: -nl-surface-2; }
+.sql-view .list-cell:filled:selected, .mongo-view .list-cell:filled:selected {
+    -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent;
+}
+.mcp-view .list-view, .llm-view .list-view { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
+.mcp-view .list-cell { -fx-background-color: -nl-surface; -fx-text-fill: -nl-text; -fx-padding: 4 8 4 8; }
+.mcp-view .list-cell:filled:hover { -fx-background-color: -nl-surface-2; }
+.mcp-view .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+.split-pane { -fx-background-color: -nl-bg; }
+.split-pane-divider { -fx-background-color: -nl-border; -fx-padding: 0 1 0 1; }
+
+/* ---------- Status bar ---------- */
+.status-bar {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 3 12 3 12;
+}
+.status-bar .label { -fx-text-fill: -nl-text-muted; -fx-font-size: 11px; }

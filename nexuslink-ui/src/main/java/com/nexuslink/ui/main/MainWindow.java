@@ -8,6 +8,7 @@ import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
 import com.nexuslink.ui.rest.RestClientView;
 import com.nexuslink.ui.sql.SqlClientView;
+import com.nexuslink.ui.theme.ThemeManager;
 import com.nexuslink.ui.ws.WebSocketView;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -19,7 +20,6 @@ import javafx.scene.layout.*;
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 /**
  * The NexusLink workspace shell: menu bar + global search, a connection tree on the left,
@@ -41,6 +41,7 @@ public final class MainWindow {
     private HistoryStore historyStore;
     private HistoryPanel historyPanel;
     private TabPane bottomTabs;
+    private MenuItem themeItem;
 
     public Scene createScene() {
         initHistoryStore();
@@ -51,8 +52,7 @@ public final class MainWindow {
         openRestTab();                       // open the initial tab after all panels exist
 
         Scene scene = new Scene(root, 1180, 760);
-        scene.getStylesheets().add(css("/com/nexuslink/ui/css/app-dark.css"));
-        scene.getStylesheets().add(css("/com/nexuslink/ui/css/rest-client.css"));
+        ThemeManager.get().register(scene, "/com/nexuslink/ui/css/rest-client.css");
 
         scene.getAccelerators().put(KeyCombination.keyCombination("F1"),
                 () -> HelpDialog.open("getting-started"));
@@ -62,6 +62,8 @@ public final class MainWindow {
                 this::sendCurrent);
         scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+`"),
                 this::toggleLog);
+        scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+Shift+T"),
+                this::toggleTheme);
 
         log("NexusLink started. Press F1 for help, Ctrl+T for a new REST tab.");
 
@@ -96,11 +98,6 @@ public final class MainWindow {
         return scene;
     }
 
-    private String css(String path) {
-        return Objects.requireNonNull(getClass().getResource(path),
-                "Missing stylesheet: " + path).toExternalForm();
-    }
-
     // ---- Top: menu + global search ----
 
     private VBox buildTopBar() {
@@ -132,7 +129,10 @@ public final class MainWindow {
         Menu view = new Menu("View");
         MenuItem toggleLog = new MenuItem("Toggle Log Panel");
         toggleLog.setOnAction(e -> toggleLog());
-        view.getItems().add(toggleLog);
+        themeItem = new MenuItem(themeMenuLabel());
+        themeItem.setOnAction(e -> toggleTheme());
+        ThemeManager.get().addListener(() -> themeItem.setText(themeMenuLabel()));
+        view.getItems().addAll(toggleLog, new SeparatorMenuItem(), themeItem);
 
         Menu help = new Menu("Help");
         MenuItem helpIndex = new MenuItem("Help Index  (F1)");
@@ -369,6 +369,17 @@ public final class MainWindow {
 
     private void toggleLog() {
         bottomPane.setExpanded(!bottomPane.isExpanded());
+    }
+
+    private void toggleTheme() {
+        ThemeManager.Theme now = ThemeManager.get().toggle();
+        log("Theme switched to " + now.label() + ".");
+    }
+
+    /** Menu label advertises the theme you'd switch *to*. */
+    private String themeMenuLabel() {
+        return "Switch to " + ThemeManager.get().current().other().label()
+                + " Theme  (Ctrl+Shift+T)";
     }
 
     public void log(String message) {

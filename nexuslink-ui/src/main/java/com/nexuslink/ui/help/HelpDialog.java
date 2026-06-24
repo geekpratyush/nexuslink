@@ -78,8 +78,8 @@ public final class HelpDialog {
         stage.setHeight(700);
 
         Scene scene = new Scene(buildLayout());
-        scene.getStylesheets().add(Objects.requireNonNull(
-                getClass().getResource("/com/nexuslink/ui/css/help-dialog.css")).toExternalForm());
+        com.nexuslink.ui.theme.ThemeManager.get().register(scene,
+                "/com/nexuslink/ui/css/help-dialog.css");
         scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
                 if (searchField.getText().isBlank()) close();
