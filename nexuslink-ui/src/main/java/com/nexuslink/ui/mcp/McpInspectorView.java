@@ -1,5 +1,6 @@
 package com.nexuslink.ui.mcp;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexuslink.protocol.ai.mcp.*;
 import javafx.application.Platform;
@@ -179,9 +180,8 @@ public final class McpInspectorView extends BorderPane {
         desc.setWrapText(true);
         toolList.getSelectionModel().selectedItemProperty().addListener((o, ov, t) -> {
             if (t != null) {
-                desc.setText(t.description());
-                toolArgs.setText(t.inputSchema() != null && t.inputSchema().has("properties")
-                        ? "{\n  \n}" : "{}");
+                desc.setText(t.description() + paramsHint(t.inputSchema()));
+                toolArgs.setText(templateFromSchema(t.inputSchema()));
             }
         });
 
@@ -221,6 +221,48 @@ public final class McpInspectorView extends BorderPane {
         });
         task.setOnFailed(e -> toolResult.setText("Error: " + task.getException().getMessage()));
         runBg(task);
+    }
+
+    /** One-line list of a tool's parameters (required marked with *). */
+    private static String paramsHint(JsonNode schema) {
+        if (schema == null || !schema.path("properties").isObject()) return "";
+        java.util.Set<String> required = new java.util.LinkedHashSet<>();
+        schema.path("required").forEach(n -> required.add(n.asText()));
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        schema.get("properties").fieldNames().forEachRemaining(
+                n -> parts.add(required.contains(n) ? n + "*" : n));
+        return parts.isEmpty() ? "" : "\n\nParameters (*required): " + String.join(", ", parts);
+    }
+
+    /** Builds an editable JSON arguments template from the tool's input schema. */
+    private static String templateFromSchema(JsonNode schema) {
+        if (schema == null || !schema.path("properties").isObject()) return "{}";
+        ObjectNode props = (ObjectNode) schema.get("properties");
+        java.util.Set<String> required = new java.util.LinkedHashSet<>();
+        schema.path("required").forEach(n -> required.add(n.asText()));
+
+        java.util.List<String> names = new java.util.ArrayList<>();
+        props.fieldNames().forEachRemaining(names::add);
+        names.sort((a, b) -> Boolean.compare(!required.contains(a), !required.contains(b))); // required first
+
+        ObjectNode out = MAPPER.createObjectNode();
+        for (String name : names) {
+            JsonNode p = props.path(name);
+            if (p.has("default")) { out.set(name, p.get("default")); continue; }
+            if (p.path("enum").isArray() && p.get("enum").size() > 0) { out.set(name, p.get("enum").get(0)); continue; }
+            switch (p.path("type").asText("string")) {
+                case "integer", "number" -> out.put(name, 0);
+                case "boolean" -> out.put(name, false);
+                case "array" -> out.set(name, MAPPER.createArrayNode());
+                case "object" -> out.set(name, MAPPER.createObjectNode());
+                default -> out.put(name, "");
+            }
+        }
+        try {
+            return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(out);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private SplitPane buildResourcesPane() {
