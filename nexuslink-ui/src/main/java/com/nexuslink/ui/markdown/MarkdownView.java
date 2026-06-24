@@ -28,7 +28,7 @@ import java.util.Set;
 public final class MarkdownView extends StackPane {
 
     private static final String MERMAID_CDN =
-            "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+            "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
 
     private final WebView webView = new WebView();
     private final Parser parser;

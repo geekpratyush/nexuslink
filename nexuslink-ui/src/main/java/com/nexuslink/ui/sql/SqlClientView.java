@@ -265,14 +265,14 @@ public final class SqlClientView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("meta-label");
-            statusLabel.setText("Not connected".equals(statusLabel.getText()) ? "" : "ER diagram ready");
-            com.nexuslink.ui.markdown.MarkdownView view = new com.nexuslink.ui.markdown.MarkdownView();
-            view.setMermaid(task.getValue());
-            javafx.scene.Scene scene = new javafx.scene.Scene(view, 900, 680);
+            statusLabel.setText("ER diagram ready");
+            com.nexuslink.ui.markdown.DiagramView view = new com.nexuslink.ui.markdown.DiagramView();
+            view.setDiagram(task.getValue());
+            javafx.scene.Scene scene = new javafx.scene.Scene(view, 960, 720);
             com.nexuslink.ui.theme.ThemeManager.get().register(scene);
             javafx.stage.Stage stage = new javafx.stage.Stage();
             if (getScene() != null) stage.initOwner(getScene().getWindow());
-            stage.setTitle("ER Diagram");
+            stage.setTitle("ER Diagram — scroll to zoom, drag to pan");
             stage.setScene(scene);
             stage.show();
             logger.accept("ER diagram generated");
