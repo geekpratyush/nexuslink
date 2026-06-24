@@ -509,6 +509,19 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 11 — Markdown/Mermaid help, ER diagrams, richer connections.**
+  - **OAuth 2.0 client-credentials** for REST (`OAuth2TokenClient` with token caching/refresh).
+  - **Save/open REST connections** with vault-backed auth (Basic/Bearer/API-key/OAuth2); generalized
+    secret vaulting over password/token/apiKeyValue/clientSecret → `*Ref`.
+  - **Markdown + Mermaid viewer** (`MarkdownView`: WebView + commonmark + mermaid.js); the Help dialog
+    now renders topic content through it (verified by screenshot). Wired `-Dnexuslink.autohelp`.
+  - **ER diagrams**: `JdbcService.erDiagramMermaid()` → Mermaid `erDiagram` from tables/PK/FK; "ER
+    Diagram" button in the SQL view renders it. Unit-tested.
+  - **Richer connection catalog**: added GRAPHQL/GRPC/SSE/REDIS/FTP/S3 protocols + `BUCKET`/`OBJECT`
+    node kinds; new public samples — GitHub, SWAPI, Countries & Rick-and-Morty GraphQL, grpcb.in,
+    Wikimedia SSE firehose, **MinIO Play S3 sandbox**, Rebex FTP, local Redis.
+  - **VERIFIED:** full `mvn install` + `mvn test` BUILD SUCCESS (RestRequestTest 6, JdbcServiceTest 6);
+    screenshots confirm Markdown help + the expanded Samples tree. Six commits pushed.
 - 2026-06-24: **Session 10 — REST depth: API-key auth, code generation, settings tab.**
   - **API-key auth:** `RestRequest` gained `API_KEY` (key name/value + HEADER|QUERY placement);
     applied in `RestExecutionService` (query folded into `requestUri()`, header via `safeHeader`);

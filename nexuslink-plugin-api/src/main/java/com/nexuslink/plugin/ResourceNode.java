@@ -17,7 +17,7 @@ public final class ResourceNode {
     /** What a node represents. Drives the icon and how children are interpreted. */
     public enum Kind {
         SERVER, DATABASE, SCHEMA, TABLE, COLUMN, COLLECTION, INDEX, FIELD,
-        TOPIC, QUEUE, QUEUE_MANAGER, FOLDER, GENERIC
+        TOPIC, QUEUE, QUEUE_MANAGER, BUCKET, OBJECT, FOLDER, GENERIC
     }
 
     private final String id;
@@ -65,6 +65,8 @@ public final class ResourceNode {
             case TOPIC         -> "topic";
             case QUEUE         -> "queue";
             case QUEUE_MANAGER -> "queue-manager";
+            case BUCKET        -> "collection";
+            case OBJECT        -> "file";
             case FOLDER        -> "schema";
             case GENERIC       -> "dot";
         };

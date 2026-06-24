@@ -77,7 +77,8 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Bespoke icons** | ui | Original "node + link" SVG icon set, themed, used across menus, sidebar, and the object explorer. |
 | **Connection manager** | core + ui | Saved connections persisted to `~/.nexuslink/connections.json`; bundled **public sample** endpoints (deletable); flexible multi-method auth model. |
 | **Object explorer** | plugin-api + ui | Lazy resource tree + details for SQL (db→tables→columns) and Mongo (db→collections→indexes/stats). |
-| **Help system** | ui | 3-pane searchable dialog, live debounced search, context-sensitive `F1`, "Did you know?" tips. |
+| **Markdown + Mermaid** | ui | `MarkdownView` (WebView) renders GFM Markdown + Mermaid diagrams; powers Help content and DB **ER diagrams**. |
+| **Help system** | ui | 3-pane searchable dialog (Markdown-rendered), live debounced search, context-sensitive `F1`, tips. |
 | **Credential vault** | security + ui | AES-256-GCM + PBKDF2 (200k); master-password dialog, auto-lock, status-bar lock toggle. Saved-connection secrets stored as vault refs (no plaintext). |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
 | **REST client** | protocol-http | HTTP/2, params/headers/body/auth tabs, color-coded status, timing, JSON pretty-print. |

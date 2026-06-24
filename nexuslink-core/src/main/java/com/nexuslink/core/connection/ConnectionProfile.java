@@ -16,7 +16,13 @@ import java.util.UUID;
 public final class ConnectionProfile {
 
     /** Protocols a profile can target. Some are connectable today; others are roadmap. */
-    public enum Protocol { REST, WEBSOCKET, SQL, MONGO, MCP, LLM, KAFKA, MQ, SFTP }
+    public enum Protocol {
+        REST, WEBSOCKET, GRAPHQL, GRPC, SSE,
+        SQL, MONGO, REDIS,
+        MCP, LLM,
+        KAFKA, MQ,
+        SFTP, FTP, S3
+    }
 
     public String id = UUID.randomUUID().toString();
     public String name = "";
@@ -56,13 +62,19 @@ public final class ConnectionProfile {
         return switch (protocol) {
             case REST -> "rest";
             case WEBSOCKET -> "ws";
+            case GRAPHQL -> "rest";
+            case GRPC -> "mcp";
+            case SSE -> "topic";
             case SQL -> "sql";
             case MONGO -> "mongo";
+            case REDIS -> "database";
             case MCP -> "mcp";
             case LLM -> "ai";
             case KAFKA -> "topic";
             case MQ -> "queue-manager";
             case SFTP -> "server";
+            case FTP -> "server";
+            case S3 -> "collection";
         };
     }
 
