@@ -200,7 +200,7 @@
   - [ ] `CookiesViewer` — cookie jar browser
   - [ ] `TimelineViewer` — waterfall chart (DNS/TCP/TLS/Send/Wait/Receive)
   - [ ] `TestResultsPanel` — post-response script pass/fail assertions
-- [ ] Code generation panel — tabbed: cURL / Java / Python / Go / JS / PowerShell
+- [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
 

@@ -106,11 +106,19 @@ public final class RestClientView extends BorderPane {
         sendButton.getStyleClass().add("btn-primary");
         sendButton.setOnAction(e -> send());
 
+        Button codeBtn = new Button("</>");
+        codeBtn.getStyleClass().add("btn-secondary");
+        codeBtn.setTooltip(new Tooltip("Generate client code"));
+        codeBtn.setOnAction(e -> {
+            syncModel();
+            CodeGenDialog.show(getScene() == null ? null : getScene().getWindow(), request);
+        });
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, helpBtn);
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 

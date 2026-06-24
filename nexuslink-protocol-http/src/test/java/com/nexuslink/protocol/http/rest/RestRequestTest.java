@@ -48,4 +48,31 @@ class RestRequestTest {
         r.setUrl("https://api.example.com/x");
         assertEquals("https://api.example.com/x", r.requestUri());
     }
+
+    @Test
+    void curlSnippetIncludesMethodUrlAndBearer() {
+        RestRequest r = new RestRequest();
+        r.setMethod("post");
+        r.setUrl("https://api.example.com/items");
+        r.setBodyType(RestRequest.BodyType.JSON);
+        r.setBody("{\"a\":1}");
+        r.setAuthType(RestRequest.AuthType.BEARER);
+        r.setAuthToken("tok123");
+
+        String curl = RestCodeGenerator.generate(RestCodeGenerator.Language.CURL, r);
+        assertTrue(curl.contains("curl -X POST"), curl);
+        assertTrue(curl.contains("https://api.example.com/items"), curl);
+        assertTrue(curl.contains("Authorization: Bearer tok123"), curl);
+        assertTrue(curl.contains("Content-Type: application/json"), curl);
+        assertTrue(curl.contains("--data"), curl);
+    }
+
+    @Test
+    void pythonSnippetReferencesRequests() {
+        RestRequest r = new RestRequest();
+        r.setUrl("https://api.example.com/x");
+        String py = RestCodeGenerator.generate(RestCodeGenerator.Language.PYTHON, r);
+        assertTrue(py.contains("import requests"), py);
+        assertTrue(py.contains("https://api.example.com/x"), py);
+    }
 }
