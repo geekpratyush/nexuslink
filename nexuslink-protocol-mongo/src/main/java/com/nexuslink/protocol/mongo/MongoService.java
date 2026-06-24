@@ -281,6 +281,53 @@ public final class MongoService implements AutoCloseable {
         return s.isEmpty() ? "_" : s;
     }
 
+    /** Returns the query plan (explain output) for a find filter as shell JSON. */
+    public String explain(String collection, String filterJson) {
+        return collection(collection).find(parseFilter(filterJson)).explain().toJson(SHELL);
+    }
+
+    /** Serializes documents to a JSON array (for export). */
+    public static String toJsonArray(List<Document> docs) {
+        StringBuilder sb = new StringBuilder("[\n");
+        for (int i = 0; i < docs.size(); i++) {
+            sb.append("  ").append(docs.get(i).toJson());
+            if (i < docs.size() - 1) sb.append(',');
+            sb.append('\n');
+        }
+        return sb.append(']').toString();
+    }
+
+    /** Serializes documents to CSV using the union of top-level fields as columns. */
+    public static String toCsv(List<Document> docs) {
+        java.util.LinkedHashSet<String> cols = new java.util.LinkedHashSet<>();
+        for (Document d : docs) cols.addAll(d.keySet());
+        StringBuilder sb = new StringBuilder();
+        sb.append(cols.stream().map(MongoService::csvEscape).collect(java.util.stream.Collectors.joining(",")));
+        sb.append('\n');
+        for (Document d : docs) {
+            java.util.List<String> row = new java.util.ArrayList<>();
+            for (String c : cols) row.add(csvEscape(valueString(d.get(c))));
+            sb.append(String.join(",", row)).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** Flattens a BSON value to a single cell string (nested values become compact JSON). */
+    public static String valueString(Object v) {
+        if (v == null) return "";
+        if (v instanceof Document d) return d.toJson();
+        if (v instanceof List<?> l) return l.toString();
+        return v.toString();
+    }
+
+    private static String csvEscape(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            return '"' + s.replace("\"", "\"\"") + '"';
+        }
+        return s;
+    }
+
     /** Creates a new (empty) collection in the current database. */
     public void createCollection(String name) {
         db().createCollection(name);

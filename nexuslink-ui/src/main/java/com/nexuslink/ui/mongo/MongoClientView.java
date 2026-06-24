@@ -71,6 +71,27 @@ public final class MongoClientView extends BorderPane {
         if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
     }
 
+    private void exportResults(boolean csv) {
+        if (lastDocs.isEmpty()) { statusLabel.setText("Run a find/SQL query first"); return; }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Export " + (csv ? "CSV" : "JSON"));
+        chooser.setInitialFileName("mongo-export." + (csv ? "csv" : "json"));
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(
+                csv ? "CSV" : "JSON", csv ? "*.csv" : "*.json"));
+        var file = chooser.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        try {
+            String content = csv ? MongoService.toCsv(lastDocs) : MongoService.toJsonArray(lastDocs);
+            java.nio.file.Files.writeString(file.toPath(), content);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Exported " + lastDocs.size() + " doc(s) → " + file.getName());
+            logger.accept("Mongo export → " + file.getAbsolutePath());
+        } catch (Exception ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Export failed: " + ex.getMessage());
+        }
+    }
+
     private void showDiagram() {
         if (activeDb == null) { statusLabel.setText("Select a database in the tree first"); return; }
         statusLabel.getStyleClass().setAll("meta-label");
@@ -189,6 +210,14 @@ public final class MongoClientView extends BorderPane {
         diagramBtn.setTooltip(new Tooltip("Infer a schema diagram from sampled documents"));
         diagramBtn.setOnAction(e -> showDiagram());
 
+        MenuButton exportBtn = new MenuButton("Export");
+        exportBtn.getStyleClass().add("btn-secondary");
+        MenuItem exportJson = new MenuItem("Export JSON…");
+        exportJson.setOnAction(e -> exportResults(false));
+        MenuItem exportCsv = new MenuItem("Export CSV…");
+        exportCsv.setOnAction(e -> exportResults(true));
+        exportBtn.getItems().addAll(exportJson, exportCsv);
+
         MenuButton structureBtn = new MenuButton("Structure");
         structureBtn.getStyleClass().add("btn-secondary");
         MenuItem createColl = new MenuItem("Create Collection…");
@@ -203,7 +232,7 @@ public final class MongoClientView extends BorderPane {
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, structureBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, exportBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -227,7 +256,7 @@ public final class MongoClientView extends BorderPane {
         });
 
         // Right: query editor + result
-        modeCombo.getItems().addAll("find", "sql", "aggregate", "insertOne", "updateMany", "deleteMany");
+        modeCombo.getItems().addAll("find", "sql", "aggregate", "explain", "insertOne", "updateMany", "deleteMany");
         modeCombo.setValue("find");
         modeCombo.valueProperty().addListener((o, ov, m) -> updateEditorHint(m));
 
@@ -368,6 +397,7 @@ public final class MongoClientView extends BorderPane {
                 return switch (mode) {
                     case "find" -> renderDocs(service.find(collection, body, limit));
                     case "sql" -> renderDocs(service.executeSql(body));
+                    case "explain" -> service.explain(collection, body);
                     case "aggregate" -> renderDocs(service.aggregate(collection, body));
                     case "insertOne" -> "Inserted _id: " + service.insertOne(collection, body);
                     case "updateMany" -> {

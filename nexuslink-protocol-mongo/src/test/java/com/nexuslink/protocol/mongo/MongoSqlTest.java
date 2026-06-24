@@ -48,4 +48,24 @@ class MongoSqlTest {
         assertEquals(1, s.get("name"));
         assertEquals(-1, s.get("age"));
     }
+
+    @Test
+    void csvExportUsesUnionOfFieldsAndEscapes() {
+        var docs = java.util.List.of(
+                new Document("name", "Al, Jr").append("age", 30),
+                new Document("name", "Bob").append("city", "NYC"));
+        String csv = MongoService.toCsv(docs);
+        String[] lines = csv.strip().split("\n");
+        assertEquals("name,age,city", lines[0]);
+        assertEquals("\"Al, Jr\",30,", lines[1]);   // comma-containing value quoted; missing city blank
+        assertEquals("Bob,,NYC", lines[2]);
+    }
+
+    @Test
+    void jsonArrayExportWrapsDocuments() {
+        String json = MongoService.toJsonArray(java.util.List.of(new Document("a", 1), new Document("b", 2)));
+        assertTrue(json.startsWith("["), json);
+        assertTrue(json.contains("\"a\": 1"), json);
+        assertTrue(json.trim().endsWith("]"), json);
+    }
 }
