@@ -13,6 +13,7 @@ import com.nexuslink.ui.mongo.MongoClientView;
 import com.nexuslink.ui.rest.RestClientView;
 import com.nexuslink.ui.sql.SqlClientView;
 import com.nexuslink.ui.theme.ThemeManager;
+import com.nexuslink.ui.vault.VaultSession;
 import com.nexuslink.ui.ws.WebSocketView;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -40,6 +41,7 @@ public final class MainWindow {
     private TextArea logArea;
     private TitledPane bottomPane;
     private Label statusConnections;
+    private Label vaultStatus;
     private int newTabCounter = 0;
 
     private HistoryStore historyStore;
@@ -140,6 +142,13 @@ public final class MainWindow {
         ThemeManager.get().addListener(() -> themeItem.setText(themeMenuLabel()));
         view.getItems().addAll(toggleLog, new SeparatorMenuItem(), themeItem);
 
+        Menu tools = new Menu("Tools", Icons.of("tools", 14));
+        MenuItem unlockVault = new MenuItem("Unlock Vault…");
+        unlockVault.setOnAction(e -> { if (VaultSession.get().ensureUnlocked(owner())) updateVaultStatus(); });
+        MenuItem lockVault = new MenuItem("Lock Vault");
+        lockVault.setOnAction(e -> { VaultSession.get().lock(); log("Vault locked."); });
+        tools.getItems().addAll(unlockVault, lockVault);
+
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
         helpIndex.setOnAction(e -> HelpDialog.open("getting-started"));
@@ -148,8 +157,7 @@ public final class MainWindow {
         help.getItems().addAll(helpIndex, shortcuts);
 
         menuBar.getMenus().addAll(file, new Menu("Edit", Icons.of("edit", 14)), view,
-                new Menu("Connection", Icons.of("connection", 14)),
-                new Menu("Tools", Icons.of("tools", 14)), ai, help);
+                new Menu("Connection", Icons.of("connection", 14)), tools, ai, help);
         HBox.setHgrow(menuBar, Priority.ALWAYS);
 
         TextField search = new TextField();
@@ -239,11 +247,25 @@ public final class MainWindow {
         statusConnections = new Label("0 connections");
         Label spacer = new Label();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+        vaultStatus = new Label();
+        vaultStatus.getStyleClass().add("meta-label");
+        vaultStatus.setOnMouseClicked(e -> {
+            if (VaultSession.get().isUnlocked()) { VaultSession.get().lock(); log("Vault locked."); }
+            else if (VaultSession.get().ensureUnlocked(owner())) updateVaultStatus();
+        });
         Label version = new Label("v1.0.0-SNAPSHOT  ·  RouteForge");
-        HBox bar = new HBox(statusConnections, spacer, version);
+        HBox bar = new HBox(statusConnections, spacer, vaultStatus, new Label("    "), version);
         bar.getStyleClass().add("status-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
+        VaultSession.get().setOnStateChange(this::updateVaultStatus);
+        updateVaultStatus();
         return new BorderPane(bar);
+    }
+
+    private void updateVaultStatus() {
+        if (vaultStatus == null) return;
+        boolean unlocked = VaultSession.get().isUnlocked();
+        vaultStatus.setText(unlocked ? "🔓 Vault unlocked" : "🔒 Vault locked");
     }
 
     // ---- Actions ----
@@ -270,7 +292,7 @@ public final class MainWindow {
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
-        view.setOnSave(connectionsPanel::saveProfile);
+        view.setOnSave(this::saveConnection);
         addTab("SQL " + (++newTabCounter), view);
         return view;
     }
@@ -278,7 +300,7 @@ public final class MainWindow {
     private MongoClientView openMongoTab() {
         MongoClientView view = new MongoClientView();
         view.setLogger(this::log);
-        view.setOnSave(connectionsPanel::saveProfile);
+        view.setOnSave(this::saveConnection);
         addTab("Mongo " + (++newTabCounter), view);
         return view;
     }
@@ -310,8 +332,8 @@ public final class MainWindow {
         switch (p.protocol) {
             case REST -> openRestTab().prefill(p.target);
             case WEBSOCKET -> openWebSocketTab().prefill(p.target);
-            case SQL -> openSqlTab().prefill(p.target, p.username, p.authProps.get("password"));
-            case MONGO -> openMongoTab().prefill(p.target);
+            case SQL -> openSqlTab().prefill(p.target, p.username, secret(p, "passwordRef", "password"));
+            case MONGO -> openMongoTab().prefill(mongoTarget(p));
             case MCP -> openMcpTab().prefill(p.target, p.properties.get("transport"));
             case LLM -> openLlmTab();
             default -> {
@@ -319,7 +341,50 @@ public final class MainWindow {
                 return;
             }
         }
-        log("Opened connection: " + p.name + "  (" + p.target + ")");
+        log("Opened connection: " + p.name);
+    }
+
+    /** Saves a connection, moving any plaintext secrets into the encrypted vault first. */
+    private void saveConnection(ConnectionProfile p) {
+        // SQL password → vault ref
+        String pass = p.authProps.remove("password");
+        if (pass != null && !pass.isBlank()) {
+            String ref = VaultSession.get().storeSecret("sql-pass", pass, owner());
+            if (ref != null) p.authProps.put("passwordRef", ref);
+            else { p.authProps.put("password", pass); log("Vault locked — '" + p.name + "' saved without protecting the password."); }
+        }
+        // Mongo connection string containing credentials → vault ref + masked display target
+        if (p.protocol == ConnectionProfile.Protocol.MONGO && hasInlineCredentials(p.target)) {
+            String ref = VaultSession.get().storeSecret("mongo-uri", p.target, owner());
+            if (ref != null) { p.authProps.put("targetRef", ref); p.target = maskUri(p.target); }
+        }
+        connectionsPanel.saveProfile(p);
+        log("Saved connection: " + p.name);
+    }
+
+    /** Resolves a secret: vault ref if present, else the plaintext value (samples). */
+    private String secret(ConnectionProfile p, String refKey, String plainKey) {
+        String ref = p.authProps.get(refKey);
+        if (ref != null) return VaultSession.get().resolve(ref, owner()).orElse(null);
+        return p.authProps.get(plainKey);
+    }
+
+    private String mongoTarget(ConnectionProfile p) {
+        String ref = p.authProps.get("targetRef");
+        if (ref != null) return VaultSession.get().resolve(ref, owner()).orElse(p.target);
+        return p.target;
+    }
+
+    private static boolean hasInlineCredentials(String uri) {
+        return uri != null && uri.matches("(?i).*://[^/@]+:[^/@]+@.*");
+    }
+
+    private static String maskUri(String uri) {
+        return uri.replaceAll("(://[^/@:]+):[^/@]+@", "$1:***@");
+    }
+
+    private javafx.stage.Window owner() {
+        return root.getScene() == null ? null : root.getScene().getWindow();
     }
 
     private Button sidebarButton(String label, String icon, Runnable action) {

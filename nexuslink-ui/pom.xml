@@ -33,6 +33,10 @@
             <artifactId>nexuslink-protocol-mongo</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-security</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
         </dependency>

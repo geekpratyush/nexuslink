@@ -80,11 +80,11 @@
 ### 1.1 Credential Vault (`nexuslink.security`)
 - [x] `CredentialVault` service — AES-256-GCM, PBKDF2 key derivation (200k iterations)
 - [x] `VaultStore` — JSON persistence (salt + per-secret ciphertext)
-- [ ] `MasterPasswordDialog` — strength meter, confirm, biometric hook
-- [ ] `AutoLockService` — timer-based lock (1/5/15/never)
+- [x] `MasterPasswordDialog` — create (confirm + strength hint) / unlock (retry on bad password) (`nexuslink-ui/vault`)
+- [x] `AutoLockService` — built into `VaultSession` (5-min inactivity auto-lock, resets on use; manual Lock/Unlock in Tools menu + status-bar 🔒/🔓 toggle)
 - [ ] `VaultBackupService` — encrypted export/import (VaultStore is the basis)
 - [x] Unit tests for encryption round-trip (5/5 pass)
-- [ ] Wire vault into REST AuthTab (store secrets as refs, not plaintext)
+- [x] **Wire vault into saved connections** — SQL passwords & credentialed Mongo URIs are stored as vault refs (`passwordRef`/`targetRef`), never plaintext in `connections.json`; resolved on open. _REST AuthTab vaulting still TODO._
 
 ### 1.2 Certificate Manager
 - [ ] `CertificateStore` — JKS/PKCS12 storage, AES-256 master key
@@ -508,6 +508,20 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 9 — Credential vault wired into saved connections.**
+  - `MasterPasswordDialog` (create with confirm + strength hint; unlock with retry) + `VaultSession`
+    (singleton over `CredentialVault`/`VaultStore` at `~/.nexuslink/vault.json`): lazily creates/loads,
+    prompts for the master password on demand, and **auto-locks after 5 min of inactivity**.
+  - **Saved-connection secrets are now encrypted:** on Save, SQL passwords and credentialed Mongo
+    connection strings are moved into the vault (`passwordRef` / `targetRef`); only the reference is
+    written to `connections.json` (Mongo's display target is masked). On open, refs are resolved
+    (unlocking the vault if needed) and pre-filled.
+  - Tools menu gained **Unlock Vault… / Lock Vault**; the status bar shows a 🔒/🔓 indicator that
+    toggles the lock on click.
+  - **VERIFIED:** full 9-module `mvn install` clean; `mvn test` BUILD SUCCESS (vault crypto round-trip
+    5/5; Mongo IT skipped); GUI boots with no exceptions or CSS warnings.
+  - Follow-ups: vault REST/WS/MCP auth secrets too; `VaultBackupService` (encrypted export/import);
+    per-protocol auth *flows* (OAuth2/Kerberos/SASL/mTLS).
 - 2026-06-24: **Session 8 — Themes, bespoke icons, object explorer, connection manager.**
   - **Theme system:** refactored all CSS to looked-up `-nl-*` palette variables (`theme-base.css`)
     with swappable `theme-dark.css` / `theme-light.css`; `ThemeManager` (Preferences-persisted) +

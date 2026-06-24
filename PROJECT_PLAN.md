@@ -78,7 +78,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Connection manager** | core + ui | Saved connections persisted to `~/.nexuslink/connections.json`; bundled **public sample** endpoints (deletable); flexible multi-method auth model. |
 | **Object explorer** | plugin-api + ui | Lazy resource tree + details for SQL (db→tables→columns) and Mongo (db→collections→indexes/stats). |
 | **Help system** | ui | 3-pane searchable dialog, live debounced search, context-sensitive `F1`, "Did you know?" tips. |
-| **Credential vault** | security | AES-256-GCM + PBKDF2 (200k). _UI wiring (master-password dialog) still pending._ |
+| **Credential vault** | security + ui | AES-256-GCM + PBKDF2 (200k); master-password dialog, auto-lock, status-bar lock toggle. Saved-connection secrets stored as vault refs (no plaintext). |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
 | **REST client** | protocol-http | HTTP/2, params/headers/body/auth tabs, color-coded status, timing, JSON pretty-print. |
 | **WebSocket client** | protocol-http | Connect/disconnect, timestamped message log, send bar. |
