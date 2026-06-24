@@ -98,6 +98,13 @@ public final class SampleCatalog {
                         + "Swap in your own connection string for a real account.")
                 .asSample().withId("sample-azure-azurite"));
 
+        // ---- Google Cloud Storage (needs your own service-account credentials) ----
+        s.add(new ConnectionProfile("Google Cloud Storage", GCS, "")
+                .withAuth(AuthMethod.NONE)
+                .withNotes("Enter your GCP project id and a service-account JSON key "
+                        + "(or rely on Application Default Credentials).")
+                .asSample().withId("sample-gcs"));
+
         // ---- File transfer (public demo servers) ----
         s.add(new ConnectionProfile("Rebex — public SFTP demo", SFTP, "sftp://test.rebex.net:22")
                 .withUser("demo").withAuth(AuthMethod.BASIC).authProp("password", "password")

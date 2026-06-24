@@ -21,7 +21,7 @@ public final class ConnectionProfile {
         SQL, MONGO, REDIS,
         MCP, LLM,
         KAFKA, MQ,
-        SFTP, FTP, S3, AZURE_BLOB
+        SFTP, FTP, S3, AZURE_BLOB, GCS
     }
 
     public String id = UUID.randomUUID().toString();
@@ -76,6 +76,7 @@ public final class ConnectionProfile {
             case FTP -> "server";
             case S3 -> "collection";
             case AZURE_BLOB -> "collection";
+            case GCS -> "collection";
         };
     }
 
