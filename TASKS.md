@@ -211,8 +211,8 @@
 - [-] Send panel: text send done _(binary toggle, file send, repeat/interval TODO)_
 
 ### 3.3 SSE Client
-- [ ] `SseService` — OkHttp EventSource
-- [ ] `SseView.fxml` — URL, headers, live event stream, event type filter, pause/resume
+- [x] `SseService` — JDK HTTP client streaming `text/event-stream` (data/event/id parsing, background thread, disconnect). **Verified live: 162 events from the Wikimedia firehose.**
+- [x] `SseView` — URL, Connect/Disconnect, live event log, event-type filter, pause/clear; wired into shell (File menu + sidebar + SSE samples)
 
 ---
 

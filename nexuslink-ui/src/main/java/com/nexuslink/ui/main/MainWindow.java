@@ -12,6 +12,7 @@ import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
 import com.nexuslink.ui.rest.RestClientView;
 import com.nexuslink.ui.sql.SqlClientView;
+import com.nexuslink.ui.sse.SseView;
 import com.nexuslink.ui.theme.ThemeManager;
 import com.nexuslink.ui.vault.VaultSession;
 import com.nexuslink.ui.ws.WebSocketView;
@@ -115,6 +116,8 @@ public final class MainWindow {
         newRest.setOnAction(e -> openRestTab());
         MenuItem newWs = new MenuItem("New WebSocket", Icons.of("ws", 14));
         newWs.setOnAction(e -> openWebSocketTab());
+        MenuItem newSse = new MenuItem("New SSE Stream", Icons.of("topic", 14));
+        newSse.setOnAction(e -> openSseTab());
         MenuItem newSql = new MenuItem("New SQL Client", Icons.of("sql", 14));
         newSql.setOnAction(e -> openSqlTab());
         MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
@@ -125,7 +128,7 @@ public final class MainWindow {
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -192,12 +195,13 @@ public final class MainWindow {
 
         Button addBtn = sidebarButton("New REST Request", "rest", this::openRestTab);
         Button wsBtn = sidebarButton("WebSocket", "ws", this::openWebSocketTab);
+        Button sseBtn = sidebarButton("SSE Stream", "topic", this::openSseTab);
         Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
         Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -290,6 +294,13 @@ public final class MainWindow {
         return view;
     }
 
+    private SseView openSseTab() {
+        SseView view = new SseView();
+        view.setLogger(this::log);
+        addTab("SSE " + (++newTabCounter), view);
+        return view;
+    }
+
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
@@ -334,6 +345,7 @@ public final class MainWindow {
         switch (p.protocol) {
             case REST -> openRestTab().applyProfile(d);
             case WEBSOCKET -> openWebSocketTab().prefill(d.target);
+            case SSE -> openSseTab().prefill(d.target);
             case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
             case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));

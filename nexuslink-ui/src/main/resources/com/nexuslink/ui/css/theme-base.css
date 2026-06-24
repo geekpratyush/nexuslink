@@ -249,7 +249,7 @@
 .history-summary { -fx-text-fill: -nl-text; -fx-font-size: 12px; }
 
 /* ---------- Protocol views (MCP + LLM + SQL + WS + Mongo) ---------- */
-.mcp-view, .llm-view, .sql-view, .ws-view, .mongo-view { -fx-background-color: -nl-bg; }
+.mcp-view, .llm-view, .sql-view, .ws-view, .mongo-view, .sse-view { -fx-background-color: -nl-bg; }
 .sql-view .list-view, .sql-view .table-view,
 .mongo-view .list-view {
     -fx-background-color: -nl-surface; -fx-border-color: -nl-border;
