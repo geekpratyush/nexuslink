@@ -148,7 +148,7 @@
 ### 2.2 Help Engine
 - [x] `HelpIndex` — in-memory inverted index with multi-term AND search + prefix fuzzy matching
 - [x] `HelpService` — Caffeine-cached search (24h TTL), context mappings (19 UI components), recently viewed, content loader
-- [ ] `HelpRenderer` — richer Markdown → JavaFX Node (tables, code blocks, inline links)
+- [x] `HelpRenderer` — `MarkdownView` (WebView + commonmark, GFM tables, themed CSS, **Mermaid** diagrams) replaces the line-based renderer; headings/bold/code/lists/tables/links render properly. Verified by screenshot.
 - [x] `ContextHelpResolver` — built into `HelpService.contextTarget(componentId)`
 
 ### 2.3 Help Dialog (`F1` / `Help` menu / `?` icon anywhere)

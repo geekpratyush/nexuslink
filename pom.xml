@@ -48,6 +48,8 @@
         <!-- JSON -->
         <jackson.version>2.17.2</jackson.version>
 
+        <commonmark.version>0.22.0</commonmark.version>
+
         <!-- Cache -->
         <caffeine.version>3.1.8</caffeine.version>
 
@@ -185,6 +187,18 @@
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-swing</artifactId>
                 <version>${javafx.version}</version>
+            </dependency>
+
+            <!-- Markdown rendering (Help + diagrams) -->
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-gfm-tables</artifactId>
+                <version>${commonmark.version}</version>
             </dependency>
 
             <!-- HTTP -->

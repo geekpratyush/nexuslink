@@ -50,6 +50,7 @@ public final class HelpDialog {
     private ScrollPane contentScroll;
     private VBox contentPane;
     private VBox sectionNav;
+    private com.nexuslink.ui.markdown.MarkdownView markdownView;
     private Label tipLabel;
 
     private final StringProperty currentTopicId = new SimpleStringProperty();
@@ -193,6 +194,10 @@ public final class HelpDialog {
         contentScroll.setFitToWidth(true);
         contentScroll.getStyleClass().add("help-content-scroll");
 
+        // WebView markdown renderer for topic content (search results use contentScroll's cards)
+        markdownView = new com.nexuslink.ui.markdown.MarkdownView();
+        javafx.scene.layout.StackPane center = new javafx.scene.layout.StackPane(contentScroll, markdownView);
+
         // Right: on-this-page section nav
         sectionNav = new VBox(8);
         sectionNav.getStyleClass().add("help-section-nav");
@@ -206,7 +211,7 @@ public final class HelpDialog {
         navScroll.setMinWidth(160);
         navScroll.setPrefWidth(180);
 
-        split.getItems().addAll(leftPane, contentScroll, navScroll);
+        split.getItems().addAll(leftPane, center, navScroll);
         split.setDividerPositions(0.2, 0.78);
 
         return split;
@@ -295,6 +300,7 @@ public final class HelpDialog {
     }
 
     private void showSearchResults(List<SearchResult> results, String query) {
+        showSearchView();
         contentPane.getChildren().clear();
         sectionNav.getChildren().clear();
 
@@ -349,49 +355,61 @@ public final class HelpDialog {
     }
 
     private void showTopicIndex() {
-        contentPane.getChildren().clear();
-        Label heading = new Label("NexusLink Help");
-        heading.getStyleClass().add("help-h1");
-        Label sub = new Label("Search above or pick a topic from the index.");
-        sub.getStyleClass().add("help-subtitle");
-        contentPane.getChildren().addAll(heading, sub);
+        markdownView.setMarkdown("""
+            # NexusLink Help
+
+            Search above or pick a topic from the index on the left.
+
+            NexusLink is a **universal protocol workbench** — REST, WebSocket, SQL, MongoDB,
+            MCP, LLMs and more in one place. Markdown and Mermaid diagrams render right here.
+
+            ```mermaid
+            flowchart LR
+              A[Pick a connection] --> B[Connect]
+              B --> C[Browse objects]
+              B --> D[Send / query]
+              C --> E[Inspect details]
+            ```
+            """);
+        showContentView();
+        sectionNav.getChildren().clear();
     }
 
     // ---- Markdown Renderer ----
 
     private void renderMarkdown(String markdown, HelpTopic topic) {
-        contentPane.getChildren().clear();
-        sectionNav.getChildren().clear();
+        markdownView.setMarkdown(markdown);
+        showContentView();
 
+        // "On this page" nav built from headings; clicking scrolls the rendered page.
+        sectionNav.getChildren().clear();
         Label navTitle = new Label("On This Page");
         navTitle.getStyleClass().add("help-section-nav-title");
         sectionNav.getChildren().add(navTitle);
-
-        String[] lines = markdown.split("\n");
-        VBox currentBlock = contentPane;
-        StringBuilder paragraph = new StringBuilder();
-
-        for (String line : lines) {
-            if (line.startsWith("# "))       { flushParagraph(paragraph, currentBlock); addHeading(line.substring(2), 1, currentBlock); }
-            else if (line.startsWith("## ")) { flushParagraph(paragraph, currentBlock); addHeading(line.substring(3), 2, currentBlock); }
-            else if (line.startsWith("### ")){ flushParagraph(paragraph, currentBlock); addHeading(line.substring(4), 3, currentBlock); }
-            else if (line.startsWith("- ") || line.startsWith("* ")) {
-                flushParagraph(paragraph, currentBlock);
-                Label bullet = new Label("• " + line.substring(2));
-                bullet.getStyleClass().add("help-bullet");
-                bullet.setWrapText(true);
-                currentBlock.getChildren().add(bullet);
-            } else if (line.startsWith("```")) {
-                flushParagraph(paragraph, currentBlock);
-                // code block — skip for brevity, render as monospaced label
-            } else if (line.isBlank()) {
-                flushParagraph(paragraph, currentBlock);
-            } else {
-                if (!paragraph.isEmpty()) paragraph.append(" ");
-                paragraph.append(line);
-            }
+        boolean inFence = false;
+        for (String line : markdown.split("\n")) {
+            if (line.startsWith("```")) { inFence = !inFence; continue; }
+            if (inFence) continue;
+            int level = line.startsWith("## ") ? 2 : line.startsWith("# ") ? 1 : 0;
+            if (level == 0) continue;
+            String text = line.substring(level + 1).trim();
+            Hyperlink navLink = new Hyperlink(text);
+            navLink.getStyleClass().add("help-nav-link-" + level);
+            navLink.setOnAction(e -> markdownView.scrollToHeading(text));
+            sectionNav.getChildren().add(navLink);
         }
-        flushParagraph(paragraph, currentBlock);
+    }
+
+    /** Show the WebView (topic content); hide the search-results pane. */
+    private void showContentView() {
+        markdownView.setVisible(true);
+        contentScroll.setVisible(false);
+    }
+
+    /** Show the search-results pane (cards); hide the WebView. */
+    private void showSearchView() {
+        markdownView.setVisible(false);
+        contentScroll.setVisible(true);
     }
 
     private void addHeading(String text, int level, VBox parent) {
@@ -445,10 +463,9 @@ public final class HelpDialog {
     }
 
     private void renderError(String message) {
-        contentPane.getChildren().clear();
-        Label err = new Label("⚠ " + message);
-        err.getStyleClass().add("help-error");
-        contentPane.getChildren().add(err);
+        markdownView.setMarkdown("# ⚠ Not found\n\n" + message);
+        showContentView();
+        sectionNav.getChildren().clear();
     }
 
     private void rotateTip() {
