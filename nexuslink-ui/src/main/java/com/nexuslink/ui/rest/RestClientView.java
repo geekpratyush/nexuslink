@@ -59,6 +59,9 @@ public final class RestClientView extends BorderPane {
     private final TextField apiKeyName = new TextField("X-API-Key");
     private final TextField apiKeyValue = new TextField();
     private ComboBox<RestRequest.ApiKeyLocation> apiKeyLocation;
+    private final TextField connectTimeoutField = new TextField();
+    private final TextField readTimeoutField = new TextField();
+    private final CheckBox followRedirectsBox = new CheckBox("Follow redirects automatically");
 
     /** Optional sink for log lines (wired to the app log panel). */
     private Consumer<String> logger = s -> {};
@@ -151,7 +154,8 @@ public final class RestClientView extends BorderPane {
                 new Tab("Params", buildKeyValueTable(paramRows)),
                 new Tab("Headers", buildKeyValueTable(headerRows)),
                 new Tab("Body", buildBodyTab()),
-                new Tab("Auth", buildAuthTab()));
+                new Tab("Auth", buildAuthTab()),
+                new Tab("Settings", buildSettingsTab()));
         return tabs;
     }
 
@@ -304,6 +308,36 @@ public final class RestClientView extends BorderPane {
         for (javafx.scene.Node n : nodes) { n.setVisible(visible); n.setManaged(visible); }
     }
 
+    private GridPane buildSettingsTab() {
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(12));
+
+        connectTimeoutField.getStyleClass().add("nl-field");
+        readTimeoutField.getStyleClass().add("nl-field");
+        connectTimeoutField.setPrefWidth(120);
+        readTimeoutField.setPrefWidth(120);
+        connectTimeoutField.setText(String.valueOf(request.getConnectTimeoutMs()));
+        readTimeoutField.setText(String.valueOf(request.getReadTimeoutMs()));
+        followRedirectsBox.setSelected(request.isFollowRedirects());
+
+        Label ctLbl = new Label("Connect timeout (ms):");
+        Label rtLbl = new Label("Read timeout (ms):");
+        ctLbl.getStyleClass().add("meta-label");
+        rtLbl.getStyleClass().add("meta-label");
+
+        grid.add(ctLbl, 0, 0); grid.add(connectTimeoutField, 1, 0);
+        grid.add(rtLbl, 0, 1); grid.add(readTimeoutField, 1, 1);
+        grid.add(followRedirectsBox, 1, 2);
+        return grid;
+    }
+
+    private static int parseIntOr(String s, int fallback) {
+        try { return Math.max(0, Integer.parseInt(s.trim())); }
+        catch (NumberFormatException e) { return fallback; }
+    }
+
     // ---- Response panel ----
 
     private BorderPane buildResponsePanel() {
@@ -398,6 +432,9 @@ public final class RestClientView extends BorderPane {
         request.setApiKeyName(apiKeyName.getText());
         request.setApiKeyValue(apiKeyValue.getText());
         request.setApiKeyLocation(apiKeyLocation.getValue());
+        request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
+        request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
+        request.setFollowRedirects(followRedirectsBox.isSelected());
     }
 
     private void renderResponse(RestResponse resp) {

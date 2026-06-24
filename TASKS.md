@@ -191,7 +191,7 @@
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
   - [ ] Form-Data table with file picker per row
 - [ ] `PreRequestTab` — JavaScript/Groovy script editor
-- [-] `SettingsTab` — timeouts/redirects in model; UI tab + TLS/cert selection TODO
+- [x] `SettingsTab` — UI tab wiring connect/read timeouts + follow-redirects to the request (honored per-call by `RestExecutionService`) _(TLS/cert selection TODO)_
 - [-] Response panel:
   - [x] Status badge (color-coded: 2xx green, 3xx blue, 4xx amber, 5xx red, err red)
   - [x] Timing: total, TTFB, download shown _(DNS/TCP/TLS split needs OkHttp listener)_
@@ -508,6 +508,17 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 10 — REST depth: API-key auth, code generation, settings tab.**
+  - **API-key auth:** `RestRequest` gained `API_KEY` (key name/value + HEADER|QUERY placement);
+    applied in `RestExecutionService` (query folded into `requestUri()`, header via `safeHeader`);
+    Auth tab UI + history-replay serialization. `RestRequestTest` covers the URL/auth logic.
+  - **Code generation:** `RestCodeGenerator` (cURL / Python / JavaScript / Java / PowerShell) renders
+    the effective request incl. resolved auth; `CodeGenDialog` (language picker + copy) opened from a
+    `</>` button on the REST bar. Tests cover curl/python output.
+  - **Settings tab:** connect/read timeouts + follow-redirects wired to the request (already honored
+    per-call by `RestExecutionService`).
+  - **VERIFIED:** full `mvn install` clean; `mvn test` BUILD SUCCESS (RestRequestTest 6/6); GUI boots
+    clean. Three commits pushed.
 - 2026-06-24: **Session 9 — Credential vault wired into saved connections.**
   - `MasterPasswordDialog` (create with confirm + strength hint; unlock with retry) + `VaultSession`
     (singleton over `CredentialVault`/`VaultStore` at `~/.nexuslink/vault.json`): lazily creates/loads,
