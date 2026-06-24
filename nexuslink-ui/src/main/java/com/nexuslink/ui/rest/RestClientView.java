@@ -78,6 +78,11 @@ public final class RestClientView extends BorderPane {
         this.historyRecorder = recorder == null ? e -> {} : recorder;
     }
 
+    /** Pre-fills the request URL (used when opening a saved/sample connection). */
+    public void prefill(String url) {
+        if (url != null && !url.isBlank()) urlField.setText(url);
+    }
+
     // ---- Method bar ----
 
     private VBox buildMethodBar() {

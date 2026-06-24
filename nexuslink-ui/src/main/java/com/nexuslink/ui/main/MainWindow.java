@@ -1,8 +1,12 @@
 package com.nexuslink.ui.main;
 
+import com.nexuslink.core.connection.ConnectionProfile;
+import com.nexuslink.core.connection.ConnectionStore;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
+import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.help.HelpDialog;
+import com.nexuslink.ui.icons.Icons;
 import com.nexuslink.ui.llm.LlmTesterView;
 import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
@@ -42,6 +46,8 @@ public final class MainWindow {
     private HistoryPanel historyPanel;
     private TabPane bottomTabs;
     private MenuItem themeItem;
+    private final ConnectionStore connectionStore = new ConnectionStore();
+    private ConnectionsPanel connectionsPanel;
 
     public Scene createScene() {
         initHistoryStore();
@@ -102,31 +108,31 @@ public final class MainWindow {
 
     private VBox buildTopBar() {
         MenuBar menuBar = new MenuBar();
-        Menu file = new Menu("File");
-        MenuItem newRest = new MenuItem("New REST Request");
+        Menu file = new Menu("File", Icons.of("file", 14));
+        MenuItem newRest = new MenuItem("New REST Request", Icons.of("rest", 14));
         newRest.setOnAction(e -> openRestTab());
-        MenuItem newWs = new MenuItem("New WebSocket");
+        MenuItem newWs = new MenuItem("New WebSocket", Icons.of("ws", 14));
         newWs.setOnAction(e -> openWebSocketTab());
-        MenuItem newSql = new MenuItem("New SQL Client");
+        MenuItem newSql = new MenuItem("New SQL Client", Icons.of("sql", 14));
         newSql.setOnAction(e -> openSqlTab());
-        MenuItem newMongo = new MenuItem("New MongoDB Client");
+        MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
         newMongo.setOnAction(e -> openMongoTab());
-        MenuItem newMcp = new MenuItem("New MCP Inspector");
+        MenuItem newMcp = new MenuItem("New MCP Inspector", Icons.of("mcp", 14));
         newMcp.setOnAction(e -> openMcpTab());
-        MenuItem newLlm = new MenuItem("New AI Agent / LLM Tester");
+        MenuItem newLlm = new MenuItem("New AI Agent / LLM Tester", Icons.of("ai", 14));
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
         file.getItems().addAll(newRest, newWs, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
-        Menu ai = new Menu("AI");
-        MenuItem mcpItem = new MenuItem("MCP Inspector");
+        Menu ai = new Menu("AI", Icons.of("ai", 14));
+        MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
         mcpItem.setOnAction(e -> openMcpTab());
-        MenuItem llmItem = new MenuItem("Agent / LLM Tester");
+        MenuItem llmItem = new MenuItem("Agent / LLM Tester", Icons.of("ai", 14));
         llmItem.setOnAction(e -> openLlmTab());
         ai.getItems().addAll(mcpItem, llmItem);
 
-        Menu view = new Menu("View");
+        Menu view = new Menu("View", Icons.of("view", 14));
         MenuItem toggleLog = new MenuItem("Toggle Log Panel");
         toggleLog.setOnAction(e -> toggleLog());
         themeItem = new MenuItem(themeMenuLabel());
@@ -134,15 +140,16 @@ public final class MainWindow {
         ThemeManager.get().addListener(() -> themeItem.setText(themeMenuLabel()));
         view.getItems().addAll(toggleLog, new SeparatorMenuItem(), themeItem);
 
-        Menu help = new Menu("Help");
-        MenuItem helpIndex = new MenuItem("Help Index  (F1)");
+        Menu help = new Menu("Help", Icons.of("help", 14));
+        MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
         helpIndex.setOnAction(e -> HelpDialog.open("getting-started"));
         MenuItem shortcuts = new MenuItem("Keyboard Shortcuts");
         shortcuts.setOnAction(e -> HelpDialog.open("keyboard-shortcuts"));
         help.getItems().addAll(helpIndex, shortcuts);
 
-        menuBar.getMenus().addAll(file, new Menu("Edit"), view,
-                new Menu("Connection"), new Menu("Tools"), ai, help);
+        menuBar.getMenus().addAll(file, new Menu("Edit", Icons.of("edit", 14)), view,
+                new Menu("Connection", Icons.of("connection", 14)),
+                new Menu("Tools", Icons.of("tools", 14)), ai, help);
         HBox.setHgrow(menuBar, Priority.ALWAYS);
 
         TextField search = new TextField();
@@ -171,63 +178,21 @@ public final class MainWindow {
         Label title = new Label("CONNECTIONS");
         title.getStyleClass().add("sidebar-title");
 
-        TreeItem<String> rootItem = new TreeItem<>("Workspace");
-        rootItem.setExpanded(true);
-        TreeItem<String> prod = new TreeItem<>("📁 Production");
-        TreeItem<String> dev = new TreeItem<>("📁 Development");
-        dev.setExpanded(true);
-        dev.getChildren().addAll(
-                new TreeItem<>("🔗 httpbin (REST)"),
-                new TreeItem<>("🔗 JSONPlaceholder (REST)"));
-        rootItem.getChildren().addAll(prod, dev);
+        connectionsPanel = new ConnectionsPanel(connectionStore);
+        connectionsPanel.setOnOpen(this::openProfile);
+        VBox.setVgrow(connectionsPanel, Priority.ALWAYS);
 
-        TreeView<String> tree = new TreeView<>(rootItem);
-        tree.getStyleClass().add("connection-tree");
-        tree.setShowRoot(false);
-        VBox.setVgrow(tree, Priority.ALWAYS);
-
-        // Double-click a REST leaf opens a tab
-        tree.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2) {
-                TreeItem<String> sel = tree.getSelectionModel().getSelectedItem();
-                if (sel != null && sel.getValue().contains("REST")) openRestTab();
-            }
-        });
-
-        Button addBtn = new Button("+ New REST Request");
-        addBtn.getStyleClass().add("btn-secondary");
-        addBtn.setMaxWidth(Double.MAX_VALUE);
-        addBtn.setOnAction(e -> openRestTab());
-
-        Button wsBtn = new Button("+ WebSocket");
-        wsBtn.getStyleClass().add("btn-secondary");
-        wsBtn.setMaxWidth(Double.MAX_VALUE);
-        wsBtn.setOnAction(e -> openWebSocketTab());
-
-        Button sqlBtn = new Button("+ SQL Client");
-        sqlBtn.getStyleClass().add("btn-secondary");
-        sqlBtn.setMaxWidth(Double.MAX_VALUE);
-        sqlBtn.setOnAction(e -> openSqlTab());
-
-        Button mongoBtn = new Button("+ MongoDB Client");
-        mongoBtn.getStyleClass().add("btn-secondary");
-        mongoBtn.setMaxWidth(Double.MAX_VALUE);
-        mongoBtn.setOnAction(e -> openMongoTab());
-
-        Button mcpBtn = new Button("+ MCP Inspector");
-        mcpBtn.getStyleClass().add("btn-secondary");
-        mcpBtn.setMaxWidth(Double.MAX_VALUE);
-        mcpBtn.setOnAction(e -> openMcpTab());
-
-        Button llmBtn = new Button("+ AI Agent / LLM");
-        llmBtn.getStyleClass().add("btn-secondary");
-        llmBtn.setMaxWidth(Double.MAX_VALUE);
-        llmBtn.setOnAction(e -> openLlmTab());
+        Button addBtn = sidebarButton("New REST Request", "rest", this::openRestTab);
+        Button wsBtn = sidebarButton("WebSocket", "ws", this::openWebSocketTab);
+        Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
+        Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
+        Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
+        Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
         VBox buttons = new VBox(6, addBtn, wsBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
-        VBox sidebar = new VBox(title, tree, buttons);
+        VBox sidebar = new VBox(title, connectionsPanel, buttons);
         sidebar.getStyleClass().add("sidebar");
         sidebar.setMinWidth(180);
         return sidebar;
@@ -295,54 +260,76 @@ public final class MainWindow {
         return view;
     }
 
-    private void openWebSocketTab() {
+    private WebSocketView openWebSocketTab() {
         WebSocketView view = new WebSocketView();
         view.setLogger(this::log);
-        Tab tab = new Tab("WS " + (++newTabCounter), view);
-        tab.setClosable(true);
-        workspace.getTabs().add(tab);
-        workspace.getSelectionModel().select(tab);
-        statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+        addTab("WS " + (++newTabCounter), view);
+        return view;
     }
 
-    private void openSqlTab() {
+    private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
-        Tab tab = new Tab("SQL " + (++newTabCounter), view);
-        tab.setClosable(true);
-        workspace.getTabs().add(tab);
-        workspace.getSelectionModel().select(tab);
-        statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+        view.setOnSave(connectionsPanel::saveProfile);
+        addTab("SQL " + (++newTabCounter), view);
+        return view;
     }
 
-    private void openMongoTab() {
+    private MongoClientView openMongoTab() {
         MongoClientView view = new MongoClientView();
         view.setLogger(this::log);
-        Tab tab = new Tab("Mongo " + (++newTabCounter), view);
-        tab.setClosable(true);
-        workspace.getTabs().add(tab);
-        workspace.getSelectionModel().select(tab);
-        statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+        view.setOnSave(connectionsPanel::saveProfile);
+        addTab("Mongo " + (++newTabCounter), view);
+        return view;
     }
 
-    private void openMcpTab() {
+    private McpInspectorView openMcpTab() {
         McpInspectorView view = new McpInspectorView();
         view.setLogger(this::log);
-        Tab tab = new Tab("MCP " + (++newTabCounter), view);
+        addTab("MCP " + (++newTabCounter), view);
+        return view;
+    }
+
+    private LlmTesterView openLlmTab() {
+        LlmTesterView view = new LlmTesterView();
+        view.setLogger(this::log);
+        addTab("Agent " + (++newTabCounter), view);
+        return view;
+    }
+
+    private void addTab(String title, javafx.scene.Node content) {
+        Tab tab = new Tab(title, content);
         tab.setClosable(true);
         workspace.getTabs().add(tab);
         workspace.getSelectionModel().select(tab);
         statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
     }
 
-    private void openLlmTab() {
-        LlmTesterView view = new LlmTesterView();
-        view.setLogger(this::log);
-        Tab tab = new Tab("Agent " + (++newTabCounter), view);
-        tab.setClosable(true);
-        workspace.getTabs().add(tab);
-        workspace.getSelectionModel().select(tab);
-        statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+    /** Opens a saved/sample connection in the appropriate protocol tab, pre-filled. */
+    private void openProfile(ConnectionProfile p) {
+        switch (p.protocol) {
+            case REST -> openRestTab().prefill(p.target);
+            case WEBSOCKET -> openWebSocketTab().prefill(p.target);
+            case SQL -> openSqlTab().prefill(p.target, p.username, p.authProps.get("password"));
+            case MONGO -> openMongoTab().prefill(p.target);
+            case MCP -> openMcpTab().prefill(p.target, p.properties.get("transport"));
+            case LLM -> openLlmTab();
+            default -> {
+                log(p.protocol + " connector is on the roadmap — '" + p.name + "' can't be opened yet.");
+                return;
+            }
+        }
+        log("Opened connection: " + p.name + "  (" + p.target + ")");
+    }
+
+    private Button sidebarButton(String label, String icon, Runnable action) {
+        Button b = new Button(label, Icons.of(icon, 15));
+        b.getStyleClass().add("btn-secondary");
+        b.setMaxWidth(Double.MAX_VALUE);
+        b.setAlignment(Pos.CENTER_LEFT);
+        b.setGraphicTextGap(8);
+        b.setOnAction(e -> action.run());
+        return b;
     }
 
     private void recordHistory(HistoryEntry entry) {

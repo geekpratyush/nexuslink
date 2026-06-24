@@ -1,9 +1,13 @@
 package com.nexuslink.ui.mongo;
 
+import com.nexuslink.core.connection.AuthMethod;
+import com.nexuslink.core.connection.ConnectionProfile;
+import com.nexuslink.plugin.ResourceNode;
+import com.nexuslink.protocol.mongo.MongoExplorer;
 import com.nexuslink.protocol.mongo.MongoQueryResult;
 import com.nexuslink.protocol.mongo.MongoService;
+import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
-import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -14,19 +18,19 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * MongoDB client tab — connect with a connection string, browse databases/collections,
- * and run find / aggregate / insert / update / delete operations using Extended-JSON.
+ * MongoDB client tab — connect with a connection string, then browse the live object tree
+ * (databases → collections → indexes, with collStats in the details panel) and run
+ * find / aggregate / insert / update / delete operations using Extended-JSON.
  */
 public final class MongoClientView extends BorderPane {
 
     private final MongoService service = new MongoService();
+    private final MongoExplorer explorerModel = new MongoExplorer(service);
+    private final ResourceExplorerView explorer = new ResourceExplorerView("Databases");
 
     private final TextField connField = new TextField("mongodb://localhost:27017");
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
-
-    private final ComboBox<String> dbCombo = new ComboBox<>();
-    private final ListView<String> collectionList = new ListView<>();
 
     private final ComboBox<String> modeCombo = new ComboBox<>();
     private final TextField limitField = new TextField("100");
@@ -34,7 +38,11 @@ public final class MongoClientView extends BorderPane {
     private final TextArea resultArea = new TextArea();
     private final Label resultStatus = new Label();
 
+    private String activeDb;
+    private String activeCollection;
+
     private Consumer<String> logger = s -> {};
+    private Consumer<ConnectionProfile> onSave = p -> {};
 
     public MongoClientView() {
         getStyleClass().add("mongo-view");
@@ -44,6 +52,34 @@ public final class MongoClientView extends BorderPane {
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
+        explorer.setLogger(this.logger);
+    }
+
+    /** Notified when the user saves the current connection as a profile. */
+    public void setOnSave(Consumer<ConnectionProfile> onSave) {
+        this.onSave = onSave == null ? p -> {} : onSave;
+    }
+
+    /** Pre-fills the connection string (used when opening a saved/sample connection). */
+    public void prefill(String connectionString) {
+        if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
+    }
+
+    private void saveCurrent() {
+        String conn = connField.getText().trim();
+        if (conn.isEmpty()) { statusLabel.setText("Enter a connection string before saving"); return; }
+        TextInputDialog dialog = new TextInputDialog(conn);
+        dialog.setTitle("Save connection");
+        dialog.setHeaderText("Save this MongoDB connection for later");
+        dialog.setContentText("Name:");
+        dialog.initOwner(getScene() == null ? null : getScene().getWindow());
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.isBlank()) return;
+            ConnectionProfile p = new ConnectionProfile(name.trim(), ConnectionProfile.Protocol.MONGO, conn)
+                    .withAuth(AuthMethod.CONNECTION_STRING);
+            onSave.accept(p);
+            logger.accept("Saved MongoDB connection: " + name.trim());
+        });
     }
 
     private VBox buildConnectionBar() {
@@ -54,13 +90,17 @@ public final class MongoClientView extends BorderPane {
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> connect());
 
+        Button saveBtn = new Button("Save");
+        saveBtn.getStyleClass().add("btn-secondary");
+        saveBtn.setOnAction(e -> saveCurrent());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -71,25 +111,17 @@ public final class MongoClientView extends BorderPane {
     }
 
     private SplitPane buildBody() {
-        // Left: database picker + collection list
-        Label dbLbl = new Label("DATABASE");
-        dbLbl.getStyleClass().add("sidebar-title");
-        dbCombo.setMaxWidth(Double.MAX_VALUE);
-        dbCombo.valueProperty().addListener((o, ov, db) -> { if (db != null) selectDatabase(db); });
-
-        Label collLbl = new Label("COLLECTIONS");
-        collLbl.getStyleClass().add("sidebar-title");
-        collectionList.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 && collectionList.getSelectionModel().getSelectedItem() != null) {
+        // Left: live object explorer (databases → collections → indexes)
+        explorer.setMinWidth(240);
+        explorer.setOnSelect(this::onExplorerSelect);
+        explorer.setOnActivate(node -> {
+            if (node.kind() == ResourceNode.Kind.COLLECTION) {
+                onExplorerSelect(node);
                 modeCombo.setValue("find");
                 queryEditor.setText("{}");
                 run();
             }
         });
-        VBox left = new VBox(dbLbl, dbCombo, collLbl, collectionList);
-        left.setPadding(new Insets(6));
-        VBox.setVgrow(collectionList, Priority.ALWAYS);
-        left.setMinWidth(200);
 
         // Right: query editor + result
         modeCombo.getItems().addAll("find", "aggregate", "insertOne", "updateMany", "deleteMany");
@@ -125,9 +157,27 @@ public final class MongoClientView extends BorderPane {
         right.setPadding(new Insets(8));
         VBox.setVgrow(resultArea, Priority.ALWAYS);
 
-        SplitPane sp = new SplitPane(left, right);
-        sp.setDividerPositions(0.24);
+        SplitPane sp = new SplitPane(explorer, right);
+        sp.setDividerPositions(0.28);
         return sp;
+    }
+
+    private void onExplorerSelect(ResourceNode node) {
+        switch (node.kind()) {
+            case DATABASE -> {
+                activeDb = node.label();
+                activeCollection = null;
+                service.useDatabase(activeDb);
+            }
+            case COLLECTION -> {
+                String path = node.id().substring("coll:".length());   // db.collection
+                int dot = path.indexOf('.');
+                activeDb = path.substring(0, dot);
+                activeCollection = path.substring(dot + 1);
+                service.useDatabase(activeDb);
+            }
+            default -> { /* index / other: keep current active collection */ }
+        }
     }
 
     private void updateEditorHint(String mode) {
@@ -156,9 +206,9 @@ public final class MongoClientView extends BorderPane {
             List<String> dbs = task.getValue();
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + dbs.size() + " database(s)");
-            dbCombo.setItems(FXCollections.observableArrayList(dbs));
-            if (!dbs.isEmpty()) dbCombo.setValue(dbs.contains("test") ? "test" : dbs.get(0));
             logger.accept("Mongo connected — " + dbs.size() + " dbs");
+            explorer.setExplorer(explorerModel);
+            explorer.load();
             connectBtn.setDisable(false);
         });
         task.setOnFailed(e -> {
@@ -170,18 +220,10 @@ public final class MongoClientView extends BorderPane {
         runBg(task);
     }
 
-    private void selectDatabase(String db) {
-        service.useDatabase(db);
-        Task<List<String>> task = new Task<>() {
-            @Override protected List<String> call() { return service.listCollectionNames(); }
-        };
-        task.setOnSucceeded(e -> collectionList.setItems(FXCollections.observableArrayList(task.getValue())));
-        runBg(task);
-    }
-
     private void run() {
-        String collection = collectionList.getSelectionModel().getSelectedItem();
-        if (collection == null) { resultStatus.setText("Select a collection first"); return; }
+        if (activeCollection == null) { resultStatus.setText("Select a collection in the tree first"); return; }
+        if (activeDb != null) service.useDatabase(activeDb);
+        String collection = activeCollection;
         String mode = modeCombo.getValue();
         String body = queryEditor.getText().trim();
         int limit = parseLimit();
@@ -208,7 +250,6 @@ public final class MongoClientView extends BorderPane {
             resultArea.setText(task.getValue());
             resultStatus.getStyleClass().setAll("meta-label");
             resultStatus.setText("ok");
-            refreshCollectionsSoon();
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
@@ -222,11 +263,6 @@ public final class MongoClientView extends BorderPane {
         if (!r.success()) throw new RuntimeException(r.error());
         Platform.runLater(() -> resultStatus.setText(r.count() + " doc(s) · " + r.durationMs() + " ms"));
         return r.documents().isEmpty() ? "(no documents)" : String.join("\n", r.documents());
-    }
-
-    private void refreshCollectionsSoon() {
-        String db = dbCombo.getValue();
-        if (db != null) selectDatabase(db);
     }
 
     private int parseLimit() {

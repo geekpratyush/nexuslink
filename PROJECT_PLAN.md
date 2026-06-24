@@ -73,6 +73,10 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | Capability | Module | Notes |
 |------------|--------|-------|
 | **Workspace shell** | ui | Menu + global search, connection tree, tabbed workspace, collapsible log panel, status bar, accelerators. |
+| **Theming** | ui | Dark + light themes via looked-up `-nl-*` palette variables; `ThemeManager` toggle (Ctrl+Shift+T), persisted. |
+| **Bespoke icons** | ui | Original "node + link" SVG icon set, themed, used across menus, sidebar, and the object explorer. |
+| **Connection manager** | core + ui | Saved connections persisted to `~/.nexuslink/connections.json`; bundled **public sample** endpoints (deletable); flexible multi-method auth model. |
+| **Object explorer** | plugin-api + ui | Lazy resource tree + details for SQL (db→tables→columns) and Mongo (db→collections→indexes/stats). |
 | **Help system** | ui | 3-pane searchable dialog, live debounced search, context-sensitive `F1`, "Did you know?" tips. |
 | **Credential vault** | security | AES-256-GCM + PBKDF2 (200k). _UI wiring (master-password dialog) still pending._ |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
@@ -92,7 +96,7 @@ Six protocol tab types coexist in the workspace: **REST · WS · SQL · Mongo ·
 | Phase | Theme | Status |
 |-------|-------|--------|
 | **0** | Project scaffold (Maven, JPMS, core infra) | ✅ Substantially done |
-| **1** | Foundation: vault, cert manager, profiles, env vars, history | 🟡 Vault + history done; cert manager / profiles / env vars pending |
+| **1** | Foundation: vault, cert manager, profiles, env vars, history | 🟡 Vault, history, **connection profiles + store + public samples** done; cert manager / env vars / profile encryption pending |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog done; more topic authoring + richer renderer pending |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST + WS done; SSE + REST depth (OAuth, code-gen, more viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | ⬜ Not started (needs a broker) |
@@ -114,7 +118,8 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started
    them (the "agent testing" endgame), using the Anthropic SDK tool-runner.
 3. **Kafka client (Phase 4)** — highest-demand messaging protocol.
 4. **REST depth** — OAuth 2.0 flows, code generation, richer response viewers.
-5. **Theming** — light theme + `ThemeManager` toggle; bundle Inter / JetBrains Mono fonts.
+5. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance, Kerberos, SASL/SCRAM, mTLS), and store secrets as vault refs.
+6. ~~Theming — light theme + toggle~~ ✅ done (dark/light palette system, Ctrl+Shift+T). _Remaining: bundle Inter / JetBrains Mono fonts; system auto-detect._
 
 ---
 

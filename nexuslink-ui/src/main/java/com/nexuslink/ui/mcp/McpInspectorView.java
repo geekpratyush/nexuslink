@@ -49,6 +49,19 @@ public final class McpInspectorView extends BorderPane {
         this.logger = logger == null ? s -> {} : logger;
     }
 
+    /** Pre-fills the server target (and transport if it matches a known option). */
+    public void prefill(String target, String transport) {
+        if (target != null && !target.isBlank()) targetField.setText(target);
+        if (transport != null) {
+            for (String item : transportCombo.getItems()) {
+                if (item.toLowerCase().contains(transport.toLowerCase())) {
+                    transportCombo.setValue(item);
+                    break;
+                }
+            }
+        }
+    }
+
     // ---- connection ----
 
     private VBox buildConnectionBar() {

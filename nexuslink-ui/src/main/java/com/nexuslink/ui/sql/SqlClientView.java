@@ -1,10 +1,15 @@
 package com.nexuslink.ui.sql;
 
+import com.nexuslink.core.connection.AuthMethod;
+import com.nexuslink.core.connection.ConnectionProfile;
+import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.db.DriverInfo;
 import com.nexuslink.protocol.db.ExternalDriverLoader;
 import com.nexuslink.protocol.db.JdbcDriverRegistry;
+import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.QueryResult;
+import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
@@ -34,12 +39,13 @@ public final class SqlClientView extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
-    private final ListView<String> tableList = new ListView<>();
+    private final ResourceExplorerView explorer = new ResourceExplorerView("Schema");
     private final TextArea sqlEditor = new TextArea();
     private final TableView<List<String>> resultGrid = new TableView<>();
     private final Label resultStatus = new Label();
 
     private Consumer<String> logger = s -> {};
+    private Consumer<ConnectionProfile> onSave = p -> {};
 
     public SqlClientView() {
         getStyleClass().add("sql-view");
@@ -49,6 +55,19 @@ public final class SqlClientView extends BorderPane {
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
+        explorer.setLogger(this.logger);
+    }
+
+    /** Notified when the user saves the current connection as a profile. */
+    public void setOnSave(Consumer<ConnectionProfile> onSave) {
+        this.onSave = onSave == null ? p -> {} : onSave;
+    }
+
+    /** Pre-fills connection fields (used when opening a saved/sample connection). */
+    public void prefill(String url, String user, String password) {
+        if (url != null && !url.isBlank()) urlField.setText(url);
+        if (user != null) userField.setText(user);
+        if (password != null) passField.setText(password);
     }
 
     /** Demo/screenshot helper: connect to in-memory SQLite, seed data, and show a query. */
@@ -67,7 +86,7 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Connected: in-memory SQLite");
             sqlEditor.setText("SELECT id, name, role FROM users ORDER BY id;");
             renderResult(task.getValue());
-            refreshTables();
+            refreshExplorer();
         });
         Thread t = new Thread(task, "sql-demo");
         t.setDaemon(true);
@@ -87,6 +106,10 @@ public final class SqlClientView extends BorderPane {
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> connect());
 
+        Button saveBtn = new Button("Save");
+        saveBtn.getStyleClass().add("btn-secondary");
+        saveBtn.setOnAction(e -> saveCurrent());
+
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
         dbCombo.getItems().setAll(JdbcDriverRegistry.all());
         dbCombo.setButtonCell(driverCell());
@@ -105,7 +128,7 @@ public final class SqlClientView extends BorderPane {
 
         Label lbl = new Label("Database:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, helpBtn);
+        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -191,20 +214,15 @@ public final class SqlClientView extends BorderPane {
     }
 
     private SplitPane buildBody() {
-        // Left: schema browser
-        tableList.setOnMouseClicked(e -> {
-            String sel = tableList.getSelectionModel().getSelectedItem();
-            if (e.getClickCount() == 2 && sel != null) {
-                String table = sel.split("\\s")[0];
+        // Left: live schema explorer (database → tables/views → columns)
+        explorer.setMinWidth(200);
+        explorer.setOnActivate(node -> {
+            if (node.kind() == ResourceNode.Kind.TABLE) {
+                String table = node.id().substring("table:".length());
                 sqlEditor.setText("SELECT * FROM " + table + " LIMIT 100;");
                 runQuery();
             }
         });
-        Label schemaTitle = new Label("TABLES");
-        schemaTitle.getStyleClass().add("sidebar-title");
-        VBox schema = new VBox(schemaTitle, tableList);
-        VBox.setVgrow(tableList, Priority.ALWAYS);
-        schema.setMinWidth(160);
 
         // Right: editor over results
         sqlEditor.getStyleClass().add("code-area");
@@ -229,9 +247,31 @@ public final class SqlClientView extends BorderPane {
         VBox right = new VBox(6, sqlEditor, runRow, resultGrid);
         right.setPadding(new Insets(8));
 
-        SplitPane sp = new SplitPane(schema, right);
-        sp.setDividerPositions(0.22);
+        SplitPane sp = new SplitPane(explorer, right);
+        sp.setDividerPositions(0.26);
         return sp;
+    }
+
+    private void saveCurrent() {
+        String url = urlField.getText().trim();
+        if (url.isEmpty()) { statusLabel.setText("Enter a JDBC URL before saving"); return; }
+        TextInputDialog dialog = new TextInputDialog(url);
+        dialog.setTitle("Save connection");
+        dialog.setHeaderText("Save this database connection for later");
+        dialog.setContentText("Name:");
+        dialog.initOwner(getScene() == null ? null : getScene().getWindow());
+        dialog.showAndWait().ifPresent(name -> {
+            if (name.isBlank()) return;
+            boolean hasUser = !userField.getText().isBlank();
+            ConnectionProfile p = new ConnectionProfile(name.trim(), ConnectionProfile.Protocol.SQL, url)
+                    .withUser(userField.getText())
+                    .withAuth(hasUser ? AuthMethod.BASIC : AuthMethod.NONE);
+            DriverInfo d = dbCombo.getValue();
+            if (d != null) p.prop("driverId", d.id());
+            if (!passField.getText().isBlank()) p.authProp("password", passField.getText());
+            onSave.accept(p);
+            logger.accept("Saved SQL connection: " + name.trim());
+        });
     }
 
     private void connect() {
@@ -250,7 +290,7 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Connected: " + task.getValue());
             logger.accept("JDBC connected: " + task.getValue());
             connectBtn.setDisable(false);
-            refreshTables();
+            refreshExplorer();
         });
         task.setOnFailed(e -> {
             statusLabel.getStyleClass().setAll("status-err");
@@ -261,12 +301,9 @@ public final class SqlClientView extends BorderPane {
         runBg(task);
     }
 
-    private void refreshTables() {
-        Task<List<String>> task = new Task<>() {
-            @Override protected List<String> call() throws Exception { return service.listTables(); }
-        };
-        task.setOnSucceeded(e -> tableList.setItems(FXCollections.observableArrayList(task.getValue())));
-        runBg(task);
+    private void refreshExplorer() {
+        explorer.setExplorer(new JdbcExplorer(service));
+        explorer.load();
     }
 
     private void runQuery() {
@@ -279,7 +316,7 @@ public final class SqlClientView extends BorderPane {
         Task<QueryResult> task = new Task<>() {
             @Override protected QueryResult call() { return service.execute(statement); }
         };
-        task.setOnSucceeded(e -> { renderResult(task.getValue()); refreshTables(); });
+        task.setOnSucceeded(e -> renderResult(task.getValue()));
         task.setOnFailed(e -> resultStatus.setText("Error: " + task.getException().getMessage()));
         runBg(task);
     }

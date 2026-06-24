@@ -8,6 +8,20 @@
     -fx-font-size: 13px;
 }
 
+/* ---------- Bespoke SVG icons ---------- */
+.nl-icon {
+    -fx-fill: transparent;
+    -fx-stroke: -nl-text-muted;
+    -fx-stroke-width: 1.9;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+.nl-icon-accent { -fx-stroke: -nl-accent; }
+.menu-item .nl-icon { -fx-stroke: -nl-text; }
+.menu-bar > .container > .menu-button .nl-icon { -fx-stroke: -nl-text; }
+.btn-primary .nl-icon { -fx-stroke: -nl-on-accent; }
+.btn-secondary .nl-icon { -fx-stroke: -nl-text; }
+
 /* ---------- Menu bar (top-level) ---------- */
 .menu-bar {
     -fx-background-color: -nl-surface;
@@ -253,6 +267,21 @@
 .mcp-view .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
 .split-pane { -fx-background-color: -nl-bg; }
 .split-pane-divider { -fx-background-color: -nl-border; -fx-padding: 0 1 0 1; }
+
+/* ---------- Object explorer ---------- */
+.explorer-view { -fx-background-color: -nl-surface; }
+.explorer-tree { -fx-background-color: transparent; -fx-border-color: transparent; }
+.explorer-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -nl-text;
+    -fx-padding: 2 4 2 4;
+}
+.explorer-tree .tree-cell:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+.explorer-tree .tree-cell:hover { -fx-background-color: -nl-surface-2; }
+.explorer-tree .tree-cell:selected .nl-icon { -fx-stroke: -nl-accent; }
+.details-table { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
+.details-table .table-row-cell { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
+.details-table .table-cell { -fx-text-fill: -nl-text; -fx-padding: 4 8 4 8; }
 
 /* ---------- Status bar ---------- */
 .status-bar {

@@ -47,7 +47,7 @@
 - [x] `CaffeineCache` wrapper (`CacheRegion`) — typed, configurable TTL per cache region
 - [x] `CacheRegistry` — all 10 standard cache regions pre-registered
 - [ ] `ApplicationConfig` — Java Preferences API + JSON overlay
-- [ ] `ThemeManager` — dark/light, system auto-detect
+- [-] `ThemeManager` — dark/light toggle + persistence done (`nexuslink-ui/theme`); _system auto-detect TODO_
 - [ ] `SettingsService` — read/write user preferences with defaults
 
 ### 0.3 Plugin API Module (`nexuslink.plugin.api`)
@@ -68,7 +68,7 @@
 - [x] `StatusBar` — open-tab count, version (memory/conn-status TODO)
 - [x] `LogPanel` — collapsible bottom (level/protocol filters TODO)
 - [x] `app-dark.css` — dark theme
-- [ ] Light theme CSS (`theme-light.css`) + ThemeManager toggle
+- [x] Light theme CSS (`theme-light.css`) + ThemeManager toggle (palette-variable system; Ctrl+Shift+T; Preferences-persisted)
 - [ ] Font loading — Inter + JetBrains Mono bundled (currently system fallback)
 
 ---
@@ -98,10 +98,11 @@
 - [ ] Unit tests: parse real certs, generate + verify chain
 
 ### 1.3 Connection Profile Manager
-- [ ] `ConnectionProfile` model — name, protocol type, host, auth ref, tags, color, folder
-- [ ] `ProfileRepository` — encrypted JSON persistence, CRUD
+- [x] `ConnectionProfile` model — name, protocol, target, username, `AuthMethod` + auth/property maps, sample flag (`nexuslink-core/connection`)
+- [-] `ProfileRepository` — `ConnectionStore` persists saved profiles + hidden-sample ids to `~/.nexuslink/connections.json`, CRUD; _encryption / secret-vault refs TODO_
 - [ ] `ProfileImportExport` — encrypted JSON bundle, team share link
-- [ ] `ConnectionTreeView` — folders, tags, color dots, search, drag-to-reorder
+- [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide; _folders, tags, color dots, drag-to-reorder TODO_
+- [x] **Bundled public sample catalog** (`SampleCatalog`) — deletable/hideable public test endpoints (REST/WS/SQL/Mongo/MCP/LLM + SFTP/Kafka placeholders)
 - [ ] `ProfileEditorDialog` — generic fields + protocol-specific section (pluggable)
 - [ ] `ProfileValidator` — per-protocol pre-save validation
 
@@ -349,7 +350,7 @@
 ### 8.1 JDBC SQL Client
 - [x] `JdbcService` — DriverManager connection, SELECT/update detection _(HikariCP pool TODO)_
 - [x] `SqlClientView` — SQL editor (Ctrl+Enter), run button, result grid
-- [x] Schema browser — table list + describe (double-click to query) _(views/indexes/procedures tree TODO)_
+- [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
 - [-] Result grid: rendered _(sort/filter/JSON/CSV export TODO)_
 - [x] **4/4 unit tests pass** (in-memory SQLite)
 - [ ] Query history integration (reuse HistoryStore)
@@ -394,7 +395,8 @@
 - [x] `MongoService` — `org.mongodb:mongodb-driver-sync` (Apache-2.0) in its own `nexuslink-protocol-mongo` module: connect, list dbs/collections, find, aggregate, count, insertOne, updateMany, deleteMany (Extended-JSON in/out) + `MongoQueryResult`
 - [x] `MongoClientView` UI — connection bar, database picker + collection list, operation selector (find/aggregate/insert/update/delete), Extended-JSON editor (Ctrl+Enter), result pane; wired into `MainWindow` (File menu + sidebar + tab opener)
 - [-] Document CRUD, aggregation pipeline builder — CRUD + raw-JSON aggregation done; _visual pipeline builder TODO_
-- [ ] Collection stats + index manager
+- [x] **Object explorer** (`MongoExplorer` + `ResourceExplorerView`): databases → collections → indexes tree with collStats + index definitions in the details panel
+- [-] Collection stats + index manager — stats + index listing surfaced in the explorer; _create/drop index UI TODO_
 - [-] Auth: SCRAM / x.509 / LDAP / Kerberos / TLS — supported via connection string (`mongodb+srv://`, TLS, SCRAM); _dedicated auth UI TODO_
 - [x] Testing: `MongoServiceTest` spins up `mongo:7.0` via Testcontainers, gated behind `-DrunMongoIT=true` so the default build stays green without Docker (4 tests, skipped when the property is unset)
 
@@ -506,6 +508,34 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 8 — Themes, bespoke icons, object explorer, connection manager.**
+  - **Theme system:** refactored all CSS to looked-up `-nl-*` palette variables (`theme-base.css`)
+    with swappable `theme-dark.css` / `theme-light.css`; `ThemeManager` (Preferences-persisted) +
+    View-menu toggle + Ctrl+Shift+T; Help dialog themed too. **Fixed the menu/dropdown/context-menu
+    contrast bug** (was dark-on-dark — popups now have explicit themed `.menu-item`/`.context-menu`
+    rules).
+  - **Bespoke SVG icons:** hand-authored a unified "node + link" glyph set (`Icons.java`, 24×24 SVG
+    paths, themed via CSS `.nl-icon`). Wired into menu bar, File/AI menu items, and sidebar buttons.
+  - **Object explorer:** `ResourceNode` + `ResourceExplorer` SPI (plugin-api) + lazy
+    `ResourceExplorerView` (tree + details, per-type icons). Implemented `JdbcExplorer`
+    (database → tables/views → columns) and `MongoExplorer` (databases → collections → indexes,
+    with collStats in the details panel — added `MongoService.listIndexes/collectionStats`).
+    Embedded in the SQL and Mongo views; double-click a table/collection runs a query.
+  - **Saved/cached connections + multi-auth model:** `ConnectionProfile` (with a broad `AuthMethod`
+    set — Basic/Bearer/API-key/TLS/mTLS/SASL/SCRAM/Kerberos/OAuth2/SSH-key/connection-string) +
+    `ConnectionStore` persisting to `~/.nexuslink/connections.json`. SQL/Mongo bars gained a **Save**
+    button; saved connections appear in the left tree and reopen pre-filled.
+  - **Public sample catalog (deletable):** `SampleCatalog` of genuinely public test endpoints
+    (httpbin, JSONPlaceholder, Postman Echo, REST Countries, Open-Meteo, public WS echoes, EBI
+    RNAcentral PostgreSQL + Rfam MySQL with published read-only creds, Rebex SFTP demo, reference
+    MCP server, Anthropic LLM, local Mongo/Kafka). Shown under "Samples (public)" in the left tree;
+    each is hideable (right-click) and the set is restorable — so corporate users can clear them.
+  - **VERIFIED:** full 9-module `mvn install` clean; **`mvn test` BUILD SUCCESS** (Mongo IT
+    Docker-gated/skipped); GUI boots with no exceptions or CSS warnings; screenshot confirms the
+    icons, the Saved/Samples connection tree, and readable menu contrast in light theme.
+  - Follow-ups: per-protocol auth *flows* (OAuth dance, Kerberos tickets, SASL/mTLS wiring) are
+    modeled but not yet implemented; Kafka/MQ/SFTP connectors still pending (catalogued as samples +
+    explorer node types). Save buttons exist for SQL/Mongo; add to REST/WS next.
 - 2026-06-24: **Session 7 — MongoDB client wired end-to-end (finished the half-built feature).**
   - Found the `nexuslink-protocol-mongo` backend (`MongoService`, `MongoQueryResult`) and a full
     `MongoClientView` from a prior session left **unwired**: `nexuslink-ui` had no dependency on the

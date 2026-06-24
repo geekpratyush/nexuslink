@@ -42,6 +42,11 @@ public final class WebSocketView extends BorderPane {
         this.logger = logger == null ? s -> {} : logger;
     }
 
+    /** Pre-fills the socket URL (used when opening a saved/sample connection). */
+    public void prefill(String url) {
+        if (url != null && !url.isBlank()) urlField.setText(url);
+    }
+
     private VBox buildBar() {
         urlField.getStyleClass().add("nl-field");
         urlField.setPromptText("wss://example.com/socket");
