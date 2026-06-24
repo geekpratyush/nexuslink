@@ -74,6 +74,66 @@ public final class JdbcService implements AutoCloseable {
         return tables;
     }
 
+    /**
+     * Builds a Mermaid {@code erDiagram} from the connected database's tables, columns
+     * (with PK/FK markers) and foreign-key relationships. Render it with a Mermaid viewer.
+     */
+    public String erDiagramMermaid() throws SQLException {
+        DatabaseMetaData md = connection.getMetaData();
+        StringBuilder sb = new StringBuilder("erDiagram\n");
+
+        List<String> tables = new ArrayList<>();
+        try (ResultSet rs = md.getTables(null, null, "%", new String[]{"TABLE"})) {
+            while (rs.next()) tables.add(rs.getString("TABLE_NAME"));
+        }
+        if (tables.isEmpty()) return sb.append("  %% no tables found\n").toString();
+
+        // Relationships (deduped): parent ||--o{ child
+        java.util.LinkedHashSet<String> rels = new java.util.LinkedHashSet<>();
+        for (String t : tables) {
+            try (ResultSet rs = md.getImportedKeys(null, null, t)) {
+                while (rs.next()) {
+                    String parent = rs.getString("PKTABLE_NAME");
+                    if (parent != null) rels.add(safe(parent) + " ||--o{ " + safe(t) + " : has");
+                }
+            }
+        }
+        for (String rel : rels) sb.append("  ").append(rel).append('\n');
+
+        // Entities
+        for (String t : tables) {
+            java.util.Set<String> pks = new java.util.HashSet<>();
+            try (ResultSet rs = md.getPrimaryKeys(null, null, t)) {
+                while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));
+            }
+            java.util.Set<String> fks = new java.util.HashSet<>();
+            try (ResultSet rs = md.getImportedKeys(null, null, t)) {
+                while (rs.next()) fks.add(rs.getString("FKCOLUMN_NAME"));
+            }
+            sb.append("  ").append(safe(t)).append(" {\n");
+            try (ResultSet rs = md.getColumns(null, null, t, "%")) {
+                while (rs.next()) {
+                    String name = rs.getString("COLUMN_NAME");
+                    String type = sanitizeType(rs.getString("TYPE_NAME"));
+                    String key = pks.contains(name) ? " PK" : fks.contains(name) ? " FK" : "";
+                    sb.append("    ").append(type).append(' ').append(safe(name)).append(key).append('\n');
+                }
+            }
+            sb.append("  }\n");
+        }
+        return sb.toString();
+    }
+
+    private static String safe(String identifier) {
+        String s = identifier == null ? "_" : identifier.replaceAll("[^A-Za-z0-9_]", "_");
+        return s.isEmpty() ? "_" : (Character.isDigit(s.charAt(0)) ? "_" + s : s);
+    }
+
+    private static String sanitizeType(String type) {
+        if (type == null || type.isBlank()) return "unknown";
+        return type.replaceAll("[^A-Za-z0-9]", "_");
+    }
+
     /** Returns "column TYPE" descriptors for a table. */
     public List<String> describeTable(String table) throws SQLException {
         List<String> cols = new ArrayList<>();

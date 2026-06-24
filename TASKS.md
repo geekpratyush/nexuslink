@@ -353,6 +353,7 @@
 - [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
 - [-] Result grid: rendered _(sort/filter/JSON/CSV export TODO)_
 - [x] **4/4 unit tests pass** (in-memory SQLite)
+- [x] **ER diagram** — `JdbcService.erDiagramMermaid()` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button renders it in the `MarkdownView`. Unit test covers entities + relationship.
 - [ ] Query history integration (reuse HistoryStore)
 - [ ] HikariCP connection pooling
 

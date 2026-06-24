@@ -19,6 +19,24 @@ class JdbcServiceTest {
     }
 
     @Test
+    void generatesErDiagramWithEntitiesAndRelationship() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE customer (id INTEGER PRIMARY KEY, name TEXT)");
+            svc.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, "
+                    + "FOREIGN KEY(customer_id) REFERENCES customer(id))");
+
+            String mermaid = svc.erDiagramMermaid();
+            assertTrue(mermaid.startsWith("erDiagram"), mermaid);
+            assertTrue(mermaid.contains("customer {"), mermaid);
+            assertTrue(mermaid.contains("orders {"), mermaid);
+            assertTrue(mermaid.contains("id PK"), mermaid);
+            assertTrue(mermaid.contains("customer_id FK"), mermaid);
+            assertTrue(mermaid.contains("customer ||--o{ orders"), mermaid);
+        }
+    }
+
+    @Test
     void createsInsertsAndQueries() throws Exception {
         try (JdbcService svc = new JdbcService()) {
             svc.connect("jdbc:sqlite::memory:", null, null);

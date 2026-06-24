@@ -110,6 +110,11 @@ public final class SqlClientView extends BorderPane {
         saveBtn.getStyleClass().add("btn-secondary");
         saveBtn.setOnAction(e -> saveCurrent());
 
+        Button erBtn = new Button("ER Diagram");
+        erBtn.getStyleClass().add("btn-secondary");
+        erBtn.setTooltip(new Tooltip("Generate an entity-relationship diagram of the schema"));
+        erBtn.setOnAction(e -> showErDiagram());
+
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
         dbCombo.getItems().setAll(JdbcDriverRegistry.all());
         dbCombo.setButtonCell(driverCell());
@@ -128,7 +133,7 @@ public final class SqlClientView extends BorderPane {
 
         Label lbl = new Label("Database:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, helpBtn);
+        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, erBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -250,6 +255,33 @@ public final class SqlClientView extends BorderPane {
         SplitPane sp = new SplitPane(explorer, right);
         sp.setDividerPositions(0.26);
         return sp;
+    }
+
+    private void showErDiagram() {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        statusLabel.setText("Building ER diagram…");
+        Task<String> task = new Task<>() {
+            @Override protected String call() throws Exception { return service.erDiagramMermaid(); }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("Not connected".equals(statusLabel.getText()) ? "" : "ER diagram ready");
+            com.nexuslink.ui.markdown.MarkdownView view = new com.nexuslink.ui.markdown.MarkdownView();
+            view.setMermaid(task.getValue());
+            javafx.scene.Scene scene = new javafx.scene.Scene(view, 900, 680);
+            com.nexuslink.ui.theme.ThemeManager.get().register(scene);
+            javafx.stage.Stage stage = new javafx.stage.Stage();
+            if (getScene() != null) stage.initOwner(getScene().getWindow());
+            stage.setTitle("ER Diagram");
+            stage.setScene(scene);
+            stage.show();
+            logger.accept("ER diagram generated");
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("ER diagram failed: " + task.getException().getMessage());
+        });
+        runBg(task);
     }
 
     private void saveCurrent() {
