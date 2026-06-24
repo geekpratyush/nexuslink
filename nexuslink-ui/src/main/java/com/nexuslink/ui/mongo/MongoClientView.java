@@ -43,6 +43,7 @@ public final class MongoClientView extends BorderPane {
     private final TableView<org.bson.Document> docTable = new TableView<>();
     private final TableView<String[]> schemaTable = new TableView<>();
     private final java.util.List<org.bson.Document> lastDocs = new java.util.ArrayList<>();
+    private String lastCollection;   // source collection for the cached docs (editable when set)
 
     private String activeDb;
     private String activeCollection;
@@ -69,6 +70,59 @@ public final class MongoClientView extends BorderPane {
     /** Pre-fills the connection string (used when opening a saved/sample connection). */
     public void prefill(String connectionString) {
         if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
+    }
+
+    private void editDocument(org.bson.Document doc) {
+        if (doc == null) return;
+        if (lastCollection == null) { statusLabel.setText("Editing is available for find results"); return; }
+        Object id = doc.get("_id");
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Edit document");
+        d.setHeaderText("Edit and save (matched by _id) in '" + lastCollection + "'");
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
+        TextArea editor = new TextArea(doc.toJson(org.bson.json.JsonWriterSettings.builder().indent(true).build()));
+        editor.getStyleClass().add("code-area");
+        editor.setPrefSize(560, 360);
+        d.getDialogPane().setContent(editor);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b ->
+                runMutation(() -> {
+                    if (activeDb != null) service.useDatabase(activeDb);
+                    return service.replaceById(lastCollection, id, editor.getText()) + " document(s) updated";
+                }));
+    }
+
+    private void deleteDocument(org.bson.Document doc) {
+        if (doc == null || lastCollection == null) return;
+        Object id = doc.get("_id");
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete this document (_id " + id + ")?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText(null);
+        if (getScene() != null) confirm.initOwner(getScene().getWindow());
+        confirm.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b ->
+                runMutation(() -> {
+                    if (activeDb != null) service.useDatabase(activeDb);
+                    return service.deleteById(lastCollection, id) + " document(s) deleted";
+                }));
+    }
+
+    /** Runs a write, reports it, and refreshes the result grid by re-running the query. */
+    private void runMutation(java.util.concurrent.Callable<String> action) {
+        Task<String> task = new Task<>() {
+            @Override protected String call() throws Exception { return action.call(); }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText(task.getValue());
+            logger.accept("Mongo: " + task.getValue());
+            run(); // refresh the current view
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("✖ " + task.getException().getMessage());
+        });
+        runBg(task);
     }
 
     private void exportResults(boolean csv) {
@@ -294,6 +348,20 @@ public final class MongoClientView extends BorderPane {
         docTable.getStyleClass().add("details-table");
         docTable.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         docTable.setPlaceholder(new Label("Run a find/SQL query, then switch to Table view"));
+        docTable.setRowFactory(tv -> {
+            TableRow<org.bson.Document> rowUI = new TableRow<>();
+            MenuItem edit = new MenuItem("Edit document…");
+            edit.setOnAction(e -> editDocument(rowUI.getItem()));
+            MenuItem del = new MenuItem("Delete document");
+            del.setOnAction(e -> deleteDocument(rowUI.getItem()));
+            ContextMenu menu = new ContextMenu(edit, del);
+            rowUI.contextMenuProperty().bind(javafx.beans.binding.Bindings
+                    .when(rowUI.emptyProperty()).then((ContextMenu) null).otherwise(menu));
+            rowUI.setOnMouseClicked(ev -> {
+                if (ev.getClickCount() == 2 && !rowUI.isEmpty()) editDocument(rowUI.getItem());
+            });
+            return rowUI;
+        });
         buildSchemaTable();
 
         StackPane resultStack = new StackPane(resultArea, docTable, schemaTable);
@@ -410,6 +478,7 @@ public final class MongoClientView extends BorderPane {
                 };
             }
         };
+        lastCollection = "find".equals(mode) ? collection : null;   // edit/delete only on find results
         boolean docMode = mode.equals("find") || mode.equals("sql") || mode.equals("aggregate");
         task.setOnSucceeded(e -> {
             resultArea.setText(task.getValue());

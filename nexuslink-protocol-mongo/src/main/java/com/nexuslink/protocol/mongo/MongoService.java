@@ -281,6 +281,18 @@ public final class MongoService implements AutoCloseable {
         return s.isEmpty() ? "_" : s;
     }
 
+    /** Replaces the document with {@code id} by the parsed {@code newJson}; returns modified count. */
+    public long replaceById(String collection, Object id, String newJson) {
+        return collection(collection)
+                .replaceOne(new Document("_id", id), Document.parse(newJson))
+                .getModifiedCount();
+    }
+
+    /** Deletes the document with {@code id}; returns deleted count. */
+    public long deleteById(String collection, Object id) {
+        return collection(collection).deleteOne(new Document("_id", id)).getDeletedCount();
+    }
+
     /** Returns the query plan (explain output) for a find filter as shell JSON. */
     public String explain(String collection, String filterJson) {
         return collection(collection).find(parseFilter(filterJson)).explain().toJson(SHELL);
