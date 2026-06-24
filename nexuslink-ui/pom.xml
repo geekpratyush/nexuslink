@@ -62,6 +62,10 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-ftp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-security</artifactId>
         </dependency>
         <dependency>

@@ -6,6 +6,7 @@ import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
 import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
+import com.nexuslink.ui.ftp.FtpView;
 import com.nexuslink.ui.gcs.GcsView;
 import com.nexuslink.ui.graphql.GraphQLView;
 import com.nexuslink.ui.grpc.GrpcView;
@@ -142,6 +143,8 @@ public final class MainWindow {
         newGcs.setOnAction(e -> openGcsTab());
         MenuItem newSftp = new MenuItem("New SFTP Browser", Icons.of("server", 14));
         newSftp.setOnAction(e -> openSftpTab());
+        MenuItem newFtp = new MenuItem("New FTP Browser", Icons.of("server", 14));
+        newFtp.setOnAction(e -> openFtpTab());
         MenuItem newKafka = new MenuItem("New Kafka Client", Icons.of("topic", 14));
         newKafka.setOnAction(e -> openKafkaTab());
         MenuItem newRedis = new MenuItem("New Redis Client", Icons.of("database", 14));
@@ -152,7 +155,7 @@ public final class MainWindow {
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newGql, newGrpc, newSql, newMongo, newS3, newAzure, newGcs, newSftp, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newGql, newGrpc, newSql, newMongo, newS3, newAzure, newGcs, newSftp, newFtp, newKafka, newRedis, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -228,12 +231,13 @@ public final class MainWindow {
         Button azureBtn = sidebarButton("Azure Blob", "collection", this::openAzureTab);
         Button gcsBtn = sidebarButton("Google Cloud Storage", "collection", this::openGcsTab);
         Button sftpBtn = sidebarButton("SFTP", "server", this::openSftpTab);
+        Button ftpBtn = sidebarButton("FTP", "server", this::openFtpTab);
         Button kafkaBtn = sidebarButton("Kafka", "topic", this::openKafkaTab);
         Button redisBtn = sidebarButton("Redis", "database", this::openRedisTab);
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, grpcBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, gcsBtn, sftpBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, grpcBtn, sqlBtn, mongoBtn, s3Btn, azureBtn, gcsBtn, sftpBtn, ftpBtn, kafkaBtn, redisBtn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -389,6 +393,13 @@ public final class MainWindow {
         return view;
     }
 
+    private FtpView openFtpTab() {
+        FtpView view = new FtpView();
+        view.setLogger(this::log);
+        addTab("FTP " + (++newTabCounter), view);
+        return view;
+    }
+
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
@@ -444,6 +455,7 @@ public final class MainWindow {
             case AZURE_BLOB -> openAzureTab().prefill(d.target);
             case GCS -> openGcsTab().prefill(d.target);
             case SFTP -> openSftpTab().prefill(d.target, d.username, d.authProps.get("password"));
+            case FTP -> openFtpTab().prefill(d.target, d.username, d.authProps.get("password"));
             case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));
             case LLM -> openLlmTab();
             default -> {

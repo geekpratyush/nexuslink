@@ -27,6 +27,7 @@
         <module>nexuslink-protocol-gcs</module>
         <module>nexuslink-protocol-grpc</module>
         <module>nexuslink-protocol-sftp</module>
+        <module>nexuslink-protocol-ftp</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -51,6 +52,7 @@
 
         <!-- SSH/SFTP -->
         <mina.sshd.version>2.13.2</mina.sshd.version>
+        <commons.net.version>3.11.1</commons.net.version>
 
         <!-- JSON -->
         <jackson.version>2.17.2</jackson.version>
@@ -203,6 +205,17 @@
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-sftp</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-ftp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- FTP / FTPS -->
+            <dependency>
+                <groupId>commons-net</groupId>
+                <artifactId>commons-net</artifactId>
+                <version>${commons.net.version}</version>
             </dependency>
             <!-- gRPC (dynamic, reflection-based) — versions aligned with the GCS SDK -->
             <dependency>
