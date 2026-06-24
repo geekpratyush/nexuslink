@@ -57,6 +57,8 @@ public final class RestCodeGenerator {
                     h.put(r.getApiKeyName(), r.getApiKeyValue());
                 }
             }
+            case OAUTH2 -> h.put("Authorization",
+                    "Bearer <access_token from " + r.getOauthTokenUrl() + ">");
             case NONE -> { /* none */ }
         }
         return h;

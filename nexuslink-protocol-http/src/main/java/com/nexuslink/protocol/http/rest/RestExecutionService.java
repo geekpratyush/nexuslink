@@ -67,6 +67,11 @@ public final class RestExecutionService {
                         safeHeader(builder, req.getApiKeyName(), req.getApiKeyValue());
                     }
                 }
+                case OAUTH2 -> {
+                    String token = OAuth2TokenClient.accessToken(req.getOauthTokenUrl(),
+                            req.getOauthClientId(), req.getOauthClientSecret(), req.getOauthScope());
+                    builder.header("Authorization", "Bearer " + token);
+                }
                 case NONE -> { /* no auth header */ }
             }
 

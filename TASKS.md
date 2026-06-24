@@ -185,7 +185,7 @@
   - [x] Basic Auth
   - [x] Bearer Token (manual)
   - [x] API Key (header / query placement) — applied in `RestExecutionService`; 4/4 `RestRequestTest` pass _(cookie placement TODO)_
-  - [ ] OAuth 2.0 — all 5 flows with token auto-refresh
+  - [-] OAuth 2.0 — **client-credentials grant** done (`OAuth2TokenClient` with token caching/auto-refresh, Auth-tab fields, applied in `RestExecutionService`); _authorization-code / PKCS / implicit / password flows TODO_
   - [ ] Digest, NTLM, AWS SigV4, HMAC, Custom Script
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_

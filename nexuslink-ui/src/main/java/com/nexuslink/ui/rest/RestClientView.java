@@ -59,6 +59,10 @@ public final class RestClientView extends BorderPane {
     private final TextField apiKeyName = new TextField("X-API-Key");
     private final TextField apiKeyValue = new TextField();
     private ComboBox<RestRequest.ApiKeyLocation> apiKeyLocation;
+    private final TextField oauthTokenUrl = new TextField();
+    private final TextField oauthClientId = new TextField();
+    private final PasswordField oauthClientSecret = new PasswordField();
+    private final TextField oauthScope = new TextField();
     private final TextField connectTimeoutField = new TextField();
     private final TextField readTimeoutField = new TextField();
     private final CheckBox followRedirectsBox = new CheckBox("Follow redirects automatically");
@@ -289,14 +293,32 @@ public final class RestClientView extends BorderPane {
         grid.add(keyValueLbl, 0, 5); grid.add(apiKeyValue, 1, 5);
         grid.add(keyInLbl, 0, 6);    grid.add(apiKeyLocation, 1, 6);
 
+        Label tokenUrlLbl = new Label("Token URL:");
+        Label clientIdLbl = new Label("Client ID:");
+        Label clientSecretLbl = new Label("Client secret:");
+        Label scopeLbl = new Label("Scope:");
+        for (Label l : new Label[]{tokenUrlLbl, clientIdLbl, clientSecretLbl, scopeLbl}) l.getStyleClass().add("meta-label");
+        for (TextField f : new TextField[]{oauthTokenUrl, oauthClientId, oauthClientSecret, oauthScope}) {
+            f.getStyleClass().add("nl-field");
+            f.setPrefWidth(280);
+        }
+        oauthScope.setPromptText("optional, space-separated");
+        grid.add(tokenUrlLbl, 0, 7);     grid.add(oauthTokenUrl, 1, 7);
+        grid.add(clientIdLbl, 0, 8);     grid.add(oauthClientId, 1, 8);
+        grid.add(clientSecretLbl, 0, 9); grid.add(oauthClientSecret, 1, 9);
+        grid.add(scopeLbl, 0, 10);       grid.add(oauthScope, 1, 10);
+
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
             boolean bearer = t == RestRequest.AuthType.BEARER;
             boolean apiKey = t == RestRequest.AuthType.API_KEY;
+            boolean oauth = t == RestRequest.AuthType.OAUTH2;
             setRowVisible(basic, userLbl, authUser, passLbl, authPass);
             setRowVisible(bearer, tokenLbl, authToken);
             setRowVisible(apiKey, keyNameLbl, apiKeyName, keyValueLbl, apiKeyValue, keyInLbl, apiKeyLocation);
+            setRowVisible(oauth, tokenUrlLbl, oauthTokenUrl, clientIdLbl, oauthClientId,
+                    clientSecretLbl, oauthClientSecret, scopeLbl, oauthScope);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
@@ -432,6 +454,10 @@ public final class RestClientView extends BorderPane {
         request.setApiKeyName(apiKeyName.getText());
         request.setApiKeyValue(apiKeyValue.getText());
         request.setApiKeyLocation(apiKeyLocation.getValue());
+        request.setOauthTokenUrl(oauthTokenUrl.getText());
+        request.setOauthClientId(oauthClientId.getText());
+        request.setOauthClientSecret(oauthClientSecret.getText());
+        request.setOauthScope(oauthScope.getText());
         request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
         request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
         request.setFollowRedirects(followRedirectsBox.isSelected());
@@ -489,6 +515,10 @@ public final class RestClientView extends BorderPane {
         root.put("apiKeyName", request.getApiKeyName());
         root.put("apiKeyValue", request.getApiKeyValue());
         root.put("apiKeyLocation", request.getApiKeyLocation().name());
+        // OAuth: persist non-secret fields only (client secret is re-entered, like Basic password)
+        root.put("oauthTokenUrl", request.getOauthTokenUrl());
+        root.put("oauthClientId", request.getOauthClientId());
+        root.put("oauthScope", request.getOauthScope());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         return root.toString();
@@ -521,6 +551,9 @@ public final class RestClientView extends BorderPane {
             apiKeyValue.setText(root.path("apiKeyValue").asText(""));
             apiKeyLocation.setValue(RestRequest.ApiKeyLocation.valueOf(
                     root.path("apiKeyLocation").asText("HEADER")));
+            oauthTokenUrl.setText(root.path("oauthTokenUrl").asText(""));
+            oauthClientId.setText(root.path("oauthClientId").asText(""));
+            oauthScope.setText(root.path("oauthScope").asText(""));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
         } catch (Exception e) {

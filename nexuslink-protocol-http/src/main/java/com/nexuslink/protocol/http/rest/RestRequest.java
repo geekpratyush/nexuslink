@@ -21,7 +21,7 @@ public final class RestRequest {
     private String body = "";
 
     // Auth
-    public enum AuthType { NONE, BASIC, BEARER, API_KEY }
+    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2 }
     /** Where an API key is sent. */
     public enum ApiKeyLocation { HEADER, QUERY }
     private AuthType authType = AuthType.NONE;
@@ -31,6 +31,11 @@ public final class RestRequest {
     private String apiKeyName = "X-API-Key";
     private String apiKeyValue = "";
     private ApiKeyLocation apiKeyLocation = ApiKeyLocation.HEADER;
+    // OAuth 2.0 client-credentials grant
+    private String oauthTokenUrl = "";
+    private String oauthClientId = "";
+    private String oauthClientSecret = "";
+    private String oauthScope = "";
 
     // Settings
     private int connectTimeoutMs = 10_000;
@@ -72,6 +77,18 @@ public final class RestRequest {
 
     public ApiKeyLocation getApiKeyLocation() { return apiKeyLocation; }
     public void setApiKeyLocation(ApiKeyLocation v) { this.apiKeyLocation = v; }
+
+    public String getOauthTokenUrl() { return oauthTokenUrl; }
+    public void setOauthTokenUrl(String v) { this.oauthTokenUrl = v; }
+
+    public String getOauthClientId() { return oauthClientId; }
+    public void setOauthClientId(String v) { this.oauthClientId = v; }
+
+    public String getOauthClientSecret() { return oauthClientSecret; }
+    public void setOauthClientSecret(String v) { this.oauthClientSecret = v; }
+
+    public String getOauthScope() { return oauthScope; }
+    public void setOauthScope(String v) { this.oauthScope = v; }
 
     public int getConnectTimeoutMs() { return connectTimeoutMs; }
     public void setConnectTimeoutMs(int v) { this.connectTimeoutMs = v; }
