@@ -557,10 +557,21 @@ public final class MainWindow {
             checks.put(d.id(), cb);
             box.getChildren().add(cb);
         }
+
+        Button selectAll = new Button("Select all");
+        selectAll.getStyleClass().add("btn-secondary");
+        selectAll.setOnAction(e -> checks.values().forEach(cb -> cb.setSelected(true)));
+        Button selectNone = new Button("Select none");
+        selectNone.getStyleClass().add("btn-secondary");
+        selectNone.setOnAction(e -> checks.values().forEach(cb -> cb.setSelected(false)));
+        HBox toolbar = new HBox(8, selectAll, selectNone);
+        toolbar.setPadding(new Insets(0, 4, 0, 4));
+
         ScrollPane scroll = new ScrollPane(box);
         scroll.setFitToWidth(true);
-        scroll.setPrefHeight(360);
-        dialog.getDialogPane().setContent(scroll);
+        scroll.setPrefHeight(340);
+        VBox dialogContent = new VBox(8, toolbar, scroll);
+        dialog.getDialogPane().setContent(dialogContent);
         dialog.setOnShown(ev -> {
             if (dialog.getDialogPane().getScene() != null) ThemeManager.get().register(dialog.getDialogPane().getScene());
         });
