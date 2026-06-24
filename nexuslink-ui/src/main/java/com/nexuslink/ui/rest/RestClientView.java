@@ -56,6 +56,9 @@ public final class RestClientView extends BorderPane {
     private final TextField authUser = new TextField();
     private final PasswordField authPass = new PasswordField();
     private final TextField authToken = new TextField();
+    private final TextField apiKeyName = new TextField("X-API-Key");
+    private final TextField apiKeyValue = new TextField();
+    private ComboBox<RestRequest.ApiKeyLocation> apiKeyLocation;
 
     /** Optional sink for log lines (wired to the app log panel). */
     private Consumer<String> logger = s -> {};
@@ -254,22 +257,43 @@ public final class RestClientView extends BorderPane {
         authUser.setPrefWidth(280);
         authToken.setPrefWidth(280);
 
+        Label keyNameLbl = new Label("Key name:");
+        Label keyValueLbl = new Label("Key value:");
+        Label keyInLbl = new Label("Add to:");
+        keyNameLbl.getStyleClass().add("meta-label");
+        keyValueLbl.getStyleClass().add("meta-label");
+        keyInLbl.getStyleClass().add("meta-label");
+        apiKeyName.getStyleClass().add("nl-field");
+        apiKeyValue.getStyleClass().add("nl-field");
+        apiKeyName.setPrefWidth(280);
+        apiKeyValue.setPrefWidth(280);
+        apiKeyLocation = new ComboBox<>(FXCollections.observableArrayList(RestRequest.ApiKeyLocation.values()));
+        apiKeyLocation.setValue(RestRequest.ApiKeyLocation.HEADER);
+
         grid.add(userLbl, 0, 1);  grid.add(authUser, 1, 1);
         grid.add(passLbl, 0, 2);  grid.add(authPass, 1, 2);
         grid.add(tokenLbl, 0, 3); grid.add(authToken, 1, 3);
+        grid.add(keyNameLbl, 0, 4);  grid.add(apiKeyName, 1, 4);
+        grid.add(keyValueLbl, 0, 5); grid.add(apiKeyValue, 1, 5);
+        grid.add(keyInLbl, 0, 6);    grid.add(apiKeyLocation, 1, 6);
 
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
             boolean bearer = t == RestRequest.AuthType.BEARER;
-            userLbl.setVisible(basic);  authUser.setVisible(basic);
-            passLbl.setVisible(basic);  authPass.setVisible(basic);
-            tokenLbl.setVisible(bearer); authToken.setVisible(bearer);
+            boolean apiKey = t == RestRequest.AuthType.API_KEY;
+            setRowVisible(basic, userLbl, authUser, passLbl, authPass);
+            setRowVisible(bearer, tokenLbl, authToken);
+            setRowVisible(apiKey, keyNameLbl, apiKeyName, keyValueLbl, apiKeyValue, keyInLbl, apiKeyLocation);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
 
         return grid;
+    }
+
+    private static void setRowVisible(boolean visible, javafx.scene.Node... nodes) {
+        for (javafx.scene.Node n : nodes) { n.setVisible(visible); n.setManaged(visible); }
     }
 
     // ---- Response panel ----
@@ -363,6 +387,9 @@ public final class RestClientView extends BorderPane {
         request.setAuthUsername(authUser.getText());
         request.setAuthPassword(authPass.getText());
         request.setAuthToken(authToken.getText());
+        request.setApiKeyName(apiKeyName.getText());
+        request.setApiKeyValue(apiKeyValue.getText());
+        request.setApiKeyLocation(apiKeyLocation.getValue());
     }
 
     private void renderResponse(RestResponse resp) {
@@ -414,6 +441,9 @@ public final class RestClientView extends BorderPane {
         root.put("authType", request.getAuthType().name());
         root.put("authUsername", request.getAuthUsername());
         root.put("authToken", request.getAuthToken());
+        root.put("apiKeyName", request.getApiKeyName());
+        root.put("apiKeyValue", request.getApiKeyValue());
+        root.put("apiKeyLocation", request.getApiKeyLocation().name());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         return root.toString();
@@ -442,6 +472,10 @@ public final class RestClientView extends BorderPane {
                     root.path("authType").asText("NONE")));
             authUser.setText(root.path("authUsername").asText(""));
             authToken.setText(root.path("authToken").asText(""));
+            apiKeyName.setText(root.path("apiKeyName").asText("X-API-Key"));
+            apiKeyValue.setText(root.path("apiKeyValue").asText(""));
+            apiKeyLocation.setValue(RestRequest.ApiKeyLocation.valueOf(
+                    root.path("apiKeyLocation").asText("HEADER")));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
         } catch (Exception e) {

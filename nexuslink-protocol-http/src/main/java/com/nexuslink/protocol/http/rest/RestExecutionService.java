@@ -29,7 +29,7 @@ public final class RestExecutionService {
                     .build();
 
             HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(req.effectiveUrl()))
+                    .uri(URI.create(req.requestUri()))
                     .timeout(Duration.ofMillis(req.getReadTimeoutMs()));
 
             // Body / method
@@ -60,6 +60,13 @@ public final class RestExecutionService {
                     builder.header("Authorization", "Basic " + token);
                 }
                 case BEARER -> builder.header("Authorization", "Bearer " + req.getAuthToken());
+                case API_KEY -> {
+                    // QUERY placement is folded into requestUri(); only HEADER is applied here.
+                    if (req.getApiKeyLocation() == RestRequest.ApiKeyLocation.HEADER
+                            && !req.getApiKeyName().isBlank()) {
+                        safeHeader(builder, req.getApiKeyName(), req.getApiKeyValue());
+                    }
+                }
                 case NONE -> { /* no auth header */ }
             }
 

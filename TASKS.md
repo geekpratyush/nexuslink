@@ -184,7 +184,7 @@
 - [-] `AuthTab` — auth type selector; sub-panels per type:
   - [x] Basic Auth
   - [x] Bearer Token (manual)
-  - [ ] API Key (header/query/cookie placement)
+  - [x] API Key (header / query placement) — applied in `RestExecutionService`; 4/4 `RestRequestTest` pass _(cookie placement TODO)_
   - [ ] OAuth 2.0 — all 5 flows with token auto-refresh
   - [ ] Digest, NTLM, AWS SigV4, HMAC, Custom Script
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO

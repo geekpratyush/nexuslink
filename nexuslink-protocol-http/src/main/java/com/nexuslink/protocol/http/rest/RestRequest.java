@@ -20,12 +20,17 @@ public final class RestRequest {
     private BodyType bodyType = BodyType.NONE;
     private String body = "";
 
-    // Auth (first cut: NONE, BASIC, BEARER — more in TASKS.md)
-    public enum AuthType { NONE, BASIC, BEARER }
+    // Auth
+    public enum AuthType { NONE, BASIC, BEARER, API_KEY }
+    /** Where an API key is sent. */
+    public enum ApiKeyLocation { HEADER, QUERY }
     private AuthType authType = AuthType.NONE;
     private String authUsername = "";
     private String authPassword = "";
     private String authToken = "";
+    private String apiKeyName = "X-API-Key";
+    private String apiKeyValue = "";
+    private ApiKeyLocation apiKeyLocation = ApiKeyLocation.HEADER;
 
     // Settings
     private int connectTimeoutMs = 10_000;
@@ -58,6 +63,15 @@ public final class RestRequest {
 
     public String getAuthToken() { return authToken; }
     public void setAuthToken(String v) { this.authToken = v; }
+
+    public String getApiKeyName() { return apiKeyName; }
+    public void setApiKeyName(String v) { this.apiKeyName = v; }
+
+    public String getApiKeyValue() { return apiKeyValue; }
+    public void setApiKeyValue(String v) { this.apiKeyValue = v; }
+
+    public ApiKeyLocation getApiKeyLocation() { return apiKeyLocation; }
+    public void setApiKeyLocation(ApiKeyLocation v) { this.apiKeyLocation = v; }
 
     public int getConnectTimeoutMs() { return connectTimeoutMs; }
     public void setConnectTimeoutMs(int v) { this.connectTimeoutMs = v; }
@@ -92,6 +106,17 @@ public final class RestRequest {
             sb.append(urlEncode(kv.getKey())).append('=').append(urlEncode(kv.getValue()));
         }
         return sb.toString();
+    }
+
+    /** {@link #effectiveUrl()} plus the API-key query param when API-key auth is in QUERY mode. */
+    public String requestUri() {
+        String base = effectiveUrl();
+        if (authType == AuthType.API_KEY && apiKeyLocation == ApiKeyLocation.QUERY
+                && !apiKeyName.isBlank()) {
+            base += (base.contains("?") ? '&' : '?')
+                    + urlEncode(apiKeyName) + '=' + urlEncode(apiKeyValue);
+        }
+        return base;
     }
 
     private static String urlEncode(String s) {
