@@ -125,6 +125,79 @@ public final class MongoClientView extends BorderPane {
         runBg(task);
     }
 
+    private static final String[] STAGE_OPS = {
+            "$match", "$group", "$project", "$sort", "$limit", "$skip",
+            "$unwind", "$count", "$lookup", "$addFields", "$set", "$facet"
+    };
+
+    /** Visual aggregation pipeline builder: add/remove stages, then run (or load into the editor). */
+    private void openPipelineBuilder() {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Aggregation pipeline builder");
+        d.setHeaderText("Add stages in order. Each runs on the selected collection.");
+        ButtonType runType = new ButtonType("Run", ButtonBar.ButtonData.OK_DONE);
+        ButtonType loadType = new ButtonType("Load into editor", ButtonBar.ButtonData.OTHER);
+        d.getDialogPane().getButtonTypes().addAll(runType, loadType, ButtonType.CANCEL);
+        d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
+
+        java.util.List<StageRow> stages = new java.util.ArrayList<>();
+        VBox stagesBox = new VBox(8);
+        Runnable addStage = () -> {
+            StageRow sr = new StageRow();
+            stages.add(sr);
+            Button remove = new Button("✕");
+            remove.getStyleClass().add("btn-secondary");
+            remove.setOnAction(e -> { stages.remove(sr); stagesBox.getChildren().remove(sr.node); });
+            sr.node = new VBox(4, new HBox(8, sr.op, remove), sr.body);
+            ((HBox) sr.node.getChildren().get(0)).setAlignment(Pos.CENTER_LEFT);
+            stagesBox.getChildren().add(sr.node);
+        };
+        addStage.run();
+        Button addBtn = new Button("+ Add stage");
+        addBtn.getStyleClass().add("btn-secondary");
+        addBtn.setOnAction(e -> addStage.run());
+
+        ScrollPane scroll = new ScrollPane(stagesBox);
+        scroll.setFitToWidth(true);
+        scroll.setPrefSize(560, 380);
+        VBox content = new VBox(8, scroll, addBtn);
+        content.setPadding(new Insets(10, 4, 4, 4));
+        d.getDialogPane().setContent(content);
+
+        java.util.Optional<ButtonType> result = d.showAndWait();
+        if (result.isEmpty() || result.get() == ButtonType.CANCEL) return;
+        String pipeline = buildPipeline(stages);
+        modeCombo.setValue("aggregate");
+        queryEditor.setText(pipeline);
+        if (result.get() == runType) run();
+    }
+
+    private String buildPipeline(java.util.List<StageRow> stages) {
+        StringBuilder sb = new StringBuilder("[\n");
+        for (int i = 0; i < stages.size(); i++) {
+            StageRow s = stages.get(i);
+            String body = s.body.getText().isBlank() ? "{}" : s.body.getText().trim();
+            sb.append("  { \"").append(s.op.getValue()).append("\": ").append(body).append(" }");
+            if (i < stages.size() - 1) sb.append(',');
+            sb.append('\n');
+        }
+        return sb.append(']').toString();
+    }
+
+    /** One pipeline stage in the builder. */
+    private static final class StageRow {
+        final ComboBox<String> op = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(STAGE_OPS));
+        final TextArea body = new TextArea();
+        VBox node;
+        StageRow() {
+            op.setValue("$match");
+            body.getStyleClass().add("code-area");
+            body.setPrefRowCount(3);
+            body.setPromptText("{ } stage body, e.g. { \"status\": \"active\" }");
+        }
+    }
+
     private void exportResults(boolean csv) {
         if (lastDocs.isEmpty()) { statusLabel.setText("Run a find/SQL query first"); return; }
         javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
@@ -264,6 +337,11 @@ public final class MongoClientView extends BorderPane {
         diagramBtn.setTooltip(new Tooltip("Infer a schema diagram from sampled documents"));
         diagramBtn.setOnAction(e -> showDiagram());
 
+        Button pipelineBtn = new Button("Pipeline…");
+        pipelineBtn.getStyleClass().add("btn-secondary");
+        pipelineBtn.setTooltip(new Tooltip("Build an aggregation pipeline stage by stage"));
+        pipelineBtn.setOnAction(e -> openPipelineBuilder());
+
         MenuButton exportBtn = new MenuButton("Export");
         exportBtn.getStyleClass().add("btn-secondary");
         MenuItem exportJson = new MenuItem("Export JSON…");
@@ -286,7 +364,7 @@ public final class MongoClientView extends BorderPane {
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, exportBtn, structureBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, pipelineBtn, exportBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
