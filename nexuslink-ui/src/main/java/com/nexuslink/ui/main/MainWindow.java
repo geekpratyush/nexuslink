@@ -12,6 +12,7 @@ import com.nexuslink.ui.llm.LlmTesterView;
 import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
 import com.nexuslink.ui.rest.RestClientView;
+import com.nexuslink.ui.s3.S3View;
 import com.nexuslink.ui.sql.SqlClientView;
 import com.nexuslink.ui.sse.SseView;
 import com.nexuslink.ui.theme.ThemeManager;
@@ -125,13 +126,15 @@ public final class MainWindow {
         newSql.setOnAction(e -> openSqlTab());
         MenuItem newMongo = new MenuItem("New MongoDB Client", Icons.of("mongo", 14));
         newMongo.setOnAction(e -> openMongoTab());
+        MenuItem newS3 = new MenuItem("New S3 / Object Storage", Icons.of("collection", 14));
+        newS3.setOnAction(e -> openS3Tab());
         MenuItem newMcp = new MenuItem("New MCP Inspector", Icons.of("mcp", 14));
         newMcp.setOnAction(e -> openMcpTab());
         MenuItem newLlm = new MenuItem("New AI Agent / LLM Tester", Icons.of("ai", 14));
         newLlm.setOnAction(e -> openLlmTab());
         MenuItem quit = new MenuItem("Quit");
         quit.setOnAction(e -> javafx.application.Platform.exit());
-        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newMcp, newLlm, new SeparatorMenuItem(), quit);
+        file.getItems().addAll(newRest, newWs, newSse, newGql, newSql, newMongo, newS3, newMcp, newLlm, new SeparatorMenuItem(), quit);
 
         Menu ai = new Menu("AI", Icons.of("ai", 14));
         MenuItem mcpItem = new MenuItem("MCP Inspector", Icons.of("mcp", 14));
@@ -202,10 +205,11 @@ public final class MainWindow {
         Button gqlBtn = sidebarButton("GraphQL", "rest", this::openGraphQLTab);
         Button sqlBtn = sidebarButton("SQL Client", "sql", this::openSqlTab);
         Button mongoBtn = sidebarButton("MongoDB Client", "mongo", this::openMongoTab);
+        Button s3Btn = sidebarButton("S3 / Object Storage", "collection", this::openS3Tab);
         Button mcpBtn = sidebarButton("MCP Inspector", "mcp", this::openMcpTab);
         Button llmBtn = sidebarButton("AI Agent / LLM", "ai", this::openLlmTab);
 
-        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, mcpBtn, llmBtn);
+        VBox buttons = new VBox(6, addBtn, wsBtn, sseBtn, gqlBtn, sqlBtn, mongoBtn, s3Btn, mcpBtn, llmBtn);
         VBox.setMargin(buttons, new Insets(8));
 
         VBox sidebar = new VBox(title, connectionsPanel, buttons);
@@ -312,6 +316,13 @@ public final class MainWindow {
         return view;
     }
 
+    private S3View openS3Tab() {
+        S3View view = new S3View();
+        view.setLogger(this::log);
+        addTab("S3 " + (++newTabCounter), view);
+        return view;
+    }
+
     private SqlClientView openSqlTab() {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
@@ -360,6 +371,7 @@ public final class MainWindow {
             case GRAPHQL -> openGraphQLTab().prefill(d.target);
             case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
+            case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));
             case MCP -> openMcpTab().prefill(d.target, d.properties.get("transport"));
             case LLM -> openLlmTab();
             default -> {
@@ -372,7 +384,7 @@ public final class MainWindow {
 
     /** authProps keys whose values are secrets and must be stored in the vault, not plaintext. */
     private static final java.util.List<String> SECRET_KEYS =
-            java.util.List.of("password", "token", "apiKeyValue", "clientSecret");
+            java.util.List.of("password", "token", "apiKeyValue", "clientSecret", "secretKey");
 
     /** Saves a connection, moving any plaintext secrets into the encrypted vault first. */
     private void saveConnection(ConnectionProfile p) {

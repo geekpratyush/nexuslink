@@ -339,10 +339,11 @@
 - [ ] Integrated into dual-pane browser
 
 ### 7.3 Object Storage
-- [ ] `S3Service` — AWS SDK v2, multipart upload, presigned URLs, versioning
+- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play.** _Upload / presigned URLs / versioning TODO._
+- [x] `S3Explorer` + `S3View` — bucket → object tree with size/modified/etag details (reuses `ResourceExplorerView`); wired into the shell (new `nexuslink-protocol-s3` module, S3 sample opens prefilled)
 - [ ] `AzureBlobService` — Azure SDK, SAS tokens, tiering
 - [ ] `GcsService` — Google Cloud Storage client, signed URLs
-- [ ] Shared bucket/container browser view
+- [-] Shared bucket/container browser view — S3 done; Azure/GCS share the same explorer pattern
 
 ---
 
@@ -510,6 +511,16 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 12 — New protocols: SSE, GraphQL, S3 object storage.**
+  - **SSE client** (`SseService` + `SseView`) over the JDK HTTP client — live-verified (162 events
+    from the Wikimedia firehose).
+  - **GraphQL client** (`GraphQLService` + `GraphQLView`) — query/variables/introspection;
+    live-verified vs. countries.trevorblades.com.
+  - **S3 / object-storage** — new `nexuslink-protocol-s3` module (AWS SDK v2, URL-connection client,
+    path-style, S3-compatible). `S3Service` + `S3Explorer` (bucket→object tree) + `S3View`;
+    `secretKey` added to the vaulted secret keys. **Live-verified: 647 buckets from MinIO Play.**
+  - All three wired into the shell (menu/sidebar/samples). Full `mvn install` + `mvn test` clean;
+    clean boot with the AWS SDK on the classpath.
 - 2026-06-24: **Session 11 — Markdown/Mermaid help, ER diagrams, richer connections.**
   - **OAuth 2.0 client-credentials** for REST (`OAuth2TokenClient` with token caching/refresh).
   - **Save/open REST connections** with vault-backed auth (Basic/Bearer/API-key/OAuth2); generalized
