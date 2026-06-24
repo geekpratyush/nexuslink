@@ -22,6 +22,7 @@
         <module>nexuslink-protocol-mongo</module>
         <module>nexuslink-protocol-s3</module>
         <module>nexuslink-protocol-kafka</module>
+        <module>nexuslink-protocol-redis</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -87,6 +88,7 @@
         <!-- MongoDB (own module, Apache-2.0) + Testcontainers for live tests -->
         <mongodb.version>5.1.4</mongodb.version>
         <aws.sdk.version>2.27.21</aws.sdk.version>
+        <lettuce.version>6.3.2.RELEASE</lettuce.version>
         <testcontainers.version>1.20.4</testcontainers.version>
 
         <!-- Testing -->
@@ -146,6 +148,18 @@
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-kafka</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-redis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Redis client -->
+            <dependency>
+                <groupId>io.lettuce</groupId>
+                <artifactId>lettuce-core</artifactId>
+                <version>${lettuce.version}</version>
             </dependency>
 
             <!-- AWS SDK v2 — S3 (object storage), lightweight URL-connection HTTP client -->

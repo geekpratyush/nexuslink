@@ -103,7 +103,15 @@ public final class ResourceExplorerView extends BorderPane {
     private void showDetails(ResourceNode node) {
         details.getItems().clear();
         if (node == null) return;
+        // Show any static details immediately, then fetch live details (default returns the same).
         details.getItems().addAll(node.details().entrySet());
+        if (explorer != null) {
+            runBg(() -> explorer.details(node), live -> {
+                if (live != null && !live.equals(node.details())) {
+                    details.getItems().setAll(live.entrySet());
+                }
+            });
+        }
     }
 
     @SuppressWarnings("unchecked")

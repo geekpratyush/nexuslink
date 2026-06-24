@@ -388,9 +388,10 @@
 - [x] Per-driver license-ack flag surfaced in the UI for Oracle/DB2
 
 ### 8.2 Redis Client (separate driver — not JDBC)
-- [ ] `RedisService` — Lettuce client (Cluster + Sentinel). Bundle: Lettuce is Apache-2.0, ~moderate.
-- [ ] All data type explorers: String/Hash/List/Set/ZSet/Stream/Geo
-- [ ] Command console with auto-complete
+- [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. _Cluster + Sentinel TODO. Needs a live server for E2E test._
+- [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
+- [-] Command console — `RedisService.execute()` supports ~20 common commands; _auto-complete TODO_
+- [x] `RedisExplorer` + `RedisView` (key browser with lazy value-on-select + console); wired into the shell
 - [ ] Pub/Sub subscriber panel
 
 ### 8.3 MongoDB Client (separate driver — not JDBC)
@@ -510,6 +511,15 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-24: **Session 14 — Redis client + explorer lazy-details.**
+  - New `nexuslink-protocol-redis` module (Lettuce): `RedisService` (connect, SCAN keys, typed value
+    read for string/hash/list/set/zset/stream, ~20-command console runner) + `RedisExplorer`.
+  - `RedisView`: `redis://` URI bar, key browser (value-on-select) + command console; wired into shell.
+  - **Explorer enhancement:** `ResourceExplorerView` now fetches `explorer.details(node)` lazily in the
+    background on selection (default still returns static details) — powers Redis value-on-select and is
+    reusable by other explorers.
+  - Full `mvn install` + `mvn test` clean; boots clean with Lettuce on the classpath. _Needs a live
+    Redis for E2E test._
 - 2026-06-24: **Session 13 — Kafka client (first cut).**
   - New `nexuslink-protocol-kafka` module: `KafkaService` (Admin topic discovery, lazy producer,
     background-poll consumer; bootstrap + security map for PLAINTEXT/SSL/SASL) + `KafkaExplorer`
