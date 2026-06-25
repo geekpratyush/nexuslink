@@ -25,6 +25,7 @@ public final class HttpMcpTransport implements McpTransport {
     private final Map<String, String> extraHeaders;
     private final HttpClient http;
     private volatile String sessionId;
+    private volatile String protocolVersion;
 
     public HttpMcpTransport(String url, Map<String, String> extraHeaders) {
         this.endpoint = URI.create(url);
@@ -38,6 +39,11 @@ public final class HttpMcpTransport implements McpTransport {
     }
 
     @Override
+    public void setProtocolVersion(String version) {
+        this.protocolVersion = version;
+    }
+
+    @Override
     public JsonNode sendRequest(ObjectNode request) {
         try {
             HttpRequest.Builder b = HttpRequest.newBuilder(endpoint)
@@ -47,6 +53,7 @@ public final class HttpMcpTransport implements McpTransport {
                     .POST(HttpRequest.BodyPublishers.ofString(request.toString(), StandardCharsets.UTF_8));
             extraHeaders.forEach(b::header);
             if (sessionId != null) b.header("Mcp-Session-Id", sessionId);
+            if (protocolVersion != null) b.header("MCP-Protocol-Version", protocolVersion);
 
             HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
             resp.headers().firstValue("Mcp-Session-Id").ifPresent(s -> this.sessionId = s);
@@ -75,6 +82,7 @@ public final class HttpMcpTransport implements McpTransport {
                     .POST(HttpRequest.BodyPublishers.ofString(notification.toString(), StandardCharsets.UTF_8));
             extraHeaders.forEach(b::header);
             if (sessionId != null) b.header("Mcp-Session-Id", sessionId);
+            if (protocolVersion != null) b.header("MCP-Protocol-Version", protocolVersion);
             http.send(b.build(), HttpResponse.BodyHandlers.discarding());
         } catch (Exception e) {
             throw new McpException("HTTP notification error: " + e.getMessage(), e);

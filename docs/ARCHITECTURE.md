@@ -11,38 +11,51 @@ depends on the UI except the app.
 
 ```
 nexuslink-parent (pom)
-├── nexuslink-plugin-api      — ProtocolConnector SPI, ConnectionConfig, descriptors
+├── nexuslink-plugin-api      — ProtocolConnector + ResourceExplorer SPI, ConnectionConfig
 ├── nexuslink-core            — EventBus, CacheRegistry (Caffeine), AppContext (DI),
-│                               HistoryStore (SQLite + FTS5)
-├── nexuslink-security        — CredentialVault (AES-256-GCM), VaultStore
-├── nexuslink-protocol-http   — RestExecutionService, WebSocketService
+│                               HistoryStore (SQLite + FTS5), ConnectionStore, ThemeManager
+├── nexuslink-security        — CredentialVault (AES-256-GCM), VaultStore, VaultSession
+├── nexuslink-protocol-http   — RestExecutionService, WebSocketService, SseService, GraphQLService
 ├── nexuslink-protocol-ai     — MCP client (JSON-RPC), AnthropicService (LLM)
-├── nexuslink-protocol-db     — JdbcService (universal SQL client)
-├── nexuslink-ui              — MainWindow shell, HelpDialog, protocol views
+├── nexuslink-protocol-db     — JdbcService + JdbcDriverRegistry (universal SQL client)
+├── nexuslink-protocol-mongo  — MongoService (find/SQL/aggregate/CRUD/schema)
+├── nexuslink-protocol-redis  — RedisService (Lettuce)
+├── nexuslink-protocol-kafka  — KafkaService (admin/producer/consumer)
+├── nexuslink-protocol-grpc   — GrpcService (reflection-based, unary)
+├── nexuslink-protocol-sftp   — SftpService (Apache MINA SSHD)
+├── nexuslink-protocol-ftp    — FtpService (Apache Commons Net)
+├── nexuslink-protocol-s3     — S3Service (AWS SDK v2, S3-compatible)
+├── nexuslink-protocol-azure  — AzureBlobService (Azure SDK)
+├── nexuslink-protocol-gcs    — GcsService (Google Cloud Storage)
+├── nexuslink-ui              — MainWindow shell, HelpDialog, protocol views, theming
 └── nexuslink-app             — NexusLinkLauncher (JavaFX Application)
 ```
 
-Empty/planned protocol modules (messaging, file, enterprise) are commented out of the
-parent `<modules>` list until they have source — re-enable each as it is implemented.
+Reserved/empty protocol modules (`protocol-messaging`, `protocol-file`,
+`protocol-enterprise`) exist as placeholders for JMS/MQTT/RabbitMQ/IBM-MQ/Solace — they are
+not yet implemented and carry no source.
 
 ## Layering
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ PRESENTATION (nexuslink-ui, nexuslink-app)                  │
-│   MainWindow · RestClientView · McpInspectorView ·          │
-│   LlmTesterView · WebSocketView · SqlClientView · HelpDialog │
+│   MainWindow · Rest/WebSocket/Sse/GraphQL/Grpc/Sql/Mongo/   │
+│   Redis/Kafka/Sftp/Ftp/S3/AzureBlob/Gcs/McpInspector/Llm    │
+│   Views · ResourceExplorerView · HelpDialog · DiagramView   │
 ├─────────────────────────────────────────────────────────────┤
 │ SERVICE (nexuslink-protocol-*)                              │
-│   RestExecutionService · WebSocketService · McpClient ·     │
-│   AnthropicService · JdbcService                            │
+│   RestExecutionService · WebSocketService · SseService ·   │
+│   GraphQLService · GrpcService · McpClient · AnthropicSvc · │
+│   JdbcService · MongoService · RedisService · KafkaService ·│
+│   SftpService · FtpService · S3/AzureBlob/GcsService        │
 ├─────────────────────────────────────────────────────────────┤
 │ CORE (nexuslink-core, nexuslink-security)                  │
 │   EventBus · CacheRegistry · AppContext · HistoryStore ·   │
-│   CredentialVault                                           │
+│   ConnectionStore · ThemeManager · CredentialVault         │
 ├─────────────────────────────────────────────────────────────┤
 │ SPI (nexuslink-plugin-api)                                  │
-│   ProtocolConnector · ConnectionConfig · PluginDescriptor   │
+│   ProtocolConnector · ResourceExplorer · ConnectionConfig  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,7 +84,10 @@ caches searches, and maps UI component IDs → help anchors so `F1` is context-s
 | Data | Store | Location |
 |------|-------|----------|
 | Request history | SQLite + FTS5 | `~/.nexuslink/history.db` |
-| Credentials | AES-256-GCM JSON | vault file (when wired into UI) |
+| Credentials | AES-256-GCM JSON | `~/.nexuslink/vault.json` (master-password unlock, 5-min auto-lock) |
+| Saved connections | JSON (secrets as vault refs) | `~/.nexuslink/connections.json` |
+| On-demand JDBC drivers | downloaded jars | `~/.nexuslink/drivers/` |
+| Preferences (theme, protocol visibility) | Java Preferences API | platform store |
 | Caches | Caffeine (in-memory) | process memory |
 
 ## Protocol Service Contracts
@@ -80,9 +96,20 @@ Each protocol exposes a small, UI-agnostic service:
 
 - **REST** — `RestExecutionService.execute(RestRequest) → RestResponse` (JDK `java.net.http`, HTTP/2)
 - **WebSocket** — `WebSocketService` (JDK `java.net.http.WebSocket`), listener-based
+- **SSE** — `SseService` streams `text/event-stream` with a per-event callback
+- **GraphQL** — `GraphQLService` (HTTP POST `{query, variables}` + introspection)
+- **gRPC** — `GrpcService` (managed channel, server reflection, unary `DynamicMessage` ↔ JSON)
 - **MCP** — `McpClient` over a `McpTransport` (HTTP or stdio); JSON-RPC 2.0
 - **LLM** — `AnthropicService.complete(model, system, user) → Result` (Anthropic Java SDK)
-- **JDBC** — `JdbcService` (HikariCP-free first cut via DriverManager); `connect`, `query`, `schema`
+- **JDBC** — `JdbcService` (DriverManager + `JdbcDriverRegistry`); `connect`, `query`, `schema`
+- **MongoDB** — `MongoService` (find/SQL/aggregate/explain/CRUD, schema inference)
+- **Redis** — `RedisService` (Lettuce; SCAN, typed value read, command runner)
+- **Kafka** — `KafkaService` (Admin discovery, producer, background-poll consumer)
+- **File transfer** — `SftpService` / `FtpService` (list dir, read file)
+- **Object storage** — `S3Service` / `AzureBlobService` / `GcsService` (list buckets/objects)
+
+Many of these implement the **`ResourceExplorer`** SPI so their object trees render through
+one shared `ResourceExplorerView` (lazy children + on-select details).
 
 New protocols follow the same shape: a headless, testable service + a `*View` that drives
 it on a `Task` and renders results.
@@ -91,9 +118,13 @@ it on a `Task` and renders results.
 
 Services are designed to be testable without a UI or external infrastructure where
 possible: the vault (pure crypto), the history store (embedded SQLite), the MCP client
-(in-memory mock transport), and the JDBC client (in-memory SQLite) all have unit tests.
-Protocols that require live infrastructure (Kafka, MQTT, real MCP servers, live LLM calls)
-are validated against their service contracts and exercised manually.
+(in-memory mock transport), the REST request/auth logic, the JDBC client + driver registry
+(in-memory SQLite), and the MongoDB SQL translator all have unit tests. The MongoDB
+integration tests use Testcontainers and are gated behind `-DrunMongoIT=true`, so the
+default build stays green without Docker. Protocols that require live infrastructure (Kafka,
+real MCP servers, live LLM calls) are validated against their service contracts and
+exercised manually; several (REST/SSE/GraphQL/gRPC/SFTP/FTP/S3) were confirmed against real
+public endpoints — see the Progress Log in `TASKS.md`.
 
 ## Adding a Protocol — Checklist
 

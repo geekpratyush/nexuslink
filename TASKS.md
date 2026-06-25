@@ -87,15 +87,21 @@
 - [x] **Wire vault into saved connections** — SQL passwords & credentialed Mongo URIs are stored as vault refs (`passwordRef`/`targetRef`), never plaintext in `connections.json`; resolved on open. _REST AuthTab vaulting still TODO._
 
 ### 1.2 Certificate Manager
-- [ ] `CertificateStore` — JKS/PKCS12 storage, AES-256 master key
-- [ ] `CertificateParser` — X.509 field extraction (subject, issuer, SAN, key usage, extensions)
-- [ ] `CertificateGenerator` — self-signed RSA/ECDSA with configurable validity + SAN
-- [ ] `CertificateImporter` — PEM/DER/PKCS12/JKS drag-and-drop
-- [ ] `CertificateExporter` — PEM/DER/PKCS12 with optional password
+- [x] `CertificateStore` — JKS/**PKCS12** keystore storage (load/save/list/import/export/delete,
+      key + trusted entries, get key/chain), password-protected (`nexuslink-security/cert`)
+- [x] `CertificateParser` — X.509 field extraction (subject, issuer, serial, validity, SAN,
+      key algo+size, sig algo, CA flag, SHA-256 fingerprint) via the JDK `CertificateFactory`;
+      `CertificateInfo` carries a VALID/EXPIRING_SOON/EXPIRED/NOT_YET_VALID status
+- [x] `CertificateGenerator` — self-signed **RSA (2048/4096) / ECDSA (P-256/P-384)** with
+      configurable validity + SAN (DNS/IP), BouncyCastle; PEM export of cert or key
+- [-] `CertificateImporter` — PEM/DER **file import** done (`CertificateManagerView`); _PKCS12/JKS bundle import + drag-and-drop TODO_
+- [-] `CertificateExporter` — **PEM export** done; _DER/PKCS12-with-password TODO_
 - [ ] `ExpirationWatchdog` — background thread, fires events at 30/7/1 day
-- [ ] `CertificateManagerView.fxml` — list + detail panel + import wizard
-- [ ] Certificate list with status icons (valid=green, warning=amber, expired=red)
-- [ ] Unit tests: parse real certs, generate + verify chain
+- [x] `CertificateManagerView` — list + detail panel + generate/import/export/delete +
+      save/open keystore; wired into **Tools ▸ Certificate Manager…** (programmatic, not FXML)
+- [x] Certificate list with status icons (valid=green, warning=amber, expired=red)
+- [x] Unit tests: generate (RSA+EC) → parse round-trip, status window, PEM round-trip,
+      keystore persist/reload of key + trusted entries (**5/5 pass**, `CertificateManagerTest`)
 
 ### 1.3 Connection Profile Manager
 - [x] `ConnectionProfile` model — name, protocol, target, username, `AuthMethod` + auth/property maps, sample flag (`nexuslink-core/connection`)
@@ -279,10 +285,14 @@
 - [ ] Replay from log cache
 
 ### 5.4 MQTT
-- [ ] `MqttService` — Eclipse Paho, v3.1.1 + v5.0
-- [ ] `MqttView.fxml` — broker URL, client ID, QoS selector, topic subscribe/publish
+- [x] `MqttService` — Eclipse Paho **v3.1.1** (`nexuslink-protocol-mqtt`): connect
+      (tcp/ssl/ws, optional user/pass + LWT, auto-reconnect), subscribe/unsubscribe (QoS 0/1/2),
+      publish (QoS + retained), streaming listener. **Verified live vs. broker.hivemq.com**
+      (subscribe → publish → received the message back at QoS 1). _v5.0 TODO._
+- [x] `MqttView` — broker URL, client ID, auth, QoS selector, topic subscribe/publish, live
+      message log; wired into the shell (File menu + sidebar + HiveMQ public sample)
 - [ ] v5 properties: user properties, message expiry, content type, correlation data
-- [ ] Message history with timestamp, QoS, retained flag
+- [-] Message history — live in-session log (timestamp, QoS, retained flag); _persistent history TODO_
 
 ### 5.5 RabbitMQ
 - [ ] `RabbitMqService` — AMQP 0.9.1 client + Management REST API
@@ -510,6 +520,63 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-25: **Session 24 — Certificate Manager (Phase 1.2, the second unstarted Phase-1 foundation).**
+  - New `cert` package in `nexuslink-security` (BouncyCastle added to the module; both bcprov +
+    bcpkix were already in `dependencyManagement`):
+    - `CertificateInfo` — UI snapshot (subject/issuer/serial/validity/SANs/key+sig algo/CA flag/
+      SHA-256) with a VALID / EXPIRING_SOON / EXPIRED / NOT_YET_VALID status (30-day window).
+    - `CertificateParser` — X.509 decode from PEM or DER via the JDK `CertificateFactory`.
+    - `CertificateGenerator` — self-signed RSA (2048/4096) / ECDSA (P-256/P-384) with configurable
+      validity + SAN (DNS/IP), self-signature verified; PEM export of cert or private key.
+    - `CertificateStore` — PKCS12/JKS keystore wrapper (load/save/list/import cert/import key+chain/
+      get key+chain/export/delete), password-protected.
+  - UI: `CertificateManagerView` — colour-coded alias list (green/amber/red by status) + a full
+    X.509 details pane + Generate-Self-Signed dialog + PEM Import/Export + Delete + Save/Open
+    keystore (key entries keep their private keys on save). Wired into **Tools ▸ Certificate
+    Manager…** (opens a "Certificates" tab). Rewrote `certificate-manager.md` help from a roadmap
+    note into real usage docs.
+  - **VERIFIED:** `CertificateManagerTest` **5/5** (generate RSA+EC → parse round-trip, validity-
+    window status, PEM round-trip, keystore persist/reload of key + trusted entries); security
+    module 10/10; `-pl …-security,ui,app -am install` builds clean. Changes uncommitted.
+  - Follow-ups (left `[ ]`/`[-]` in §1.2): `ExpirationWatchdog` (30/7/1-day events), DER/PKCS12-
+    with-password export, PKCS12/JKS bundle import + drag-and-drop, CSR generation.
+- 2026-06-25: **Session 23 — MQTT client (Phase 5 kickoff) + all tracking docs refreshed.**
+  - **Refreshed every tracking markdown** to match reality (they had drifted ~10 sessions
+    behind): `README.md`, `PROJECT_PLAN.md`, `docs/ARCHITECTURE.md`, `RUN.md`, and the
+    `NexusLink_Specification.md` status banner now list the full built protocol set, the ~45%
+    completion figure (112 done · 24 in-progress · 116 not started), and what remains.
+  - **MQTT client** — new `nexuslink-protocol-mqtt` module (Eclipse Paho v3.1.1; the dep was
+    already in `dependencyManagement`). `MqttService`: connect (tcp/ssl/ws, optional
+    user/pass + Last-Will, auto-reconnect, MemoryPersistence), subscribe/unsubscribe (QoS
+    0/1/2), publish (QoS + retained), streaming listener with connection-lost callback.
+  - `MqttView` (UI): broker bar + connect/disconnect toggle, client-id/auth fields, a
+    subscribe row (topic filter + QoS), a publish panel (topic/QoS/retained/payload), and a
+    live timestamped message log. Wired into `MainWindow` (File menu + sidebar + openProfile
+    `MQTT` case), added the `MQTT` protocol to the `ConnectionProfile` enum + icon hint, and
+    added a **HiveMQ public-broker sample** to `SampleCatalog`. Rewrote the `mqtt.md` help
+    topic from a roadmap note into real usage docs.
+  - **VERIFIED LIVE vs. broker.hivemq.com:** headless round-trip through `MqttService` —
+    connected, subscribed to a unique topic at QoS 1, published, and received the exact
+    payload back, then disconnected cleanly. Full `-pl …-mqtt,core,ui,app -am install`
+    builds clean. Changes uncommitted in the working tree.
+- 2026-06-25: **Session 22 — MCP Bearer-token auth (the real remaining MCP gap).**
+  - `HttpMcpTransport` already accepted an `extraHeaders` map but `McpInspectorView` always passed
+    `Map.of()`, so the HTTP transport sent *no* credentials — connecting to auth-gated servers
+    (Render and friends) was impossible.
+  - Added a **Bearer token** `PasswordField` to the connect bar, shown only for the HTTP transport
+    (hidden for stdio). On connect, `authHeaders()` turns it into an `Authorization` header: a bare
+    token becomes `Bearer <token>`; a value that already carries a scheme (`Bearer`/`Basic`/`token`)
+    is sent verbatim, so non-Bearer schemes still work. The header flows through to every request +
+    notification via the existing `extraHeaders` plumbing.
+  - **VERIFIED:** `nexuslink-protocol-ai,nexuslink-ui` compile clean; `McpClientTest` 5/5 green.
+    Live Render verification + vaulting the token (currently field-only) + a full OAuth device/PKCE
+    flow remain as follow-ups. Changes uncommitted in the working tree.
+- 2026-06-25: **Session 21 — MCP Inspector fixes (tested against Render's hosted MCP server).**
+  - **Status dot never went green when connected.** Root cause: `McpInspectorView.connect()` set `status-err` on failure but never reset the style on success, and `.meta-label` (declared later in `theme-base.css`) overrode `.status-ok` at equal specificity. Fix: connecting/ok/err each `setAll(meta-label + status-*)`, and added compound selectors (`.meta-label.status-ok` etc.) so the status colour wins regardless of source order. Added `.status-ok` / `.status-connecting` CSS.
+  - **400 on post-handshake calls.** `HttpMcpTransport` never sent the `MCP-Protocol-Version` header that MCP rev. 2025-03-26+ requires after `initialize`; strict servers (Render) reply 400. Fix: `McpTransport.setProtocolVersion(...)` (default no-op), `HttpMcpTransport` sends the header on every request + notification, `McpClient.connect()` hands it the negotiated version before the initialized notification.
+  - **"prompts not supported" errors.** `loadAll()` called `prompts/list` + `resources/list` unconditionally. Added `McpClient.serverSupports(capability)` and gated discovery on the advertised capabilities; unadvertised ones are skipped with a log line.
+  - **Arguments (JSON) box too short / unreadable.** Long Render tool descriptions crowded it out. Gave `toolArgs` minHeight 140 / 10 rows and `toolResult` minHeight 120 / 8 rows; moved the description into a capped (≤90px) scrollable band (`.desc-scroll`).
+  - **VERIFIED:** `nexuslink-protocol-ai,nexuslink-ui` compile clean; `McpClientTest` 5/5 green. **NOT yet verified live** against Render (user deferred to tomorrow). Changes uncommitted in working tree.
 - 2026-06-25: **Session 20 — MongoDB power features (toward "beyond Studio 3T").**
   - **Schema diagram from Mongo** — `MongoService.inferDiagram` samples documents per collection,
     infers BSON field types, guesses relationships (`<name>_id`/`Id`) → Mermaid; rendered in the
@@ -727,20 +794,52 @@
 
 ---
 
-## NEXT ACTION
+## NEXT ACTION  — RESUME POINT (saved 2026-06-25, after Session 24)
 
-**Foundation + first protocols are done and verified.** Working today: shell, help system,
-vault (core), history, REST, WebSocket, SQL/JDBC, **MongoDB**, MCP Inspector, AI/LLM tester.
-Full `mvn test` BUILD SUCCESS (Mongo integration tests Docker-gated via `-DrunMongoIT=true`).
+**Where the project stands:** ~46% of tracked tasks done (120 `[x]` · 27 `[-]` · 105 `[ ]`).
+Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
+**certificate manager**, history, and protocol clients — REST, WebSocket, SSE, GraphQL, gRPC,
+SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP
+Inspector (Bearer auth), AI/LLM tester. Full `mvn test` is **BUILD SUCCESS** (Mongo IT
+Docker-gated via `-DrunMongoIT=true`).
 
-Highest-value next steps (pick per priority):
-1. **Wire the vault into the UI** — master-password dialog + auto-lock; store REST/LLM secrets as
-   vault refs instead of plaintext in history replay.
-2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
-   (the "agent testing" endgame). Use the Anthropic SDK tool-runner.
-3. **Kafka client** (Phase 4) — needs a broker; highest-demand messaging protocol.
-4. **REST depth** — OAuth 2.0 flows, code generation, more response viewers.
-5. **Theming** — light theme + `ThemeManager` toggle; bundle Inter/JetBrains Mono fonts.
+### ⚠️ FIRST THING ON RESUME — there is uncommitted work in the tree
 
-On resume: read this file, run `mvn -DskipTests install` then `mvn test`, then `cd nexuslink-app && mvn javafx:run`.
+Sessions 21–24 are **all uncommitted** (`git status` to confirm). They build clean and tests
+pass. Review and **commit** them before starting new work. The uncommitted changes are:
+- **Session 21** — MCP Inspector fixes (status dot, MCP-Protocol-Version header, capability gating, layout).
+- **Session 22** — MCP Bearer-token auth (`McpInspectorView` token field → `Authorization` header).
+- **Session 23** — **MQTT client** (new `nexuslink-protocol-mqtt` module + `MqttView`, HiveMQ sample,
+  verified live) + **all tracking docs refreshed** (README/PROJECT_PLAN/ARCHITECTURE/RUN/spec banner).
+- **Session 24** — **Certificate Manager** (new `cert` package in `nexuslink-security`:
+  parser/generator/store + `CertificateManagerView` under Tools ▸ Certificate Manager…; 5/5 tests).
+
+Untracked new dirs: `nexuslink-protocol-mqtt/`, `nexuslink-security/src/{main,test}/.../cert/`,
+`nexuslink-ui/src/main/java/com/nexuslink/ui/{cert,mqtt}/`.
+
+### ⏭ Highest-value next steps (pick per priority)
+
+1. **`ExpirationWatchdog`** (Phase 1.2) — background thread firing 30/7/1-day events for stored
+   certs; surface in the cert list + status bar. Finishes the cert-manager thread cleanly.
+2. **Environment-variable system** (Phase 1.4) — `EnvironmentService` + `${VAR}` interpolation +
+   per-profile dev/staging/prod sets + secret masking. The last unstarted Phase-1 foundation.
+3. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
+   after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
+4. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
+   (the "agent testing" endgame), via the Anthropic SDK tool-runner.
+5. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
+   (cookies, waterfall timeline, test assertions).
+
+### How to resume
+
+```bash
+cd /home/pratyush/software/nexuslink
+git status                       # review the uncommitted Sessions 21–24, then commit
+mvn -DskipTests install          # build all modules
+mvn test                         # full suite (Mongo IT skipped without -DrunMongoIT=true)
+cd nexuslink-app && mvn javafx:run   # launch the desktop app (needs a graphical display)
+```
+
+Then read this file top-to-bottom, scan the PROGRESS LOG (Sessions 24 → 1) for context, and
+continue from the first `[ ]` in the active phase or the priority list above.
 

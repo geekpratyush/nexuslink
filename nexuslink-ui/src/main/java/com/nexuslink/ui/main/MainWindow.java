@@ -7,6 +7,7 @@ import com.nexuslink.core.history.HistoryStore;
 import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.ftp.FtpView;
+import com.nexuslink.ui.cert.CertificateManagerView;
 import com.nexuslink.ui.gcs.GcsView;
 import com.nexuslink.ui.graphql.GraphQLView;
 import com.nexuslink.ui.grpc.GrpcView;
@@ -16,6 +17,7 @@ import com.nexuslink.ui.kafka.KafkaView;
 import com.nexuslink.ui.llm.LlmTesterView;
 import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
+import com.nexuslink.ui.mqtt.MqttView;
 import com.nexuslink.ui.redis.RedisView;
 import com.nexuslink.ui.rest.RestClientView;
 import com.nexuslink.ui.s3.S3View;
@@ -153,7 +155,9 @@ public final class MainWindow {
         unlockVault.setOnAction(e -> { if (VaultSession.get().ensureUnlocked(owner())) updateVaultStatus(); });
         MenuItem lockVault = new MenuItem("Lock Vault");
         lockVault.setOnAction(e -> { VaultSession.get().lock(); log("Vault locked."); });
-        tools.getItems().addAll(unlockVault, lockVault);
+        MenuItem certManager = new MenuItem("Certificate Manager…");
+        certManager.setOnAction(e -> openCertManagerTab());
+        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
@@ -329,6 +333,13 @@ public final class MainWindow {
         return view;
     }
 
+    private MqttView openMqttTab() {
+        MqttView view = new MqttView();
+        view.setLogger(this::log);
+        addTab("MQTT " + (++newTabCounter), view);
+        return view;
+    }
+
     private RedisView openRedisTab() {
         RedisView view = new RedisView();
         view.setLogger(this::log);
@@ -394,6 +405,13 @@ public final class MainWindow {
         return view;
     }
 
+    private CertificateManagerView openCertManagerTab() {
+        CertificateManagerView view = new CertificateManagerView();
+        view.setLogger(this::log);
+        addTab("Certificates " + (++newTabCounter), view);
+        return view;
+    }
+
     private void addTab(String title, javafx.scene.Node content) {
         Tab tab = new Tab(title, content);
         tab.setClosable(true);
@@ -415,6 +433,7 @@ public final class MainWindow {
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
             case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));
             case KAFKA -> openKafkaTab().prefill(d.target);
+            case MQTT -> openMqttTab().prefill(d.target, d.username, d.authProps.get("password"));
             case REDIS -> openRedisTab().prefill(d.target);
             case AZURE_BLOB -> openAzureTab().prefill(d.target);
             case GCS -> openGcsTab().prefill(d.target);
@@ -557,6 +576,7 @@ public final class MainWindow {
                 new ProtocolDef("sftp", "SFTP", "New SFTP Browser", "server", this::openSftpTab),
                 new ProtocolDef("ftp", "FTP", "New FTP Browser", "server", this::openFtpTab),
                 new ProtocolDef("kafka", "Kafka", "New Kafka Client", "topic", this::openKafkaTab),
+                new ProtocolDef("mqtt", "MQTT", "New MQTT Client", "topic", this::openMqttTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
                 new ProtocolDef("llm", "AI Agent / LLM", "New AI Agent / LLM Tester", "ai", this::openLlmTab));

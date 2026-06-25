@@ -171,6 +171,16 @@
 .status-4xx { -fx-text-fill: -nl-warn;   -fx-font-weight: bold; }
 .status-5xx { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
 .status-err { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+.status-ok  { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
+.status-connecting { -fx-text-fill: -nl-text-muted; }
+/* Compound selectors so the status colour beats .meta-label regardless of CSS source order. */
+.meta-label.status-err { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+.meta-label.status-ok  { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
+.meta-label.status-connecting { -fx-text-fill: -nl-text-muted; }
+
+/* MCP tool description: scrolls within a fixed band, transparent to match the pane. */
+.desc-scroll, .desc-scroll > .viewport { -fx-background-color: transparent; }
+.desc-scroll { -fx-padding: 0; }
 
 /* ---------- Response / code areas ---------- */
 .code-area {

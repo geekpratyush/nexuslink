@@ -124,6 +124,11 @@ public final class SampleCatalog {
                 .withAuth(AuthMethod.NONE)
                 .withNotes("Local Redis default. Redis client is on the roadmap (TLS/ACL supported).")
                 .asSample().withId("sample-redis-local"));
+        s.add(new ConnectionProfile("HiveMQ — public MQTT broker", MQTT, "tcp://broker.hivemq.com:1883")
+                .withAuth(AuthMethod.NONE)
+                .withNotes("Public test broker (anonymous). Subscribe to a topic, then publish to it from "
+                        + "another client (or this one) to see messages flow. ssl://broker.hivemq.com:8883 for TLS.")
+                .asSample().withId("sample-mqtt-hivemq"));
 
         return s;
     }

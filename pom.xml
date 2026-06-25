@@ -22,6 +22,7 @@
         <module>nexuslink-protocol-mongo</module>
         <module>nexuslink-protocol-s3</module>
         <module>nexuslink-protocol-kafka</module>
+        <module>nexuslink-protocol-mqtt</module>
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
@@ -157,6 +158,11 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-mqtt</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

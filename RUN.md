@@ -1,9 +1,12 @@
 # Running NexusLink (dev)
 
-NexusLink is a JavaFX desktop app. Runnable today (Session 2): the **workspace shell**
-(menu, connection tree, tabs, log panel, status bar), a **working REST client**
-(live HTTP/2 requests with color-coded status, timing, headers/body viewers), and the
-**Help system** (F1). More protocols land in later phases (see `TASKS.md`).
+NexusLink is a JavaFX desktop app. Runnable today: the **workspace shell** (menu, connection
+tree, tabs, log panel, status bar, dark/light theming), the **Help system** (F1), the
+**credential vault** (master-password unlock, auto-lock), and a broad set of protocol
+clients — **REST, WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka, SFTP,
+FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector, and the AI/LLM tester.** Some
+need live infrastructure or credentials for end-to-end use (Kafka needs a broker; Azure/GCS
+need accounts; the LLM tester needs `ANTHROPIC_API_KEY`). See `TASKS.md` for exact status.
 
 ## Prerequisites
 - Java 21 (`java -version` → 21.x)
@@ -36,12 +39,18 @@ java --module-path "$JFX" \
 ```
 
 ## What you'll see
-- The **workspace shell**: menu bar + search, connection tree (left), a "REST 1" tab,
-  collapsible log panel (bottom), status bar.
+- The **workspace shell**: menu bar + global search, connection tree (left) with **Saved**
+  and **Samples (public)** groups, tabbed workspace, collapsible log/history panel (bottom),
+  status bar with a vault 🔒/🔓 toggle.
 - **REST client**: pick a method, type a URL, hit **Send** (or Ctrl+Enter). You get a
   color-coded status, timing (total/TTFB/download), size + HTTP version, and the response
-  body (JSON auto–pretty-printed) and headers. Every call is logged in the bottom panel.
-- Press **F1** (or Help menu) for the 3-pane searchable Help dialog.
+  body (JSON auto–pretty-printed) and headers. Every call is logged + saved to history.
+- **Other protocols** open from the **File** / **AI** menus or the sidebar buttons — each as
+  its own tab (SQL grid, Mongo views, object-storage trees, the MCP Inspector, etc.). The
+  bundled public **samples** open prefilled so you can try a protocol with one click.
+- Toggle **dark/light theme** with **Ctrl+Shift+T**; open **View ▸ Protocols…** to show only
+  the connection types you use.
+- Press **F1** (or Help menu) for the 3-pane searchable, Markdown/Mermaid Help dialog.
 
 ## Smoke-test the REST engine (no GUI)
 ```bash

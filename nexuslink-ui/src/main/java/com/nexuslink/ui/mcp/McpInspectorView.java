@@ -23,6 +23,7 @@ public final class McpInspectorView extends BorderPane {
 
     private final ComboBox<String> transportCombo = new ComboBox<>();
     private final TextField targetField = new TextField();
+    private final PasswordField tokenField = new PasswordField();
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
@@ -72,6 +73,10 @@ public final class McpInspectorView extends BorderPane {
 
         targetField.getStyleClass().add("nl-field");
         HBox.setHgrow(targetField, Priority.ALWAYS);
+
+        tokenField.getStyleClass().add("nl-field");
+        tokenField.setPromptText("Bearer token (optional)");
+        tokenField.setPrefColumnCount(22);
         updatePrompt();
 
         connectBtn.getStyleClass().add("btn-primary");
@@ -81,7 +86,7 @@ public final class McpInspectorView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("plugins"));
 
-        HBox row = new HBox(8, transportCombo, targetField, connectBtn, helpBtn);
+        HBox row = new HBox(8, transportCombo, targetField, tokenField, connectBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -97,6 +102,10 @@ public final class McpInspectorView extends BorderPane {
         targetField.setPromptText(http
                 ? "https://mcp.example.com/mcp"
                 : "npx -y @modelcontextprotocol/server-everything");
+        // A Bearer token only applies to the HTTP transport (stdio servers authenticate
+        // however the subprocess is configured), so hide it for stdio to avoid confusion.
+        tokenField.setManaged(http);
+        tokenField.setVisible(http);
     }
 
     private void connect() {
@@ -104,14 +113,17 @@ public final class McpInspectorView extends BorderPane {
         if (target.isEmpty()) { statusLabel.setText("Enter a server target first"); return; }
 
         connectBtn.setDisable(true);
+        statusLabel.getStyleClass().setAll("meta-label", "status-connecting");
         statusLabel.setText("Connecting…");
         boolean http = transportCombo.getValue().startsWith("HTTP");
-        logger.accept("MCP connect → " + target);
+        java.util.Map<String, String> headers = http ? authHeaders() : java.util.Map.of();
+        logger.accept("MCP connect → " + target
+                + (headers.isEmpty() ? "" : " (with Authorization)"));
 
         Task<McpTypes.ServerInfo> task = new Task<>() {
             @Override protected McpTypes.ServerInfo call() {
                 McpTransport transport = http
-                        ? new HttpMcpTransport(target, java.util.Map.of())
+                        ? new HttpMcpTransport(target, headers)
                         : new StdioMcpTransport(List.of(target.split("\\s+")));
                 client = new McpClient(transport);
                 return client.connect();
@@ -119,6 +131,7 @@ public final class McpInspectorView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             McpTypes.ServerInfo info = task.getValue();
+            statusLabel.getStyleClass().setAll("meta-label", "status-ok");
             statusLabel.setText("Connected: " + info.name() + " v" + info.version()
                     + "  (protocol " + info.protocolVersion() + ")");
             logger.accept("MCP connected: " + info.name() + " v" + info.version());
@@ -126,7 +139,7 @@ public final class McpInspectorView extends BorderPane {
             loadAll();
         });
         task.setOnFailed(e -> {
-            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.getStyleClass().setAll("meta-label", "status-err");
             statusLabel.setText("Connect failed: " + task.getException().getMessage());
             logger.accept("MCP connect FAILED: " + task.getException().getMessage());
             connectBtn.setDisable(false);
@@ -134,10 +147,26 @@ public final class McpInspectorView extends BorderPane {
         runBg(task);
     }
 
+    /**
+     * Builds the {@code Authorization} header from the token field, if filled. A bare token
+     * is wrapped as {@code Bearer <token>}; a value that already names a scheme
+     * (e.g. {@code Bearer …}, {@code Basic …}) is sent verbatim so other schemes still work.
+     */
+    private java.util.Map<String, String> authHeaders() {
+        String token = tokenField.getText() == null ? "" : tokenField.getText().trim();
+        if (token.isEmpty()) return java.util.Map.of();
+        boolean hasScheme = token.matches("(?i)^(bearer|basic|token)\\s.+");
+        return java.util.Map.of("Authorization", hasScheme ? token : "Bearer " + token);
+    }
+
     private void loadAll() {
-        runList(() -> client.listTools(), toolList::getItems);
-        runList(() -> client.listResources(), resourceList::getItems);
-        runList(() -> client.listPrompts(), promptList::getItems);
+        // Only query capabilities the server advertised — calling an unadvertised method
+        // (e.g. prompts/list on a tools-only server like Render) just returns an error.
+        if (client.serverSupports("tools")) runList(() -> client.listTools(), toolList::getItems);
+        if (client.serverSupports("resources")) runList(() -> client.listResources(), resourceList::getItems);
+        else logger.accept("MCP: server does not advertise 'resources' — skipping");
+        if (client.serverSupports("prompts")) runList(() -> client.listPrompts(), promptList::getItems);
+        else logger.accept("MCP: server does not advertise 'prompts' — skipping");
     }
 
     private <T> void runList(java.util.concurrent.Callable<List<T>> supplier,
@@ -172,12 +201,23 @@ public final class McpInspectorView extends BorderPane {
         });
         toolArgs.getStyleClass().add("code-area");
         toolArgs.setPromptText("{ }  — JSON arguments");
+        toolArgs.setPrefRowCount(10);
+        toolArgs.setMinHeight(140);
         toolResult.getStyleClass().add("code-area");
         toolResult.setEditable(false);
+        toolResult.setPrefRowCount(8);
+        toolResult.setMinHeight(120);
 
         Label desc = new Label();
         desc.getStyleClass().add("meta-label");
         desc.setWrapText(true);
+        // A long tool description (Render's are paragraphs) must not crowd out the args box:
+        // cap it and let it scroll within its own fixed band.
+        ScrollPane descScroll = new ScrollPane(desc);
+        descScroll.getStyleClass().add("desc-scroll");
+        descScroll.setFitToWidth(true);
+        descScroll.setMaxHeight(90);
+        descScroll.setPrefHeight(60);
         toolList.getSelectionModel().selectedItemProperty().addListener((o, ov, t) -> {
             if (t != null) {
                 desc.setText(t.description() + paramsHint(t.inputSchema()));
@@ -189,7 +229,7 @@ public final class McpInspectorView extends BorderPane {
         callBtn.getStyleClass().add("btn-primary");
         callBtn.setOnAction(e -> callSelectedTool());
 
-        VBox right = new VBox(8, desc, new Label("Arguments (JSON):"), toolArgs, callBtn,
+        VBox right = new VBox(8, descScroll, new Label("Arguments (JSON):"), toolArgs, callBtn,
                 new Label("Result:"), toolResult);
         right.setPadding(new Insets(8));
         VBox.setVgrow(toolArgs, Priority.ALWAYS);

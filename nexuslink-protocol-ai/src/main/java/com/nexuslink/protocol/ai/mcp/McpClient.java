@@ -50,6 +50,10 @@ public final class McpClient implements AutoCloseable {
                 result.path("protocolVersion").asText(PROTOCOL_VERSION),
                 result.path("capabilities"));
 
+        // Streamable HTTP requires the negotiated version on all later requests; hand it to the
+        // transport before the initialized notification (which is itself a subsequent request).
+        transport.setProtocolVersion(serverInfo.protocolVersion());
+
         // Per spec, follow up with the initialized notification.
         transport.sendNotification(JsonRpc.notification("notifications/initialized", MAPPER.createObjectNode()));
         return serverInfo;
@@ -57,6 +61,16 @@ public final class McpClient implements AutoCloseable {
 
     public McpTypes.ServerInfo serverInfo() {
         return serverInfo;
+    }
+
+    /**
+     * Whether the server advertised a top-level capability (e.g. {@code "tools"},
+     * {@code "resources"}, {@code "prompts"}) during initialize. Calling a method for an
+     * unadvertised capability is what produces "prompts not supported"-style errors, so
+     * callers should gate discovery on this.
+     */
+    public boolean serverSupports(String capability) {
+        return serverInfo != null && serverInfo.capabilities().has(capability);
     }
 
     // ---- Tools ----

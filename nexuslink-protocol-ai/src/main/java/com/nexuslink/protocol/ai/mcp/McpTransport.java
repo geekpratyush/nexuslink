@@ -19,6 +19,14 @@ public interface McpTransport extends AutoCloseable {
     /** Send a JSON-RPC notification (fire-and-forget; no response). */
     void sendNotification(ObjectNode notification) throws McpException;
 
+    /**
+     * Records the protocol version negotiated during {@code initialize}. Streamable HTTP
+     * requires echoing it as the {@code MCP-Protocol-Version} header on every request after
+     * initialization (MCP rev. 2025-03-26+); omitting it makes strict servers reply 400.
+     * No-op for transports that don't need it (e.g. stdio).
+     */
+    default void setProtocolVersion(String version) {}
+
     @Override
     void close();
 

@@ -16,8 +16,13 @@
 > - **`TASKS.md`** — the living, phase-by-phase build tracker and resume point
 > - **`docs/ARCHITECTURE.md`** — module layout and patterns
 >
-> **Working today:** workspace shell, help system, credential vault, request history,
-> REST client, WebSocket client, JDBC SQL client, MCP Inspector, and an AI Agent/LLM tester.
+> **Working today (~45% of the tracked tasks):** workspace shell with dark/light theming,
+> help system, credential vault (master-password + auto-lock), request history, and a broad
+> set of protocol clients — REST, WebSocket, SSE, GraphQL, gRPC, JDBC SQL, MongoDB, Redis,
+> Kafka (first cut), SFTP, FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector
+> (with Bearer auth), and an AI Agent/LLM tester. **Still ahead:** enterprise messaging
+> (MQTT/RabbitMQ/JMS/MQ/Solace/cloud), LDAP/SSH/SNMP, the certificate manager, environment
+> variables, monitoring/metrics/tracing, external secret vaults, and native packaging.
 > Note: the runtime targets **Java 21** (virtual threads), a step up from the 17+ baseline below.
 
 ---
