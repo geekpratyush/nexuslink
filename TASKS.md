@@ -430,9 +430,12 @@
 - [x] Testing: `MongoServiceTest` spins up `mongo:7.0` via Testcontainers, gated behind `-DrunMongoIT=true` so the default build stays green without Docker (4 tests, skipped when the property is unset)
 
 ### 8.4 LDAP / Active Directory
-- [ ] `LdapService` — UnboundID SDK, StartTLS/SSL
-- [ ] Directory tree browser (DIT), entry editor (LDIF view)
-- [ ] Search dialog (custom filter builder + predefined filters)
+- [x] `LdapService` — UnboundID SDK; connect plain/LDAPS (+ optional bind), Root-DSE naming contexts,
+      base/one/sub search with RFC-4515 filter, decoded entries (`nexuslink-protocol-ldap`,
+      **6/6 tests** end-to-end against the bundled in-memory directory server); _StartTLS TODO_
+- [-] `LdapView` — connect bar (host/port/bind/LDAPS), search (base/filter/scope/limit), DN result list +
+      attribute detail; naming contexts pre-fill the base; `${VAR}` in every field. _DIT tree + LDIF editor TODO_
+- [ ] Search dialog (custom filter builder + predefined filters), entry add/modify/delete
 
 ### 8.5 SSH Terminal
 - [ ] `SshTerminalService` — Apache MINA SSHD
@@ -537,6 +540,21 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 31 — LDAP / Active Directory client (Phase 8.4), opens directory services.**
+  - New module **`nexuslink-protocol-ldap`** (reactor now 21 modules): `LdapService` over the UnboundID
+    LDAP SDK — connect plain or **LDAPS** (trust-all, testing tool) with an optional bind DN+password,
+    read the Root-DSE **naming contexts**, and run **base/one/sub** searches with an RFC-4515 filter
+    and size limit, returning DN + decoded attributes. `scopeOf` is a pure helper.
+  - **Tested end-to-end with no external LDAP**: UnboundID bundles an `InMemoryDirectoryServer`, so the
+    suite seeds `dc=example,dc=com` with people and asserts real connect/bind/search behaviour —
+    subtree count, filter narrowing + attribute decode, base-scope single entry, anonymous bind, and
+    not-connected rejection. **6/6 tests.**
+  - **`LdapView`** — connect bar (host/port/bind DN/password/LDAPS toggle that flips 389↔636), search
+    bar (base/filter/scope/limit), DN result list + attribute-detail pane; naming contexts pre-fill the
+    base on connect; `${VAR}` resolved in every field. Wired to **File ▸ New LDAP Browser** + sidebar
+    (the `ldap` help topic already existed).
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 21 modules); `LdapServiceTest` 6/6.
+    Live AD/LDAP browse needs a directory server.
 - 2026-06-26: **Session 30 — `ProfileValidator` (completes Phase 1) + the MCP→Agent tool-calling loop.**
   - **`ProfileValidator`** (`nexuslink-core/connection`) — pure, per-protocol pre-save validation: required
     name; protocol-specific target shape (URL schemes for REST/WS/SSE/GraphQL/MQTT, `jdbc:` for SQL,
@@ -899,15 +917,15 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 30)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 31)
 
-**Where the project stands:** ~49% of tracked tasks done (128 `[x]` · 28 `[-]` · 97 `[ ]`).
+**Where the project stands:** ~49% of tracked tasks done (129 `[x]` · 29 `[-]` · 95 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
 (first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester, and the
-**AI Agent (MCP tool-calling loop)**. Full `mvn test` is **BUILD SUCCESS** across all 20 modules
-(Mongo IT Docker-gated via `-DrunMongoIT=true`).
+**AI Agent (MCP tool-calling loop)**, and **LDAP / Active Directory** (browse + search). Full
+`mvn test` is **BUILD SUCCESS** across all 21 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
 
 ### ✅ Tree state on resume
 
@@ -920,19 +938,17 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **RabbitMQ depth** (Phase 5.5) — Management REST API (queue depths/connections), publisher
-   confirms, manual ack/nack/requeue, message-properties editor, DLX viewer. _Needs a broker for
-   live E2E (CloudAMQP free tier or `docker run rabbitmq:3-management`)._
-2. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/SigV4 auth, more
+1. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/SigV4 auth, more
    response viewers (cookies, waterfall timeline, test assertions).
-3. **LDAP / Active Directory** (Phase 8) — UnboundID SDK has an in-memory directory server, so the
-   client is fully unit-testable offline; opens the directory-services arc.
-4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
-   drag-and-drop, CSR generation.
-5. **Agent depth** — multi-turn chat, human-in-the-loop tool approval, parallel tool calls.
+2. **SNMP browser** (Phase 8.6) — SNMP4J v1/v2c/v3 GET/WALK; the OID/PDU build + table parse are
+   unit-testable offline (a live agent is only needed for E2E).
+3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack/requeue,
+   DLX viewer. _Needs a broker for live E2E._
+4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR.
+5. **LDAP depth** — DIT tree browser, LDIF entry editor (add/modify/delete), filter builder, StartTLS.
 
-_(Done Session 30: `ProfileValidator` (13/13) wired into save; MCP→Agent tool-calling loop —
-`McpAgentRunner` (3/3 on the pure tool-conversion seam) + `AgentView`. Session 29: RabbitMQ first cut.)_
+_(Done Session 31: LDAP / Active Directory — `nexuslink-protocol-ldap` (`LdapService`, 6/6 end-to-end
+tests against the in-memory server) + `LdapView`. Session 30: `ProfileValidator` + MCP→Agent loop.)_
 
 ### How to resume
 

@@ -24,6 +24,7 @@
         <module>nexuslink-protocol-kafka</module>
         <module>nexuslink-protocol-mqtt</module>
         <module>nexuslink-protocol-rabbitmq</module>
+        <module>nexuslink-protocol-ldap</module>
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
@@ -82,6 +83,9 @@
 
         <!-- RabbitMQ (AMQP 0.9.1) -->
         <rabbitmq.version>5.21.0</rabbitmq.version>
+
+        <!-- LDAP / Active Directory (UnboundID SDK; bundles an in-memory directory server for tests) -->
+        <unboundid.version>7.0.1</unboundid.version>
 
         <!-- HikariCP -->
         <hikari.version>5.1.0</hikari.version>
@@ -185,6 +189,19 @@
                 <groupId>com.rabbitmq</groupId>
                 <artifactId>amqp-client</artifactId>
                 <version>${rabbitmq.version}</version>
+            </dependency>
+
+            <!-- LDAP / Active Directory client (UnboundID) -->
+            <dependency>
+                <groupId>com.unboundid</groupId>
+                <artifactId>unboundid-ldapsdk</artifactId>
+                <version>${unboundid.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-ldap</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- Redis client -->

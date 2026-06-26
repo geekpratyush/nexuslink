@@ -59,6 +59,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-kafka      ← Kafka (admin/producer/consumer)
 ├── nexuslink-protocol-mqtt       ← MQTT (Eclipse Paho; connect/subscribe/publish)
 ├── nexuslink-protocol-rabbitmq   ← RabbitMQ (AMQP 0.9.1; declare/publish/consume)
+├── nexuslink-protocol-ldap       ← LDAP / Active Directory (UnboundID; browse + search)
 ├── nexuslink-protocol-redis      ← Redis (Lettuce)
 ├── nexuslink-protocol-azure      ← Azure Blob Storage
 ├── nexuslink-protocol-gcs        ← Google Cloud Storage
@@ -110,6 +111,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **MCP Inspector** | protocol-ai | Full JSON-RPC 2.0 Model Context Protocol client (HTTP/SSE + stdio); optional **Bearer-token auth**. |
 | **AI / LLM tester** | protocol-ai | Anthropic Java SDK, `claude-opus-4-8` default with adaptive thinking. |
 | **AI Agent (MCP tools)** | protocol-ai | `McpAgentRunner` hands an MCP server's tools to Claude and runs the full tool-calling loop (tool_use → execute → tool_result → repeat); `AgentView` streams turns/tool-calls/results live. Pure tool-conversion seam **3/3 tests**. |
+| **LDAP / Active Directory** | protocol-ldap | UnboundID SDK; connect plain/LDAPS + optional bind, naming contexts, base/one/sub search with RFC-4515 filter, decoded entries. **6/6 tests** end-to-end vs. the bundled in-memory directory server. |
 
 Many protocol tab types coexist in the workspace: **REST · WS · SSE · GraphQL · gRPC · SQL ·
 Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
@@ -128,12 +130,12 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (verified live) + **RabbitMQ** (declare/publish/consume, first cut) done; RabbitMQ management REST + JMS/IBM MQ/Solace/cloud pending |
 | **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** browse/read done; local pane + transfer queue + uploads pending |
-| **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC + Mongo (power features) + **Redis** done; LDAP/SSH/SNMP pending |
+| **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC + Mongo (power features) + **Redis** + **LDAP** (browse + search) done; SSH/SNMP pending |
 | **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | ⬜ Not started |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~49% of tracked tasks complete** (128 done · 28 in-progress · 97 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~49% of tracked tasks complete** (129 done · 29 in-progress · 95 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
@@ -155,7 +157,7 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **RabbitMQ first cut** ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
-(Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop**.
+(Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

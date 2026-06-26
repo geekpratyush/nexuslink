@@ -68,7 +68,8 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **MQTT** (Eclipse Paho; connect/subscribe/publish) | 🟡 First cut (verified live vs. HiveMQ public broker) |
 | **RabbitMQ** (AMQP 0.9.1; declare/publish/consume) | 🟡 First cut (needs a broker for E2E) |
 | JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
-| LDAP / Active Directory · SSH terminal · SNMP | ⏳ Not started |
+| **LDAP / Active Directory** (browse + RFC-4515 search) | 🟡 First cut (needs a directory server for E2E) |
+| SSH terminal · SNMP | ⏳ Not started |
 
 **Cross-cutting / polish**
 
@@ -157,6 +158,7 @@ nexuslink-protocol-redis    Redis client
 nexuslink-protocol-kafka    Kafka client
 nexuslink-protocol-mqtt     MQTT client (Eclipse Paho)
 nexuslink-protocol-rabbitmq RabbitMQ client (AMQP 0.9.1; amqp-client)
+nexuslink-protocol-ldap     LDAP / Active Directory client (UnboundID)
 nexuslink-protocol-grpc     gRPC client (reflection-based)
 nexuslink-protocol-sftp     SFTP client (Apache MINA SSHD)
 nexuslink-protocol-ftp      FTP / FTPS client (Apache Commons Net)
