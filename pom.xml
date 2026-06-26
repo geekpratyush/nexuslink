@@ -25,6 +25,7 @@
         <module>nexuslink-protocol-mqtt</module>
         <module>nexuslink-protocol-rabbitmq</module>
         <module>nexuslink-protocol-ldap</module>
+        <module>nexuslink-protocol-snmp</module>
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
@@ -86,6 +87,9 @@
 
         <!-- LDAP / Active Directory (UnboundID SDK; bundles an in-memory directory server for tests) -->
         <unboundid.version>7.0.1</unboundid.version>
+
+        <!-- SNMP (SNMP4J) -->
+        <snmp4j.version>3.8.2</snmp4j.version>
 
         <!-- HikariCP -->
         <hikari.version>5.1.0</hikari.version>
@@ -201,6 +205,19 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-ldap</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- SNMP client (SNMP4J) -->
+            <dependency>
+                <groupId>org.snmp4j</groupId>
+                <artifactId>snmp4j</artifactId>
+                <version>${snmp4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-snmp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

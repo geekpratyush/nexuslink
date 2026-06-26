@@ -446,8 +446,12 @@
 - [ ] Multi-tab sessions, local port forwarding config
 
 ### 8.6 SNMP Browser
-- [ ] `SnmpService` — SNMP4J, v1/v2c/v3
-- [ ] MIB browser, OID walk, trap receiver panel
+- [x] `SnmpService` — SNMP4J community **v1/v2c** GET + WALK (GETNEXT subtree loop w/ end-of-MIB +
+      non-advancing guards), decoded varbinds (OID/type/value) (`nexuslink-protocol-snmp`,
+      **4/4 tests** on the pure version/address/OID/varbind seam); _SNMPv3 USM TODO_
+- [-] `SnmpView` — open v1/v2c session, GET an OID or WALK a subtree into an OID/type/value table;
+      `${VAR}` in host/community/OID. _MIB-name resolution + DIT tree + trap receiver TODO_
+- [ ] Trap/inform receiver panel, MIB compiler / OID-name resolution
 
 ---
 
@@ -543,6 +547,20 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 33 — SNMP browser (Phase 8.6), second directory-services protocol.**
+  - New module **`nexuslink-protocol-snmp`** (reactor now 22 modules): `SnmpService` over SNMP4J —
+    open a community **v1/v2c** UDP session and **GET** an OID or **WALK** a subtree (GETNEXT loop with
+    end-of-MIB / out-of-subtree / non-advancing-agent guards), returning decoded varbinds (OID dotted
+    string, SMI type, value).
+  - **Offline-testable** per the user's steer: the decision logic is factored into pure helpers —
+    `versionOf` (text→SNMP4J constant), `normalizeAddress` (`udp:host/port`), `isValidOid`, and
+    `toVarBind` (decode a `VariableBinding`, constructable without a socket) — and unit-tested **4/4**;
+    live GET/WALK needs a reachable agent.
+  - **`SnmpView`** — open bar (host/port/community/version), an OID field with **GET**/**WALK** buttons,
+    and an OID/type/value results table; `${VAR}` resolved in host/community/OID; client-side OID
+    validation before querying. Wired to **File ▸ New SNMP Browser** + sidebar (the `snmp` help topic
+    already existed).
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 22 modules); `SnmpServiceTest` 4/4.
 - 2026-06-27: **Session 32 — REST OAuth 2.0 Authorization Code + PKCE (REST depth, offline-testable).**
   - New `OAuth2AuthorizationCode` (`nexuslink-protocol-http`): the pure flow pieces — PKCE pair generation,
     `S256` challenge derivation (base64url(sha256), unpadded), authorization-URL construction (preserving
@@ -933,15 +951,16 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 32)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 33)
 
-**Where the project stands:** ~49% of tracked tasks done (129 `[x]` · 29 `[-]` · 95 `[ ]`).
+**Where the project stands:** ~50% of tracked tasks done (130 `[x]` · 30 `[-]` · 93 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
 (first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester, and the
-**AI Agent (MCP tool-calling loop)**, and **LDAP / Active Directory** (browse + search). Full
-`mvn test` is **BUILD SUCCESS** across all 21 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
+**AI Agent (MCP tool-calling loop)**, **LDAP / Active Directory** (browse + search), and an **SNMP
+browser** (v1/v2c GET/WALK). Full `mvn test` is **BUILD SUCCESS** across all 22 modules (Mongo IT
+Docker-gated via `-DrunMongoIT=true`).
 
 ### ✅ Tree state on resume
 
@@ -954,17 +973,16 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **SNMP browser** (Phase 8.6) — SNMP4J v1/v2c/v3 GET/WALK; the OID/PDU build + table parse are
-   unit-testable offline (a live agent is only needed for E2E).
-2. **REST depth (more auth)** — Digest, NTLM, AWS SigV4, HMAC (signing logic is pure/testable);
-   richer response viewers (cookies, waterfall timeline, test assertions).
-3. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
-   generation (all offline-testable round-trips).
-4. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
-5. **LDAP depth** — DIT tree browser, LDIF entry editor (add/modify/delete), filter builder, StartTLS.
+1. **REST depth (more auth)** — Digest, NTLM, AWS SigV4, HMAC (signing logic is pure, testable with
+   published vectors); richer response viewers (cookies, waterfall timeline, test assertions).
+2. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
+   generation (all offline-testable round-trips with the existing BouncyCastle dep).
+3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
+4. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB-name resolution, trap receiver.
+5. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math is unit-testable offline.
 
-_(Done Session 32: REST OAuth 2.0 **authorization-code + PKCE** — `OAuth2AuthorizationCode` (8/8 incl.
-RFC 7636 vector) + interactive `OAuth2AuthCodeDialog`. Session 31: LDAP. Session 30: ProfileValidator + Agent loop.)_
+_(Done Session 33: SNMP browser — `nexuslink-protocol-snmp` (`SnmpService` v1/v2c GET/WALK, 4/4) +
+`SnmpView`. Session 32: OAuth2 auth-code + PKCE. Session 31: LDAP. Session 30: ProfileValidator + Agent loop.)_
 
 ### How to resume
 

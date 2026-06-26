@@ -17,6 +17,7 @@ import com.nexuslink.ui.gcs.GcsView;
 import com.nexuslink.ui.graphql.GraphQLView;
 import com.nexuslink.ui.grpc.GrpcView;
 import com.nexuslink.ui.ldap.LdapView;
+import com.nexuslink.ui.snmp.SnmpView;
 import com.nexuslink.ui.help.HelpDialog;
 import com.nexuslink.ui.icons.Icons;
 import com.nexuslink.ui.kafka.KafkaView;
@@ -366,6 +367,13 @@ public final class MainWindow {
         return view;
     }
 
+    private SnmpView openSnmpTab() {
+        SnmpView view = new SnmpView();
+        view.setLogger(this::log);
+        addTab("SNMP " + (++newTabCounter), view);
+        return view;
+    }
+
     private RedisView openRedisTab() {
         RedisView view = new RedisView();
         view.setLogger(this::log);
@@ -630,6 +638,7 @@ public final class MainWindow {
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),
+                new ProtocolDef("snmp", "SNMP Browser", "New SNMP Browser", "server", this::openSnmpTab),
                 new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
                 new ProtocolDef("llm", "AI / LLM Tester", "New AI / LLM Tester", "ai", this::openLlmTab),
                 new ProtocolDef("agent", "AI Agent (MCP tools)", "New AI Agent", "ai", this::openAgentTab));
