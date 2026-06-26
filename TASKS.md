@@ -537,6 +537,25 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 30 — `ProfileValidator` (completes Phase 1) + the MCP→Agent tool-calling loop.**
+  - **`ProfileValidator`** (`nexuslink-core/connection`) — pure, per-protocol pre-save validation: required
+    name; protocol-specific target shape (URL schemes for REST/WS/SSE/GraphQL/MQTT, `jdbc:` for SQL,
+    `mongodb(+srv)://` for Mongo, host:port for gRPC/MQ + Kafka bootstrap, etc.); per-`AuthMethod`
+    required fields (username for BASIC/SASL, token/key for Bearer/API-key/SigV4 accepting either raw
+    or vaulted `*Ref` keys, keystore for mTLS, tokenUrl+clientId for OAuth2, principal for Kerberos,
+    private key for SSH). Wired into `MainWindow.saveConnection`, which now blocks an invalid save
+    with an Alert. **13/13 tests.** This was the last unchecked Phase-1 item → **Phase 1 complete.**
+  - **MCP → Agent tool-calling loop** (the "agent testing" endgame): new `com.nexuslink.protocol.ai.agent.McpAgentRunner`
+    hands an MCP server's tools to Claude via the Anthropic Java SDK and runs the full loop — model
+    emits `tool_use` → runner executes via an injected `ToolExecutor` (wired to `McpClient.callTool`)
+    → feeds `tool_result` blocks back → repeats until the model answers (12-turn cap). Assistant
+    `Message`s are appended whole so thinking + tool_use blocks survive between turns. The pure
+    `toAnthropicTool` seam (MCP JSON-Schema → Anthropic `Tool.InputSchema`) is unit-tested **3/3**
+    without an API key. New **`AgentView`** (Tools/File ▸ New AI Agent) connects an MCP server (HTTP/
+    stdio), shows the tool count, and streams turns/tool-calls/results into a live transcript; `${VAR}`
+    resolved in target/token/system/task. New **AI Agent** help topic. LLM tab relabeled "LLM".
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 20 modules); `ProfileValidatorTest`
+    13/13, `McpAgentRunnerTest` 3/3. Live agent run needs `ANTHROPIC_API_KEY` + an MCP server.
 - 2026-06-26: **Session 29 — RabbitMQ first cut (Phase 5.5), the #1 next-step item.**
   - New module **`nexuslink-protocol-rabbitmq`** (registered in the reactor, 20 modules now): `RabbitMqService`
     over the official `amqp-client` (AMQP 0.9.1) — connect via `amqp://`/`amqps://` URI or bare
@@ -880,38 +899,40 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 29)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 30)
 
-**Where the project stands:** ~48% of tracked tasks done (127 `[x]` · 28 `[-]` · 98 `[ ]`).
+**Where the project stands:** ~49% of tracked tasks done (128 `[x]` · 28 `[-]` · 97 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
-(first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester. Full
-`mvn test` is **BUILD SUCCESS** across all 20 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
+(first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester, and the
+**AI Agent (MCP tool-calling loop)**. Full `mvn test` is **BUILD SUCCESS** across all 20 modules
+(Mongo IT Docker-gated via `-DrunMongoIT=true`).
 
 ### ✅ Tree state on resume
 
-Sessions 21–24 committed in `67bac92`; Session 25 (`ExpirationWatchdog`) in `0be9069`; Session 26
-(env-variable system), S27–28 (`${VAR}` adoption) committed; Session 29 adds the **RabbitMQ** module
-+ view. `git status` should be clean (branch ahead of `origin/main` — push when ready). **Phase 1 is
-functionally complete** — the env-variable system was the last unstarted Phase-1 foundation.
-Remaining Phase-1 items are `[-]` polish (cert DER/PKCS12 export + bundle import + CSR; `ProfileValidator`).
+Sessions 21–24 committed in `67bac92`; S25 (`ExpirationWatchdog`) `0be9069`; S26 (env-variable system),
+S27–28 (`${VAR}` adoption) committed; S29 (`4ed4410`) **RabbitMQ** module+view; S30 adds
+**`ProfileValidator`** + the **MCP→Agent tool-calling loop** (`McpAgentRunner` + `AgentView`).
+`git status` should be clean (branch ahead of `origin/main` — push when ready). **Phase 1 is now
+fully complete** — `ProfileValidator` was the last unchecked Phase-1 item. Remaining Phase-1 polish
+is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
-   (the "agent testing" endgame), via the Anthropic SDK tool-runner.
-2. **RabbitMQ depth** (Phase 5.5) — Management REST API (queue depths/connections), publisher
+1. **RabbitMQ depth** (Phase 5.5) — Management REST API (queue depths/connections), publisher
    confirms, manual ack/nack/requeue, message-properties editor, DLX viewer. _Needs a broker for
    live E2E (CloudAMQP free tier or `docker run rabbitmq:3-management`)._
-3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
-   (cookies, waterfall timeline, test assertions).
+2. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/SigV4 auth, more
+   response viewers (cookies, waterfall timeline, test assertions).
+3. **LDAP / Active Directory** (Phase 8) — UnboundID SDK has an in-memory directory server, so the
+   client is fully unit-testable offline; opens the directory-services arc.
 4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
    drag-and-drop, CSR generation.
-5. **`ProfileValidator`** (Phase 1.3) — per-protocol pre-save validation of connection profiles.
+5. **Agent depth** — multi-turn chat, human-in-the-loop tool approval, parallel tool calls.
 
-_(Done Session 29: RabbitMQ first cut — `nexuslink-protocol-rabbitmq` module + `RabbitMqView`,
-declare/publish/consume, `${VAR}` in every field, 7/7 tests. Session 28: `${VAR}` in every view.)_
+_(Done Session 30: `ProfileValidator` (13/13) wired into save; MCP→Agent tool-calling loop —
+`McpAgentRunner` (3/3 on the pure tool-conversion seam) + `AgentView`. Session 29: RabbitMQ first cut.)_
 
 ### How to resume
 

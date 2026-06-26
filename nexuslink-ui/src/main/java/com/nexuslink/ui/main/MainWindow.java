@@ -7,6 +7,7 @@ import com.nexuslink.core.di.AppContext;
 import com.nexuslink.core.env.EnvironmentService;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
+import com.nexuslink.ui.agent.AgentView;
 import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.env.EnvironmentManagerView;
@@ -418,6 +419,13 @@ public final class MainWindow {
     private LlmTesterView openLlmTab() {
         LlmTesterView view = new LlmTesterView();
         view.setLogger(this::log);
+        addTab("LLM " + (++newTabCounter), view);
+        return view;
+    }
+
+    private AgentView openAgentTab() {
+        AgentView view = new AgentView();
+        view.setLogger(this::log);
         addTab("Agent " + (++newTabCounter), view);
         return view;
     }
@@ -614,7 +622,8 @@ public final class MainWindow {
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
-                new ProtocolDef("llm", "AI Agent / LLM", "New AI Agent / LLM Tester", "ai", this::openLlmTab));
+                new ProtocolDef("llm", "AI / LLM Tester", "New AI / LLM Tester", "ai", this::openLlmTab),
+                new ProtocolDef("agent", "AI Agent (MCP tools)", "New AI Agent", "ai", this::openAgentTab));
     }
 
     /** Rebuilds the File menu + sidebar buttons from the enabled protocols. */

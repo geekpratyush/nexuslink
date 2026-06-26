@@ -63,7 +63,8 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **SFTP / FTP / FTPS** (remote tree browse + read) | ✅ Working (verified live; local pane + transfer queue TODO) |
 | **S3 / Azure Blob / GCS** object storage (bucket→object browser) | 🟡 S3 verified live; Azure/GCS need creds for E2E |
 | **MCP Inspector** (tools/resources/prompts, Bearer-token auth) | ✅ Working (tested; OAuth/PKCE + vaulting TODO) |
-| **AI Agent / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
+| **AI / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
+| **AI Agent** (MCP tool-calling loop — Claude calls an MCP server's tools) | ✅ Working (needs `ANTHROPIC_API_KEY` + an MCP server) |
 | **MQTT** (Eclipse Paho; connect/subscribe/publish) | 🟡 First cut (verified live vs. HiveMQ public broker) |
 | **RabbitMQ** (AMQP 0.9.1; declare/publish/consume) | 🟡 First cut (needs a broker for E2E) |
 | JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
@@ -125,8 +126,11 @@ See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
 - **Object storage** — S3 / Azure Blob / GCS bucket→object browsers behind one shared view.
 - **MCP Inspector** — connect to a Model Context Protocol server (HTTP or stdio), with optional
   **Bearer-token auth**; list and call its **tools**, read **resources**, render **prompts**.
-- **AI Agent / LLM Tester** — send Messages API requests to Claude (default
+- **AI / LLM Tester** — send Messages API requests to Claude (default
   `claude-opus-4-8`, adaptive thinking) and inspect the response and token usage.
+- **AI Agent** — connect an MCP server, hand its tools to Claude, and run the full tool-calling
+  loop (the model plans, calls tools, sees results, and continues); watch every turn, tool call,
+  and result stream into a live transcript.
 - **Vault** — AES-256-GCM credential vault with a master-password dialog and 5-min auto-lock;
   saved-connection secrets are stored as vault refs, never plaintext.
 - **Certificate manager** — generate self-signed RSA/ECDSA certs, import/export PEM/DER, persist

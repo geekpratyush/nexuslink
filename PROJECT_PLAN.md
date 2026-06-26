@@ -109,6 +109,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **S3 / Azure / GCS** | protocol-s3 / -azure / -gcs | Bucket→object browsers behind one shared explorer view. **S3 verified live (MinIO).** |
 | **MCP Inspector** | protocol-ai | Full JSON-RPC 2.0 Model Context Protocol client (HTTP/SSE + stdio); optional **Bearer-token auth**. |
 | **AI / LLM tester** | protocol-ai | Anthropic Java SDK, `claude-opus-4-8` default with adaptive thinking. |
+| **AI Agent (MCP tools)** | protocol-ai | `McpAgentRunner` hands an MCP server's tools to Claude and runs the full tool-calling loop (tool_use → execute → tool_result → repeat); `AgentView` streams turns/tool-calls/results live. Pure tool-conversion seam **3/3 tests**. |
 
 Many protocol tab types coexist in the workspace: **REST · WS · SSE · GraphQL · gRPC · SQL ·
 Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
@@ -120,7 +121,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | Phase | Theme | Status |
 |-------|-------|--------|
 | **0** | Project scaffold (Maven, JPMS, core infra) | ✅ Substantially done |
-| **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ Vault (+UI/auto-lock), history, profiles + store + public samples, **certificate manager (+ expiry watchdog)**, **environment-variable system** done; remaining: `ProfileValidator`, cert export/import polish |
+| **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ **Complete** — vault (+UI/auto-lock), history, profiles + store + public samples + **`ProfileValidator`**, **certificate manager (+ expiry watchdog)**, **environment-variable system**; only cert export/import polish remains as `[-]` |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (+OAuth2 client-creds, code-gen), WS, **SSE** done; REST depth (more auth flows, viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
@@ -132,18 +133,17 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~48% of tracked tasks complete** (127 done · 28 in-progress · 98 not started; see `TASKS.md`). **Phase-1 foundations are complete.**
+**Overall: ~49% of tracked tasks complete** (128 done · 28 in-progress · 97 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
 ## 6. Highest-value next steps
 
-1. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
-   them (the "agent testing" endgame), using the Anthropic SDK tool-runner. _(MCP now supports
-   Bearer-token auth; next: vault the token + an OAuth/PKCE flow.)_
-2. **Enterprise messaging (Phase 5)** — RabbitMQ depth next (management REST API, publisher
+1. **Enterprise messaging (Phase 5)** — RabbitMQ depth next (management REST API, publisher
    confirms, manual ack/nack/requeue, DLX viewer), then JMS / cloud messaging. _(MQTT + RabbitMQ
    first cuts are done.)_
+2. **Directory services (Phase 8)** — LDAP / Active Directory next (UnboundID SDK ships an in-memory
+   directory server, so the client is fully unit-testable offline), then SSH terminal + SNMP.
 3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
    richer response viewers (cookies, waterfall timeline, test assertions).
 4. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
@@ -154,7 +154,8 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
 ✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **RabbitMQ first cut** ·
 ✅ **certificate manager (+ expiry watchdog)** ·
-✅ **environment-variable system (+ `${VAR}` live in every protocol view)**.
+✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
+(Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---
