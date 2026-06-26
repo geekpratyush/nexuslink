@@ -48,14 +48,16 @@ reuses — so adding a protocol is a small, well-defined unit of work.
 ```
 nexuslink-parent (pom)            ← aggregator + dependencyManagement (all versions pinned)
 ├── nexuslink-plugin-api          ← ProtocolConnector SPI, ConnectionConfig, result records
-├── nexuslink-core                ← EventBus, AppContext (DI), Caffeine cache, History store
-├── nexuslink-security            ← CredentialVault (AES-256-GCM), VaultStore
+├── nexuslink-core                ← EventBus, AppContext (DI), Caffeine cache, History store,
+│                                   EnvironmentService (${VAR} / .env / secret masking)
+├── nexuslink-security            ← CredentialVault (AES-256-GCM), VaultStore, certificate manager
 ├── nexuslink-protocol-http       ← REST + WebSocket
 ├── nexuslink-protocol-ai         ← MCP Inspector + Anthropic LLM / agent tester
 ├── nexuslink-protocol-db         ← JDBC SQL client + on-demand driver manager
 ├── nexuslink-protocol-mongo      ← MongoDB client
 ├── nexuslink-protocol-s3         ← S3 / object storage (AWS SDK v2)
 ├── nexuslink-protocol-kafka      ← Kafka (admin/producer/consumer)
+├── nexuslink-protocol-mqtt       ← MQTT (Eclipse Paho; connect/subscribe/publish)
 ├── nexuslink-protocol-redis      ← Redis (Lettuce)
 ├── nexuslink-protocol-azure      ← Azure Blob Storage
 ├── nexuslink-protocol-gcs        ← Google Cloud Storage
@@ -64,7 +66,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-ftp        ← FTP / FTPS (Apache Commons Net)
 ├── nexuslink-ui                  ← shell (MainWindow), all protocol views, Help system
 └── nexuslink-app                 ← JavaFX entry point (the ONLY runnable module)
-    + planned: protocol-messaging, protocol-file, protocol-enterprise
+    + planned: protocol-messaging (RabbitMQ/JMS), protocol-file, protocol-enterprise (IBM MQ/Solace)
 ```
 
 > **Why you start the app from `nexuslink-app`:** the parent POM is a pure aggregator and the
@@ -88,6 +90,8 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Markdown + Mermaid** | ui | `MarkdownView` (WebView) renders GFM Markdown + Mermaid diagrams; powers Help content and DB **ER diagrams**. |
 | **Help system** | ui | 3-pane searchable dialog (Markdown-rendered), live debounced search, context-sensitive `F1`, tips. |
 | **Credential vault** | security + ui | AES-256-GCM + PBKDF2 (200k); master-password dialog, auto-lock, status-bar lock toggle. Saved-connection secrets stored as vault refs (no plaintext). |
+| **Certificate manager** | security + ui | Generate self-signed RSA/ECDSA, import/export PEM/DER, persist to PKCS12/JKS keystore, colour-coded validity + 30/7/1-day **expiry watchdog**. |
+| **Environment variables** | core + ui | Named `${VAR}` environments (dev/staging/prod) + active selection; resolution active env → `.env` → system env; `${VAR:-default}`/nested/escape; secrets masked in UI + scrubbed from logs. |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
 | **REST client** | protocol-http | HTTP/2, params/headers/body/auth tabs, color-coded status, timing, JSON pretty-print. |
 | **WebSocket client** | protocol-http | Connect/disconnect, timestamped message log, send bar. |
@@ -95,6 +99,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **MongoDB client** | protocol-mongo | find/SQL/aggregate/explain/CRUD, inferred schema diagram, Compass-style JSON/Table/Schema views, JSON/CSV export, query history. |
 | **Redis client** | protocol-redis | Lettuce; key browser with typed value rendering + command console. _(Needs a live server for E2E.)_ |
 | **Kafka client** | protocol-kafka | Admin topic explorer, produce, consume. _(First cut; needs a broker for E2E.)_ |
+| **MQTT client** | protocol-mqtt | Eclipse Paho; connect, subscribe to topic filters, publish. **Verified live (HiveMQ public broker).** _(First cut.)_ |
 | **SSE client** | protocol-http | Live `text/event-stream` log with event-type filter. **Verified live (Wikimedia firehose).** |
 | **GraphQL client** | protocol-http | Query/variables editor + one-click introspection. **Verified live.** |
 | **gRPC client** | protocol-grpc | Reflection-based service/method discovery + unary invoke (JSON ↔ DynamicMessage). **Verified live (grpcb.in).** |
@@ -113,11 +118,11 @@ Mongo · Redis · Kafka · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
 | Phase | Theme | Status |
 |-------|-------|--------|
 | **0** | Project scaffold (Maven, JPMS, core infra) | ✅ Substantially done |
-| **1** | Foundation: vault, cert manager, profiles, env vars, history | 🟡 Vault (+UI/auto-lock), history, **connection profiles + store + public samples** done; cert manager / env vars / profile encryption pending |
+| **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ Vault (+UI/auto-lock), history, profiles + store + public samples, **certificate manager (+ expiry watchdog)**, **environment-variable system** done; remaining: `ProfileValidator`, cert export/import polish |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (+OAuth2 client-creds, code-gen), WS, **SSE** done; REST depth (more auth flows, viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
-| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | ⬜ Not started |
+| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (connect/subscribe/publish, verified live) done; RabbitMQ/JMS/IBM MQ/Solace/cloud pending |
 | **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** browse/read done; local pane + transfer queue + uploads pending |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC + Mongo (power features) + **Redis** done; LDAP/SSH/SNMP pending |
@@ -125,28 +130,31 @@ Mongo · Redis · Kafka · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~45% of tracked tasks complete** (~112 done · ~24 in-progress · ~116 not started; see `TASKS.md`).
+**Overall: ~48% of tracked tasks complete** (125 done · 28 in-progress · 100 not started; see `TASKS.md`). **Phase-1 foundations are complete.**
 
 ---
 
 ## 6. Highest-value next steps
 
-1. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
+1. **`${VAR}` adoption** — thread `EnvironmentService.interpolate(...)` through each protocol
+   view's send path (REST first: URL/headers/params/body). The engine + active environment are
+   already live via `AppContext.resolve(EnvironmentService.class)`.
+2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
    them (the "agent testing" endgame), using the Anthropic SDK tool-runner. _(MCP now supports
    Bearer-token auth; next: vault the token + an OAuth/PKCE flow.)_
-2. **Enterprise messaging (Phase 5)** — MQTT (Eclipse Paho) is the highest-demand unstarted
-   protocol; then RabbitMQ / JMS / cloud messaging.
-3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
+3. **Enterprise messaging (Phase 5)** — RabbitMQ next (AMQP 0.9.1 + management REST), then
+   JMS / cloud messaging. _(MQTT first cut is done.)_
+4. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
    richer response viewers (cookies, waterfall timeline, test assertions).
-4. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
+5. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
    Kerberos, SASL/SCRAM, mTLS), and store secrets as vault refs.
-5. **Certificate manager + environment variables** — the two unstarted Phase-1 foundations.
 6. **Kafka depth** — schema registry, consumer-lag monitor, metrics (the first cut exists).
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
-✅ dark/light theming · ✅ MCP Bearer auth. _(Remaining theming: bundle Inter / JetBrains Mono
-fonts; system theme auto-detect.)_
+✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **certificate manager
+(+ expiry watchdog)** · ✅ **environment-variable system**. _(Remaining theming: bundle Inter /
+JetBrains Mono fonts; system theme auto-detect.)_
 
 ---
 
@@ -178,4 +186,4 @@ _Full rationale for each lives in the Decisions Log of [`TASKS.md`](./TASKS.md).
 
 ---
 
-_Author: Pratyush Ranjan Mishra · Last updated: 2026-06-25 · maintained alongside `TASKS.md` (the living build log)._
+_Author: Pratyush Ranjan Mishra · Last updated: 2026-06-26 · maintained alongside `TASKS.md` (the living build log)._

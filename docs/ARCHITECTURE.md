@@ -13,14 +13,17 @@ depends on the UI except the app.
 nexuslink-parent (pom)
 ├── nexuslink-plugin-api      — ProtocolConnector + ResourceExplorer SPI, ConnectionConfig
 ├── nexuslink-core            — EventBus, CacheRegistry (Caffeine), AppContext (DI),
-│                               HistoryStore (SQLite + FTS5), ConnectionStore, ThemeManager
-├── nexuslink-security        — CredentialVault (AES-256-GCM), VaultStore, VaultSession
+│                               HistoryStore (SQLite + FTS5), ConnectionStore, ThemeManager,
+│                               EnvironmentService (${VAR} / .env / VariableInterpolator / masking)
+├── nexuslink-security        — CredentialVault (AES-256-GCM), VaultStore, VaultSession,
+│                               certificate manager (CertificateStore/Parser/Generator, ExpirationWatchdog)
 ├── nexuslink-protocol-http   — RestExecutionService, WebSocketService, SseService, GraphQLService
 ├── nexuslink-protocol-ai     — MCP client (JSON-RPC), AnthropicService (LLM)
 ├── nexuslink-protocol-db     — JdbcService + JdbcDriverRegistry (universal SQL client)
 ├── nexuslink-protocol-mongo  — MongoService (find/SQL/aggregate/CRUD/schema)
 ├── nexuslink-protocol-redis  — RedisService (Lettuce)
 ├── nexuslink-protocol-kafka  — KafkaService (admin/producer/consumer)
+├── nexuslink-protocol-mqtt   — MqttService (Eclipse Paho; connect/subscribe/publish)
 ├── nexuslink-protocol-grpc   — GrpcService (reflection-based, unary)
 ├── nexuslink-protocol-sftp   — SftpService (Apache MINA SSHD)
 ├── nexuslink-protocol-ftp    — FtpService (Apache Commons Net)
@@ -32,8 +35,9 @@ nexuslink-parent (pom)
 ```
 
 Reserved/empty protocol modules (`protocol-messaging`, `protocol-file`,
-`protocol-enterprise`) exist as placeholders for JMS/MQTT/RabbitMQ/IBM-MQ/Solace — they are
-not yet implemented and carry no source.
+`protocol-enterprise`) exist as placeholders for RabbitMQ/JMS/IBM-MQ/Solace — they are
+not yet implemented and carry no source. (MQTT now has its own implemented module,
+`protocol-mqtt`.)
 
 ## Layering
 
@@ -41,18 +45,20 @@ not yet implemented and carry no source.
 ┌─────────────────────────────────────────────────────────────┐
 │ PRESENTATION (nexuslink-ui, nexuslink-app)                  │
 │   MainWindow · Rest/WebSocket/Sse/GraphQL/Grpc/Sql/Mongo/   │
-│   Redis/Kafka/Sftp/Ftp/S3/AzureBlob/Gcs/McpInspector/Llm    │
-│   Views · ResourceExplorerView · HelpDialog · DiagramView   │
+│   Redis/Kafka/Mqtt/Sftp/Ftp/S3/AzureBlob/Gcs/McpInspector/  │
+│   Llm/CertificateManager/EnvironmentManager Views ·         │
+│   ResourceExplorerView · HelpDialog · DiagramView           │
 ├─────────────────────────────────────────────────────────────┤
 │ SERVICE (nexuslink-protocol-*)                              │
 │   RestExecutionService · WebSocketService · SseService ·   │
 │   GraphQLService · GrpcService · McpClient · AnthropicSvc · │
 │   JdbcService · MongoService · RedisService · KafkaService ·│
-│   SftpService · FtpService · S3/AzureBlob/GcsService        │
+│   MqttService · SftpService · FtpService · S3/Azure/GcsSvc  │
 ├─────────────────────────────────────────────────────────────┤
 │ CORE (nexuslink-core, nexuslink-security)                  │
 │   EventBus · CacheRegistry · AppContext · HistoryStore ·   │
-│   ConnectionStore · ThemeManager · CredentialVault         │
+│   ConnectionStore · ThemeManager · EnvironmentService ·    │
+│   CredentialVault · CertificateStore · ExpirationWatchdog  │
 ├─────────────────────────────────────────────────────────────┤
 │ SPI (nexuslink-plugin-api)                                  │
 │   ProtocolConnector · ResourceExplorer · ConnectionConfig  │
@@ -86,6 +92,7 @@ caches searches, and maps UI component IDs → help anchors so `F1` is context-s
 | Request history | SQLite + FTS5 | `~/.nexuslink/history.db` |
 | Credentials | AES-256-GCM JSON | `~/.nexuslink/vault.json` (master-password unlock, 5-min auto-lock) |
 | Saved connections | JSON (secrets as vault refs) | `~/.nexuslink/connections.json` |
+| Environments (`${VAR}` sets + active id) | JSON | `~/.nexuslink/environments.json` (+ optional `~/.nexuslink/.env`) |
 | On-demand JDBC drivers | downloaded jars | `~/.nexuslink/drivers/` |
 | Preferences (theme, protocol visibility) | Java Preferences API | platform store |
 | Caches | Caffeine (in-memory) | process memory |
@@ -105,6 +112,7 @@ Each protocol exposes a small, UI-agnostic service:
 - **MongoDB** — `MongoService` (find/SQL/aggregate/explain/CRUD, schema inference)
 - **Redis** — `RedisService` (Lettuce; SCAN, typed value read, command runner)
 - **Kafka** — `KafkaService` (Admin discovery, producer, background-poll consumer)
+- **MQTT** — `MqttService` (Eclipse Paho; connect, subscribe to topic filters, publish)
 - **File transfer** — `SftpService` / `FtpService` (list dir, read file)
 - **Object storage** — `S3Service` / `AzureBlobService` / `GcsService` (list buckets/objects)
 
@@ -117,14 +125,16 @@ it on a `Task` and renders results.
 ## Testing Strategy
 
 Services are designed to be testable without a UI or external infrastructure where
-possible: the vault (pure crypto), the history store (embedded SQLite), the MCP client
-(in-memory mock transport), the REST request/auth logic, the JDBC client + driver registry
-(in-memory SQLite), and the MongoDB SQL translator all have unit tests. The MongoDB
-integration tests use Testcontainers and are gated behind `-DrunMongoIT=true`, so the
-default build stays green without Docker. Protocols that require live infrastructure (Kafka,
-real MCP servers, live LLM calls) are validated against their service contracts and
-exercised manually; several (REST/SSE/GraphQL/gRPC/SFTP/FTP/S3) were confirmed against real
-public endpoints — see the Progress Log in `TASKS.md`.
+possible: the vault (pure crypto), the certificate manager + `ExpirationWatchdog`
+(clock-injectable), the environment-variable system (`VariableInterpolator` / `EnvironmentService`
+/ `SecretMaskingFilter`), the history store (embedded SQLite), the MCP client (in-memory mock
+transport), the REST request/auth logic, the JDBC client + driver registry (in-memory SQLite),
+and the MongoDB SQL translator all have unit tests. The MongoDB integration tests use
+Testcontainers and are gated behind `-DrunMongoIT=true`, so the default build stays green without
+Docker. Protocols that require live infrastructure (Kafka, real MCP servers, live LLM calls) are
+validated against their service contracts and exercised manually; several
+(REST/SSE/GraphQL/gRPC/SFTP/FTP/S3/MQTT) were confirmed against real public endpoints — see the
+Progress Log in `TASKS.md`.
 
 ## Adding a Protocol — Checklist
 

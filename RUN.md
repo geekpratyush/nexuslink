@@ -2,11 +2,13 @@
 
 NexusLink is a JavaFX desktop app. Runnable today: the **workspace shell** (menu, connection
 tree, tabs, log panel, status bar, dark/light theming), the **Help system** (F1), the
-**credential vault** (master-password unlock, auto-lock), and a broad set of protocol
-clients — **REST, WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka, SFTP,
-FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector, and the AI/LLM tester.** Some
-need live infrastructure or credentials for end-to-end use (Kafka needs a broker; Azure/GCS
-need accounts; the LLM tester needs `ANTHROPIC_API_KEY`). See `TASKS.md` for exact status.
+**credential vault** (master-password unlock, auto-lock), the **certificate manager**
+(Tools ▸ Certificate Manager…), the **environment-variable manager** (Tools ▸ Environments…),
+and a broad set of protocol clients — **REST, WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB,
+Redis, Kafka, MQTT, SFTP, FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector, and the
+AI/LLM tester.** Some need live infrastructure or credentials for end-to-end use (Kafka needs a
+broker; Azure/GCS need accounts; the LLM tester needs `ANTHROPIC_API_KEY`). See `TASKS.md` for
+exact status.
 
 ## Prerequisites
 - Java 21 (`java -version` → 21.x)

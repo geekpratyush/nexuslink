@@ -16,14 +16,16 @@
 > - **`TASKS.md`** — the living, phase-by-phase build tracker and resume point
 > - **`docs/ARCHITECTURE.md`** — module layout and patterns
 >
-> **Working today (~45% of the tracked tasks):** workspace shell with dark/light theming,
-> help system, credential vault (master-password + auto-lock), request history, and a broad
-> set of protocol clients — REST, WebSocket, SSE, GraphQL, gRPC, JDBC SQL, MongoDB, Redis,
-> Kafka (first cut), SFTP, FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector
-> (with Bearer auth), and an AI Agent/LLM tester. **Still ahead:** enterprise messaging
-> (MQTT/RabbitMQ/JMS/MQ/Solace/cloud), LDAP/SSH/SNMP, the certificate manager, environment
-> variables, monitoring/metrics/tracing, external secret vaults, and native packaging.
-> Note: the runtime targets **Java 21** (virtual threads), a step up from the 17+ baseline below.
+> **Working today (~48% of the tracked tasks; Phase-1 foundations complete):** workspace shell
+> with dark/light theming, help system, credential vault (master-password + auto-lock),
+> certificate manager (generate/import/export + 30/7/1-day expiry watchdog), environment-variable
+> system (`${VAR}` envs + `.env` + secret masking), request history, and a broad set of protocol
+> clients — REST, WebSocket, SSE, GraphQL, gRPC, JDBC SQL, MongoDB, Redis, Kafka (first cut),
+> MQTT (first cut), SFTP, FTP/FTPS, S3/Azure/GCS object storage, the MCP Inspector (with Bearer
+> auth), and an AI Agent/LLM tester. **Still ahead:** remaining enterprise messaging
+> (RabbitMQ/JMS/MQ/Solace/cloud), LDAP/SSH/SNMP, monitoring/metrics/tracing, external secret
+> vaults, and native packaging. Note: the runtime targets **Java 21** (virtual threads), a step
+> up from the 17+ baseline below.
 
 ---
 
