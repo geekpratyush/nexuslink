@@ -113,7 +113,8 @@
 - [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide; _folders, tags, color dots, drag-to-reorder TODO_
 - [x] **Bundled public sample catalog** (`SampleCatalog`) — deletable/hideable public test endpoints (REST/WS/SQL/Mongo/MCP/LLM + SFTP/Kafka placeholders)
 - [ ] `ProfileEditorDialog` — generic fields + protocol-specific section (pluggable)
-- [ ] `ProfileValidator` — per-protocol pre-save validation
+- [x] `ProfileValidator` — per-protocol pre-save validation (name, target shape per protocol, auth-method
+      required fields incl. raw-or-vaulted secret refs); blocks `saveConnection` with an Alert; **13/13 tests**
 
 ### 1.4 Environment Variable System
 - [x] `EnvironmentService` — named environments (dev/staging/prod) + active selection, persisted to

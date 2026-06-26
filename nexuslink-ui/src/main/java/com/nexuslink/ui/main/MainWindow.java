@@ -1,6 +1,7 @@
 package com.nexuslink.ui.main;
 
 import com.nexuslink.core.connection.ConnectionProfile;
+import com.nexuslink.core.connection.ProfileValidator;
 import com.nexuslink.core.connection.ConnectionStore;
 import com.nexuslink.core.di.AppContext;
 import com.nexuslink.core.env.EnvironmentService;
@@ -478,6 +479,16 @@ public final class MainWindow {
 
     /** Saves a connection, moving any plaintext secrets into the encrypted vault first. */
     private void saveConnection(ConnectionProfile p) {
+        ProfileValidator.Result check = ProfileValidator.validate(p);
+        if (!check.valid()) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Can't save connection");
+            alert.setHeaderText("'" + p.name + "' has validation problems");
+            alert.setContentText(String.join("\n", check.errors()));
+            alert.showAndWait();
+            log("Save rejected — " + check.summary());
+            return;
+        }
         for (String key : SECRET_KEYS) {
             String value = p.authProps.remove(key);
             if (value != null && !value.isBlank()) {
