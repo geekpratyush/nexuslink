@@ -127,7 +127,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **0** | Project scaffold (Maven, JPMS, core infra) | ✅ Substantially done |
 | **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ **Complete** — vault (+UI/auto-lock), history, profiles + store + public samples + **`ProfileValidator`**, **certificate manager (+ expiry watchdog)**, **environment-variable system**; only cert export/import polish remains as `[-]` |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
-| **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (+OAuth2 **client-creds & authorization-code/PKCE**, code-gen), WS, **SSE** done; REST depth (Digest/NTLM/SigV4, more viewers) pending |
+| **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (auth: Basic/Bearer/API-key/**OAuth2 client-creds+auth-code-PKCE**/**AWS SigV4**/**Digest**, code-gen), WS, **SSE** done; REST depth (NTLM/HMAC, more viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
 | **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (verified live) + **RabbitMQ** (declare/publish/consume, first cut) done; RabbitMQ management REST + JMS/IBM MQ/Solace/cloud pending |
 | **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
@@ -137,7 +137,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~50% of tracked tasks complete** (130 done · 30 in-progress · 93 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~50% of tracked tasks complete** (130 done · 31 in-progress · 92 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
@@ -159,7 +159,8 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **RabbitMQ first cut** ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
-(Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)**.
+(Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
+✅ **REST AWS SigV4 + Digest auth**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

@@ -202,7 +202,10 @@
     + **authorization-code with PKCE** (`OAuth2AuthorizationCode`: S256 challenge per RFC 7636, auth-URL build,
     redirect parse, token exchange; interactive `OAuth2AuthCodeDialog` opens the browser → applies a Bearer token;
     **8/8 tests** incl. the RFC 7636 known-answer vector); _implicit / password / device-code flows TODO_
-  - [ ] Digest, NTLM, AWS SigV4, HMAC, Custom Script
+  - [-] **AWS Signature v4** (`AwsSigV4Signer`, verified vs the `aws-sig-v4-test-suite` get-vanilla
+    known-answer + temp-credential session token; applied in `RestExecutionService`, Auth-tab fields)
+    + **Digest** (`DigestAuthenticator`, RFC 2617/7616 qop=auth/MD5, verified vs the RFC 2617 §3.5
+    known-answer; 401-challenge single-retry in `RestExecutionService`); _NTLM / HMAC / Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
   - [ ] Form-Data table with file picker per row
@@ -547,6 +550,24 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 34 — REST AWS SigV4 + Digest auth (REST depth, offline-testable signers).**
+  - `AwsSigV4Signer` (`nexuslink-protocol-http`): full AWS Signature v4 (canonical request → string-to-sign
+    → date/region/service/`aws4_request` signing-key chain → `Authorization` header), plus `X-Amz-Date`
+    and `X-Amz-Security-Token` for temporary credentials. Verified against the official
+    **`aws-sig-v4-test-suite` "get-vanilla"** known-answer vector (signature
+    `5fa00fa3…fbf31`) + a session-token case. **2/2 tests.**
+  - `DigestAuthenticator` (`nexuslink-protocol-http`): parse a `WWW-Authenticate: Digest` challenge and
+    compute the `Authorization: Digest` response (`qop=auth`, MD5; legacy RFC 2069 fallback). Verified
+    against the canonical **RFC 2617 §3.5** known-answer (`6629fae4…c4ef1`). **4/4 tests.**
+  - Wired into `RestExecutionService`: SigV4 signs and adds headers before send; **Digest** does the
+    challenge-response — first request unauthenticated, then on a 401 Digest challenge compute + retry
+    once. Refactored request building into a reusable `buildRequest(req, digestHeader)` helper.
+  - `RestRequest` gained `AuthType.AWS_SIGV4` + `AuthType.DIGEST` and the AWS fields (region/service/
+    access-key/secret-key/session-token; Digest reuses username/password), threaded through
+    `interpolated()`. `RestClientView` Auth tab shows the matching rows; JSON save persists non-secret
+    AWS fields (secret/session re-entered, like the Basic password).
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 22 modules); http module 21/21 incl.
+    the two new known-answer suites. Live calls need a real AWS endpoint / Digest server.
 - 2026-06-27: **Session 33 — SNMP browser (Phase 8.6), second directory-services protocol.**
   - New module **`nexuslink-protocol-snmp`** (reactor now 22 modules): `SnmpService` over SNMP4J —
     open a community **v1/v2c** UDP session and **GET** an OID or **WALK** a subtree (GETNEXT loop with
@@ -951,9 +972,9 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 33)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 34)
 
-**Where the project stands:** ~50% of tracked tasks done (130 `[x]` · 30 `[-]` · 93 `[ ]`).
+**Where the project stands:** ~50% of tracked tasks done (130 `[x]` · 31 `[-]` · 92 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
@@ -973,16 +994,17 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **REST depth (more auth)** — Digest, NTLM, AWS SigV4, HMAC (signing logic is pure, testable with
-   published vectors); richer response viewers (cookies, waterfall timeline, test assertions).
-2. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
+1. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
    generation (all offline-testable round-trips with the existing BouncyCastle dep).
-3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
-4. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB-name resolution, trap receiver.
-5. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math is unit-testable offline.
+2. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math (P50/P95/P99,
+   throughput) is unit-testable offline.
+3. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
+   (NTLM, HMAC, custom-script).
+4. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
+5. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB names, trap receiver.
 
-_(Done Session 33: SNMP browser — `nexuslink-protocol-snmp` (`SnmpService` v1/v2c GET/WALK, 4/4) +
-`SnmpView`. Session 32: OAuth2 auth-code + PKCE. Session 31: LDAP. Session 30: ProfileValidator + Agent loop.)_
+_(Done Session 34: REST **AWS SigV4** + **Digest** auth — `AwsSigV4Signer` (vs aws-sig-v4-test-suite) +
+`DigestAuthenticator` (vs RFC 2617), wired into the executor + Auth tab. Session 33: SNMP. Session 32: OAuth2 PKCE.)_
 
 ### How to resume
 

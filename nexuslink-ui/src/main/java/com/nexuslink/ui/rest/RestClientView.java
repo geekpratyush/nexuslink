@@ -67,6 +67,11 @@ public final class RestClientView extends BorderPane {
     private final TextField oauthClientId = new TextField();
     private final PasswordField oauthClientSecret = new PasswordField();
     private final TextField oauthScope = new TextField();
+    private final TextField awsRegion = new TextField("us-east-1");
+    private final TextField awsService = new TextField("execute-api");
+    private final TextField awsAccessKey = new TextField();
+    private final PasswordField awsSecretKey = new PasswordField();
+    private final TextField awsSessionToken = new TextField();
     private final TextField connectTimeoutField = new TextField();
     private final TextField readTimeoutField = new TextField();
     private final CheckBox followRedirectsBox = new CheckBox("Follow redirects automatically");
@@ -403,17 +408,39 @@ public final class RestClientView extends BorderPane {
         javafx.scene.layout.VBox grantBox = new javafx.scene.layout.VBox(4, authCodeBtn, grantHint);
         grid.add(grantLbl, 0, 11);       grid.add(grantBox, 1, 11);
 
+        Label regionLbl = new Label("AWS region:");
+        Label serviceLbl = new Label("AWS service:");
+        Label accessKeyLbl = new Label("Access key:");
+        Label secretKeyLbl = new Label("Secret key:");
+        Label sessionTokenLbl = new Label("Session token:");
+        for (Label l : new Label[]{regionLbl, serviceLbl, accessKeyLbl, secretKeyLbl, sessionTokenLbl}) l.getStyleClass().add("meta-label");
+        for (TextField f : new TextField[]{awsRegion, awsService, awsAccessKey, awsSecretKey, awsSessionToken}) {
+            f.getStyleClass().add("nl-field");
+            f.setPrefWidth(280);
+        }
+        awsSessionToken.setPromptText("optional, for temporary credentials");
+        grid.add(regionLbl, 0, 12);       grid.add(awsRegion, 1, 12);
+        grid.add(serviceLbl, 0, 13);      grid.add(awsService, 1, 13);
+        grid.add(accessKeyLbl, 0, 14);    grid.add(awsAccessKey, 1, 14);
+        grid.add(secretKeyLbl, 0, 15);    grid.add(awsSecretKey, 1, 15);
+        grid.add(sessionTokenLbl, 0, 16); grid.add(awsSessionToken, 1, 16);
+
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
+            boolean digest = t == RestRequest.AuthType.DIGEST;
             boolean bearer = t == RestRequest.AuthType.BEARER;
             boolean apiKey = t == RestRequest.AuthType.API_KEY;
             boolean oauth = t == RestRequest.AuthType.OAUTH2;
-            setRowVisible(basic, userLbl, authUser, passLbl, authPass);
+            boolean sigv4 = t == RestRequest.AuthType.AWS_SIGV4;
+            // Basic + Digest both use the username/password fields.
+            setRowVisible(basic || digest, userLbl, authUser, passLbl, authPass);
             setRowVisible(bearer, tokenLbl, authToken);
             setRowVisible(apiKey, keyNameLbl, apiKeyName, keyValueLbl, apiKeyValue, keyInLbl, apiKeyLocation);
             setRowVisible(oauth, tokenUrlLbl, oauthTokenUrl, clientIdLbl, oauthClientId,
                     clientSecretLbl, oauthClientSecret, scopeLbl, oauthScope, grantLbl, grantBox);
+            setRowVisible(sigv4, regionLbl, awsRegion, serviceLbl, awsService, accessKeyLbl, awsAccessKey,
+                    secretKeyLbl, awsSecretKey, sessionTokenLbl, awsSessionToken);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
@@ -570,6 +597,11 @@ public final class RestClientView extends BorderPane {
         request.setOauthClientId(oauthClientId.getText());
         request.setOauthClientSecret(oauthClientSecret.getText());
         request.setOauthScope(oauthScope.getText());
+        request.setAwsRegion(awsRegion.getText());
+        request.setAwsService(awsService.getText());
+        request.setAwsAccessKey(awsAccessKey.getText());
+        request.setAwsSecretKey(awsSecretKey.getText());
+        request.setAwsSessionToken(awsSessionToken.getText());
         request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
         request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
         request.setFollowRedirects(followRedirectsBox.isSelected());
@@ -631,6 +663,10 @@ public final class RestClientView extends BorderPane {
         root.put("oauthTokenUrl", request.getOauthTokenUrl());
         root.put("oauthClientId", request.getOauthClientId());
         root.put("oauthScope", request.getOauthScope());
+        // AWS SigV4: persist non-secret fields only (secret/session keys are re-entered)
+        root.put("awsRegion", request.getAwsRegion());
+        root.put("awsService", request.getAwsService());
+        root.put("awsAccessKey", request.getAwsAccessKey());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         return root.toString();
@@ -666,6 +702,9 @@ public final class RestClientView extends BorderPane {
             oauthTokenUrl.setText(root.path("oauthTokenUrl").asText(""));
             oauthClientId.setText(root.path("oauthClientId").asText(""));
             oauthScope.setText(root.path("oauthScope").asText(""));
+            awsRegion.setText(root.path("awsRegion").asText("us-east-1"));
+            awsService.setText(root.path("awsService").asText("execute-api"));
+            awsAccessKey.setText(root.path("awsAccessKey").asText(""));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
         } catch (Exception e) {

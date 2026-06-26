@@ -51,7 +51,7 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
 | Protocol | Status |
 |----------|--------|
-| **REST** (HTTP/2, Basic/Bearer/API-key/OAuth2-client-creds, timing, viewers, code-gen) | ✅ Working (more auth flows + viewers TODO) |
+| **REST** (HTTP/2, auth: Basic/Bearer/API-key/OAuth2 client-creds + auth-code-PKCE/AWS-SigV4/Digest, timing, viewers, code-gen) | ✅ Working (NTLM/HMAC + more viewers TODO) |
 | **WebSocket** | ✅ Working (text; binary/reconnect TODO) |
 | **SSE** | ✅ Working (verified live) |
 | **GraphQL** (query/variables/introspection) | ✅ Working (subscriptions TODO) |

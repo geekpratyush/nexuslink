@@ -22,7 +22,7 @@ public final class RestRequest {
     private String body = "";
 
     // Auth
-    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2 }
+    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST }
     /** Where an API key is sent. */
     public enum ApiKeyLocation { HEADER, QUERY }
     private AuthType authType = AuthType.NONE;
@@ -37,6 +37,12 @@ public final class RestRequest {
     private String oauthClientId = "";
     private String oauthClientSecret = "";
     private String oauthScope = "";
+    // AWS Signature v4 (Digest reuses authUsername/authPassword)
+    private String awsRegion = "us-east-1";
+    private String awsService = "execute-api";
+    private String awsAccessKey = "";
+    private String awsSecretKey = "";
+    private String awsSessionToken = "";
 
     // Settings
     private int connectTimeoutMs = 10_000;
@@ -91,6 +97,21 @@ public final class RestRequest {
     public String getOauthScope() { return oauthScope; }
     public void setOauthScope(String v) { this.oauthScope = v; }
 
+    public String getAwsRegion() { return awsRegion; }
+    public void setAwsRegion(String v) { this.awsRegion = v; }
+
+    public String getAwsService() { return awsService; }
+    public void setAwsService(String v) { this.awsService = v; }
+
+    public String getAwsAccessKey() { return awsAccessKey; }
+    public void setAwsAccessKey(String v) { this.awsAccessKey = v; }
+
+    public String getAwsSecretKey() { return awsSecretKey; }
+    public void setAwsSecretKey(String v) { this.awsSecretKey = v; }
+
+    public String getAwsSessionToken() { return awsSessionToken; }
+    public void setAwsSessionToken(String v) { this.awsSessionToken = v; }
+
     public int getConnectTimeoutMs() { return connectTimeoutMs; }
     public void setConnectTimeoutMs(int v) { this.connectTimeoutMs = v; }
 
@@ -133,6 +154,11 @@ public final class RestRequest {
         r.oauthClientId = fn.apply(oauthClientId);
         r.oauthClientSecret = fn.apply(oauthClientSecret);
         r.oauthScope = fn.apply(oauthScope);
+        r.awsRegion = fn.apply(awsRegion);
+        r.awsService = fn.apply(awsService);
+        r.awsAccessKey = fn.apply(awsAccessKey);
+        r.awsSecretKey = fn.apply(awsSecretKey);
+        r.awsSessionToken = fn.apply(awsSessionToken);
         r.connectTimeoutMs = connectTimeoutMs;
         r.readTimeoutMs = readTimeoutMs;
         r.followRedirects = followRedirects;
