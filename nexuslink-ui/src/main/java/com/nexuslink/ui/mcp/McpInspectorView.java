@@ -3,6 +3,7 @@ package com.nexuslink.ui.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexuslink.protocol.ai.mcp.*;
+import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -109,7 +110,7 @@ public final class McpInspectorView extends BorderPane {
     }
 
     private void connect() {
-        String target = targetField.getText().trim();
+        String target = Env.resolve(targetField.getText().trim());   // resolve ${VAR} against active environment
         if (target.isEmpty()) { statusLabel.setText("Enter a server target first"); return; }
 
         connectBtn.setDisable(true);
@@ -153,7 +154,7 @@ public final class McpInspectorView extends BorderPane {
      * (e.g. {@code Bearer …}, {@code Basic …}) is sent verbatim so other schemes still work.
      */
     private java.util.Map<String, String> authHeaders() {
-        String token = tokenField.getText() == null ? "" : tokenField.getText().trim();
+        String token = tokenField.getText() == null ? "" : Env.resolve(tokenField.getText().trim());
         if (token.isEmpty()) return java.util.Map.of();
         boolean hasScheme = token.matches("(?i)^(bearer|basic|token)\\s.+");
         return java.util.Map.of("Authorization", hasScheme ? token : "Bearer " + token);
@@ -249,7 +250,7 @@ public final class McpInspectorView extends BorderPane {
         Task<McpTypes.ToolResult> task = new Task<>() {
             @Override protected McpTypes.ToolResult call() throws Exception {
                 ObjectNode args = (ObjectNode) MAPPER.readTree(
-                        toolArgs.getText().isBlank() ? "{}" : toolArgs.getText());
+                        toolArgs.getText().isBlank() ? "{}" : Env.resolve(toolArgs.getText()));
                 return client.callTool(tool.name(), args);
             }
         };
@@ -365,7 +366,7 @@ public final class McpInspectorView extends BorderPane {
             Task<List<McpTypes.Content>> task = new Task<>() {
                 @Override protected List<McpTypes.Content> call() throws Exception {
                     ObjectNode args = (ObjectNode) MAPPER.readTree(
-                            promptArgs.getText().isBlank() ? "{}" : promptArgs.getText());
+                            promptArgs.getText().isBlank() ? "{}" : Env.resolve(promptArgs.getText()));
                     return client.getPrompt(p.name(), args);
                 }
             };

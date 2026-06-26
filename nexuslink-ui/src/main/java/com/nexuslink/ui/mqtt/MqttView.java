@@ -1,6 +1,7 @@
 package com.nexuslink.ui.mqtt;
 
 import com.nexuslink.protocol.mqtt.MqttService;
+import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -156,7 +157,7 @@ public final class MqttView extends BorderPane {
             append("⇆ disconnected");
             return;
         }
-        String broker = brokerField.getText().trim();
+        String broker = Env.resolve(brokerField.getText().trim());   // resolve ${VAR} against active environment
         if (broker.isEmpty()) { statusLabel.setText("Enter a broker URI"); return; }
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
@@ -165,8 +166,9 @@ public final class MqttView extends BorderPane {
 
         Task<Void> task = new Task<>() {
             @Override protected Void call() throws Exception {
-                service.connect(broker, clientIdField.getText().trim(), userField.getText().trim(),
-                        passField.getText(), true, "", "", 0);
+                service.connect(broker, Env.resolve(clientIdField.getText().trim()),
+                        Env.resolve(userField.getText().trim()), Env.resolve(passField.getText()),
+                        true, "", "", 0);
                 service.setListener(new MqttService.MessageListener() {
                     @Override public void onMessage(MqttService.Incoming m) {
                         Platform.runLater(() -> append("◀ " + m.topic() + "  (q" + m.qos()
@@ -202,7 +204,7 @@ public final class MqttView extends BorderPane {
     }
 
     private void subscribe() {
-        String topic = subTopic.getText().trim();
+        String topic = Env.resolve(subTopic.getText().trim());   // resolve ${VAR} in the topic filter
         if (topic.isEmpty() || !service.isConnected()) return;
         int qos = subQos.getValue();
         runAction(() -> service.subscribe(topic, qos),
@@ -211,7 +213,7 @@ public final class MqttView extends BorderPane {
     }
 
     private void unsubscribe() {
-        String topic = subTopic.getText().trim();
+        String topic = Env.resolve(subTopic.getText().trim());   // resolve ${VAR} in the topic filter
         if (topic.isEmpty() || !service.isConnected()) return;
         runAction(() -> service.unsubscribe(topic),
                 () -> append("⊖ unsubscribed " + topic),
@@ -219,12 +221,12 @@ public final class MqttView extends BorderPane {
     }
 
     private void publish() {
-        String topic = pubTopic.getText().trim();
+        String topic = Env.resolve(pubTopic.getText().trim());   // resolve ${VAR} in topic + payload
         if (topic.isEmpty()) { pubStatus.setText("Enter a topic"); return; }
         if (!service.isConnected()) { pubStatus.setText("Not connected"); return; }
         int qos = pubQos.getValue();
         boolean retained = pubRetained.isSelected();
-        String payload = pubPayload.getText();
+        String payload = Env.resolve(pubPayload.getText());
         pubStatus.getStyleClass().setAll("meta-label");
         pubStatus.setText("Publishing…");
         runAction(() -> service.publish(topic, payload, qos, retained),

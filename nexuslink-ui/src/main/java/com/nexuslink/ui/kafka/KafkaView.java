@@ -3,6 +3,7 @@ package com.nexuslink.ui.kafka;
 import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -179,14 +180,14 @@ public final class KafkaView extends BorderPane {
             String module = mech.startsWith("SCRAM")
                     ? "org.apache.kafka.common.security.scram.ScramLoginModule"
                     : "org.apache.kafka.common.security.plain.PlainLoginModule";
-            props.put("sasl.jaas.config", module + " required username=\"" + saslUser.getText()
-                    + "\" password=\"" + saslPass.getText() + "\";");
+            props.put("sasl.jaas.config", module + " required username=\"" + Env.resolve(saslUser.getText())
+                    + "\" password=\"" + Env.resolve(saslPass.getText()) + "\";");
         }
         return props;
     }
 
     private void connect() {
-        String bootstrap = bootstrapField.getText().trim();
+        String bootstrap = Env.resolve(bootstrapField.getText().trim());   // resolve ${VAR} against active environment
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
@@ -217,13 +218,13 @@ public final class KafkaView extends BorderPane {
     }
 
     private void produce() {
-        String topic = produceTopic.getText().trim();
+        String topic = Env.resolve(produceTopic.getText().trim());   // resolve ${VAR} in topic/key/value
         if (topic.isEmpty()) { produceStatus.setText("Enter a topic"); return; }
         produceStatus.getStyleClass().setAll("meta-label");
         produceStatus.setText("Sending…");
         Task<KafkaService.SendResult> task = new Task<>() {
             @Override protected KafkaService.SendResult call() throws Exception {
-                return service.send(topic, produceKey.getText(), produceValue.getText());
+                return service.send(topic, Env.resolve(produceKey.getText()), Env.resolve(produceValue.getText()));
             }
         };
         task.setOnSucceeded(e -> {
@@ -241,11 +242,11 @@ public final class KafkaView extends BorderPane {
 
     private void toggleConsume() {
         if (consumeToggle.isSelected()) {
-            String topic = consumeTopic.getText().trim();
+            String topic = Env.resolve(consumeTopic.getText().trim());   // resolve ${VAR} in topic/group
             if (topic.isEmpty()) { consumeToggle.setSelected(false); return; }
             consumeToggle.setText("Stop");
             append("⇆ subscribing to " + topic);
-            service.startConsuming(topic, consumeGroup.getText().trim(), fromBeginning.isSelected(),
+            service.startConsuming(topic, Env.resolve(consumeGroup.getText().trim()), fromBeginning.isSelected(),
                     new KafkaService.MessageListener() {
                         @Override public void onMessage(KafkaService.KafkaMessage m) {
                             Platform.runLater(() -> append("◀ p" + m.partition() + "@" + m.offset()

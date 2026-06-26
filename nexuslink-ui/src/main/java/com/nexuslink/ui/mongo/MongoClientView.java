@@ -6,6 +6,7 @@ import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.mongo.MongoExplorer;
 import com.nexuslink.protocol.mongo.MongoQueryResult;
 import com.nexuslink.protocol.mongo.MongoService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -502,7 +503,7 @@ public final class MongoClientView extends BorderPane {
     private void connect() {
         connectBtn.setDisable(true);
         statusLabel.setText("Connecting…");
-        String conn = connField.getText().trim();
+        String conn = Env.resolve(connField.getText().trim());   // resolve ${VAR} against active environment
         logger.accept("Mongo connect → " + conn.replaceAll(":[^:@/]+@", ":***@"));
         Task<List<String>> task = new Task<>() {
             @Override protected List<String> call() { return service.connect(conn); }
@@ -527,7 +528,7 @@ public final class MongoClientView extends BorderPane {
 
     private void run() {
         String mode = modeCombo.getValue();
-        String body = queryEditor.getText().trim();
+        String body = Env.resolve(queryEditor.getText().trim());   // resolve ${VAR} in the query/pipeline
         // SQL mode parses its own collection from the FROM clause; it only needs a database.
         if ("sql".equals(mode)) {
             if (activeDb == null) { resultStatus.setText("Select a database in the tree first"); return; }

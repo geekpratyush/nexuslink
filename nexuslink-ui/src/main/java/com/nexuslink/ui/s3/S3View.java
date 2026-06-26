@@ -2,6 +2,7 @@ package com.nexuslink.ui.s3;
 
 import com.nexuslink.protocol.s3.S3Explorer;
 import com.nexuslink.protocol.s3.S3Service;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -91,7 +92,11 @@ public final class S3View extends BorderPane {
     }
 
     private void connect() {
-        String endpoint = endpointField.getText().trim();
+        // Resolve ${VAR} against the active environment for endpoint + credentials + region.
+        String endpoint = Env.resolve(endpointField.getText().trim());
+        String accessKey = Env.resolve(accessKeyField.getText().trim());
+        String secretKey = Env.resolve(secretKeyField.getText());
+        String region = Env.resolve(regionField.getText().trim());
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
@@ -99,8 +104,7 @@ public final class S3View extends BorderPane {
 
         Task<Integer> task = new Task<>() {
             @Override protected Integer call() {
-                service.connect(endpoint, accessKeyField.getText().trim(), secretKeyField.getText(),
-                        regionField.getText().trim(), pathStyle.isSelected());
+                service.connect(endpoint, accessKey, secretKey, region, pathStyle.isSelected());
                 return service.listBuckets().size();
             }
         };

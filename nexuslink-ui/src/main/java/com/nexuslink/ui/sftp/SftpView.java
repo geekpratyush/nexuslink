@@ -2,6 +2,7 @@ package com.nexuslink.ui.sftp;
 
 import com.nexuslink.protocol.sftp.SftpExplorer;
 import com.nexuslink.protocol.sftp.SftpService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -88,11 +89,15 @@ public final class SftpView extends BorderPane {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
         int port = parsePort();
-        logger.accept("SFTP connect → " + userField.getText() + "@" + hostField.getText() + ":" + port);
+        // Resolve ${VAR} against the active environment for host + credentials.
+        String host = Env.resolve(hostField.getText().trim());
+        String user = Env.resolve(userField.getText().trim());
+        String pass = Env.resolve(passField.getText());
+        logger.accept("SFTP connect → " + user + "@" + host + ":" + port);
 
         Task<Integer> task = new Task<>() {
             @Override protected Integer call() throws Exception {
-                service.connect(hostField.getText().trim(), port, userField.getText().trim(), passField.getText());
+                service.connect(host, port, user, pass);
                 return service.list("/").size();
             }
         };

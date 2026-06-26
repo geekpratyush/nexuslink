@@ -1,6 +1,7 @@
 package com.nexuslink.ui.llm;
 
 import com.nexuslink.protocol.ai.llm.AnthropicService;
+import com.nexuslink.ui.env.Env;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -113,7 +114,7 @@ public final class LlmTesterView extends BorderPane {
     }
 
     private void send() {
-        String msg = userMessage.getText().trim();
+        String msg = Env.resolve(userMessage.getText().trim());   // resolve ${VAR} in the prompt
         if (msg.isEmpty()) { statusLabel.setText("Enter a user message first"); return; }
 
         sendBtn.setDisable(true);
@@ -125,7 +126,7 @@ public final class LlmTesterView extends BorderPane {
 
         Task<AnthropicService.Result> task = new Task<>() {
             @Override protected AnthropicService.Result call() {
-                return service.complete(modelCombo.getValue(), systemPrompt.getText(), msg);
+                return service.complete(modelCombo.getValue(), Env.resolve(systemPrompt.getText()), msg);
             }
         };
         task.setOnSucceeded(e -> { render(task.getValue()); finish(); });

@@ -2,6 +2,7 @@ package com.nexuslink.ui.redis;
 
 import com.nexuslink.protocol.redis.RedisExplorer;
 import com.nexuslink.protocol.redis.RedisService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -98,7 +99,7 @@ public final class RedisView extends BorderPane {
     }
 
     private void connect() {
-        String uri = uriField.getText().trim();
+        String uri = Env.resolve(uriField.getText().trim());   // resolve ${VAR} against active environment
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
@@ -128,7 +129,7 @@ public final class RedisView extends BorderPane {
     }
 
     private void runCommand() {
-        String cmd = commandField.getText().trim();
+        String cmd = Env.resolve(commandField.getText().trim());   // resolve ${VAR} in the command
         if (cmd.isEmpty() || !service.isConnected()) return;
         consoleOut.appendText("> " + cmd + "\n");
         Task<String> task = new Task<>() {

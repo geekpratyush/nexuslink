@@ -2,6 +2,7 @@ package com.nexuslink.ui.ftp;
 
 import com.nexuslink.protocol.ftp.FtpExplorer;
 import com.nexuslink.protocol.ftp.FtpService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -91,12 +92,15 @@ public final class FtpView extends BorderPane {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
         int port = parsePort();
-        logger.accept("FTP connect → " + userField.getText() + "@" + hostField.getText() + ":" + port);
+        // Resolve ${VAR} against the active environment for host + credentials.
+        String host = Env.resolve(hostField.getText().trim());
+        String user = Env.resolve(userField.getText().trim());
+        String pass = Env.resolve(passField.getText());
+        logger.accept("FTP connect → " + user + "@" + host + ":" + port);
 
         Task<Integer> task = new Task<>() {
             @Override protected Integer call() throws Exception {
-                service.connect(hostField.getText().trim(), port, userField.getText().trim(),
-                        passField.getText(), passiveBox.isSelected(), tlsBox.isSelected());
+                service.connect(host, port, user, pass, passiveBox.isSelected(), tlsBox.isSelected());
                 return service.list("/").size();
             }
         };

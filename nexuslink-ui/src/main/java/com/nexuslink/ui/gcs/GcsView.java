@@ -2,6 +2,7 @@ package com.nexuslink.ui.gcs;
 
 import com.nexuslink.protocol.gcs.GcsExplorer;
 import com.nexuslink.protocol.gcs.GcsService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -89,8 +90,9 @@ public final class GcsView extends BorderPane {
     }
 
     private void connect() {
-        String project = projectField.getText().trim();
-        String credPath = credPathField.getText().trim();
+        // Resolve ${VAR} against the active environment for the project id + credentials path.
+        String project = Env.resolve(projectField.getText().trim());
+        String credPath = Env.resolve(credPathField.getText().trim());
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");

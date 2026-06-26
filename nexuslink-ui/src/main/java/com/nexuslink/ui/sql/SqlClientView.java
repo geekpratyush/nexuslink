@@ -9,6 +9,7 @@ import com.nexuslink.protocol.db.JdbcDriverRegistry;
 import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.QueryResult;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -403,11 +404,14 @@ public final class SqlClientView extends BorderPane {
     private void connect() {
         connectBtn.setDisable(true);
         statusLabel.setText("Connecting…");
-        String url = urlField.getText().trim();
+        // Resolve ${VAR} against the active environment for the JDBC URL + credentials.
+        String url = Env.resolve(urlField.getText().trim());
+        String user = Env.resolve(userField.getText());
+        String pass = Env.resolve(passField.getText());
         logger.accept("JDBC connect → " + url);
         Task<String> task = new Task<>() {
             @Override protected String call() throws Exception {
-                service.connect(url, userField.getText(), passField.getText());
+                service.connect(url, user, pass);
                 return service.databaseInfo();
             }
         };
@@ -436,7 +440,7 @@ public final class SqlClientView extends BorderPane {
         String sql = sqlEditor.getText().trim();
         if (sql.isEmpty()) return;
         // Run only the statement at the caret-ish: take the first ;-separated non-empty statement
-        String statement = sql.split(";")[0].trim();
+        String statement = Env.resolve(sql.split(";")[0].trim());   // resolve ${VAR} in the statement
         resultStatus.setText("Running…");
         logger.accept("SQL → " + truncate(statement));
         Task<QueryResult> task = new Task<>() {

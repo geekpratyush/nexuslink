@@ -1,6 +1,7 @@
 package com.nexuslink.ui.grpc;
 
 import com.nexuslink.protocol.grpc.GrpcService;
+import com.nexuslink.ui.env.Env;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -134,10 +135,11 @@ public final class GrpcView extends BorderPane {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
         int port = parsePort();
-        logger.accept("gRPC connect → " + hostField.getText().trim() + ":" + port);
+        String host = Env.resolve(hostField.getText().trim());   // resolve ${VAR} against active environment
+        logger.accept("gRPC connect → " + host + ":" + port);
         Task<List<String>> task = new Task<>() {
             @Override protected List<String> call() throws Exception {
-                service.connect(hostField.getText().trim(), port, tlsBox.isSelected());
+                service.connect(host, port, tlsBox.isSelected());
                 return service.listServices();
             }
         };
@@ -182,7 +184,7 @@ public final class GrpcView extends BorderPane {
         }
         callStatus.getStyleClass().setAll("meta-label");
         callStatus.setText("Invoking…");
-        String json = requestEditor.getText();
+        String json = Env.resolve(requestEditor.getText());   // resolve ${VAR} in the request body
         Task<String> task = new Task<>() {
             @Override protected String call() throws Exception { return service.invokeUnary(svc, method.name(), json); }
         };

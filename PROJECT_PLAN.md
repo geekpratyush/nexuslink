@@ -91,7 +91,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Help system** | ui | 3-pane searchable dialog (Markdown-rendered), live debounced search, context-sensitive `F1`, tips. |
 | **Credential vault** | security + ui | AES-256-GCM + PBKDF2 (200k); master-password dialog, auto-lock, status-bar lock toggle. Saved-connection secrets stored as vault refs (no plaintext). |
 | **Certificate manager** | security + ui | Generate self-signed RSA/ECDSA, import/export PEM/DER, persist to PKCS12/JKS keystore, colour-coded validity + 30/7/1-day **expiry watchdog**. |
-| **Environment variables** | core + ui | Named `${VAR}` environments (dev/staging/prod) + active selection; resolution active env → `.env` → system env; `${VAR:-default}`/nested/escape; secrets masked in UI + scrubbed from logs. |
+| **Environment variables** | core + ui | Named `${VAR}` environments (dev/staging/prod) + active selection; resolution active env → `.env` → system env; `${VAR:-default}`/nested/escape; secrets masked in UI + scrubbed from logs. **Resolved at send/connect time in every protocol view.** |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
 | **REST client** | protocol-http | HTTP/2, params/headers/body/auth tabs, color-coded status, timing, JSON pretty-print. |
 | **WebSocket client** | protocol-http | Connect/disconnect, timestamped message log, send bar. |
@@ -136,25 +136,22 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started
 
 ## 6. Highest-value next steps
 
-1. **Finish `${VAR}` adoption** — REST/WebSocket/SSE/GraphQL resolve `${VAR}` at send time
-   (Session 27, via `RestRequest.interpolated()` + the shared `ui.env.Env` helper); extend the same
-   to the remaining views (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/LLM).
+1. **Enterprise messaging (Phase 5)** — RabbitMQ next (AMQP 0.9.1 + management REST), then
+   JMS / cloud messaging. _(MQTT first cut is done.)_
 2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
    them (the "agent testing" endgame), using the Anthropic SDK tool-runner. _(MCP now supports
    Bearer-token auth; next: vault the token + an OAuth/PKCE flow.)_
-3. **Enterprise messaging (Phase 5)** — RabbitMQ next (AMQP 0.9.1 + management REST), then
-   JMS / cloud messaging. _(MQTT first cut is done.)_
-4. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
+3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
    richer response viewers (cookies, waterfall timeline, test assertions).
-5. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
+4. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
    Kerberos, SASL/SCRAM, mTLS), and store secrets as vault refs.
-6. **Kafka depth** — schema registry, consumer-lag monitor, metrics (the first cut exists).
+5. **Kafka depth** — schema registry, consumer-lag monitor, metrics (the first cut exists).
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
 ✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **certificate manager
-(+ expiry watchdog)** · ✅ **environment-variable system**. _(Remaining theming: bundle Inter /
-JetBrains Mono fonts; system theme auto-detect.)_
+(+ expiry watchdog)** · ✅ **environment-variable system (+ `${VAR}` live in every protocol view)**.
+_(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---
 

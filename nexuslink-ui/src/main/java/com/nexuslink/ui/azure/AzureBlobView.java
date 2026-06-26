@@ -2,6 +2,7 @@ package com.nexuslink.ui.azure;
 
 import com.nexuslink.protocol.azure.AzureBlobExplorer;
 import com.nexuslink.protocol.azure.AzureBlobService;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -67,7 +68,7 @@ public final class AzureBlobView extends BorderPane {
     }
 
     private void connect() {
-        String conn = connStringField.getText().trim();
+        String conn = Env.resolve(connStringField.getText().trim());   // resolve ${VAR} against active environment
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");

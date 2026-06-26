@@ -125,10 +125,11 @@
       secret), New/Delete/Set-Active, reveal-secrets toggle; **Tools ▸ Environments…** (nexuslink-ui)
 - [x] `SecretMaskingFilter` — `looksSecret` name heuristic (auto-flags secrets), `scrub` removes
       secret values from logs/rendered requests (longest-first), `maskValue` for UI fields (core)
-- [-] _Adoption_: `${VAR}` now resolved at send time in **REST** (URL/params/headers/body/auth, via
-      `RestRequest.interpolated()`; secrets scrubbed from the log line), **WebSocket**, **SSE**, and
-      **GraphQL** (endpoint/query/variables) via the shared `ui.env.Env` helper. Remaining views
-      (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/LLM) still read raw fields — follow-up.
+- [x] _Adoption_: `${VAR}` resolved at send/connect time across **every protocol view** — REST
+      (URL/params/headers/body/auth, via `RestRequest.interpolated()`; secrets scrubbed from the log),
+      WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (bootstrap/SASL/topics),
+      MQTT (broker/creds/topics/payload), SFTP, FTP, S3, Azure, GCS, MCP (target/token/tool+prompt
+      args), and the LLM tester (system + user prompt) — all via the shared `ui.env.Env` helper.
 
 ### 1.5 History Store
 - [x] `HistoryStore` — SQLite with FTS5 (full-text search) + LIKE fallback
@@ -532,6 +533,17 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 28 — `${VAR}` adoption completed across every remaining protocol view.**
+  - Extended the shared `com.nexuslink.ui.env.Env` helper to **gRPC** (host + request body), **SQL/JDBC**
+    (URL/user/pass + the executed statement), **MongoDB** (connection string + query/pipeline),
+    **Redis** (URI + console command), **Kafka** (bootstrap, SASL user/pass, produce + consume
+    topics/key/value/group), **MQTT** (broker/clientId/user/pass + subscribe/publish topics + payload),
+    **SFTP** + **FTP** (host + credentials), **S3** (endpoint/keys/region), **Azure** (connection
+    string), **GCS** (project + credentials path), **MCP Inspector** (target, auth token, tool +
+    prompt arguments), and the **LLM tester** (system + user prompt).
+  - Every protocol view now resolves `${VAR}` against the active environment at send/connect time;
+    `${VAR}` is a no-op when no environment is active. Phase-1.4 adoption follow-up is now **done**.
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 19 modules); UI compiles clean.
 - 2026-06-26: **Session 27 — `${VAR}` adoption in the HTTP-family views (applies the Phase-1.4 engine).**
   - `RestRequest.interpolated(UnaryOperator<String>)` — returns a deep copy with every string field
     (URL, query params, headers, body, all auth fields) resolved, **without mutating** the editor's
@@ -851,9 +863,9 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 27)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 28)
 
-**Where the project stands:** ~48% of tracked tasks done (125 `[x]` · 28 `[-]` · 100 `[ ]`).
+**Where the project stands:** ~48% of tracked tasks done (126 `[x]` · 27 `[-]` · 100 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP,
@@ -870,17 +882,17 @@ bundle import + CSR; `ProfileValidator`; threading `${VAR}` through each protoco
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **Finish `${VAR}` adoption** — REST/WebSocket/SSE/GraphQL now resolve at send time (Session 27);
-   extend the same to the remaining views (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/
-   LLM) via the `ui.env.Env` helper, so the env system applies everywhere.
-2. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
+1. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
    after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
-3. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
+2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
    (the "agent testing" endgame), via the Anthropic SDK tool-runner.
-4. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
+3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
    (cookies, waterfall timeline, test assertions).
-5. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
+4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
    drag-and-drop, CSR generation.
+5. **`ProfileValidator`** (Phase 1.3) — per-protocol pre-save validation of connection profiles.
+
+_(Done Session 28: `${VAR}` interpolation now applies in every protocol view.)_
 
 ### How to resume
 
