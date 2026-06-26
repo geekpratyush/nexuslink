@@ -308,9 +308,12 @@
 - [-] Message history — live in-session log (timestamp, QoS, retained flag); _persistent history TODO_
 
 ### 5.5 RabbitMQ
-- [ ] `RabbitMqService` — AMQP 0.9.1 client + Management REST API
-- [ ] Exchange/Queue/Binding browser, publish + consume UI
-- [ ] DLX config viewer
+- [-] `RabbitMqService` — AMQP 0.9.1 client (official `amqp-client`): connect (URI/host[:port] +
+      credentials), declare exchange/queue/binding, publish (persistent), consume w/ auto-ack
+      (`nexuslink-protocol-rabbitmq`, **7/7 tests** on the pure `factoryFor` seam); _Management REST API TODO_
+- [x] `RabbitMqView` — declare exchange/queue/binding, publish to exchange+routing-key, consume a
+      queue into a live message log; `${VAR}` resolved in every field; **File ▸ New RabbitMQ Client**
+- [ ] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
 
 ### 5.6 Cloud Messaging
 - [ ] AWS SQS: send/receive/delete, DLQ, FIFO support
@@ -533,6 +536,19 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 29 — RabbitMQ first cut (Phase 5.5), the #1 next-step item.**
+  - New module **`nexuslink-protocol-rabbitmq`** (registered in the reactor, 20 modules now): `RabbitMqService`
+    over the official `amqp-client` (AMQP 0.9.1) — connect via `amqp://`/`amqps://` URI or bare
+    `host[:port]` + credentials, declare exchange (direct/fanout/topic/headers)/queue/binding, publish
+    persistent messages, and consume a queue with auto-ack into a listener.
+  - The connection-spec build is factored into a **pure `factoryFor` seam** so it is fully unit-tested
+    without a live broker — host/port parsing, AMQP vs AMQPS default ports, URI-embedded credentials
+    winning over explicit args, blank-field defaults, and blank-target rejection (**7/7 tests**).
+  - **`RabbitMqView`** (Messaging) — declare exchange/queue/binding, publish to exchange + routing key,
+    consume a queue into a live timestamped message log; `${VAR}` resolved in **every** field at
+    connect/declare/publish/consume time. Wired into **File ▸ New RabbitMQ Client** + sidebar, with a
+    new **RabbitMQ Client** help topic.
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 20 modules); `RabbitMqServiceTest` 7/7.
 - 2026-06-26: **Session 28 — `${VAR}` adoption completed across every remaining protocol view.**
   - Extended the shared `com.nexuslink.ui.env.Env` helper to **gRPC** (host + request body), **SQL/JDBC**
     (URL/user/pass + the executed statement), **MongoDB** (connection string + query/pipeline),
@@ -863,36 +879,38 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 28)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 29)
 
-**Where the project stands:** ~48% of tracked tasks done (126 `[x]` · 27 `[-]` · 100 `[ ]`).
+**Where the project stands:** ~48% of tracked tasks done (127 `[x]` · 28 `[-]` · 98 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
-WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP,
-FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester. Full `mvn test` is
-**BUILD SUCCESS** (Mongo IT Docker-gated via `-DrunMongoIT=true`).
+WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
+(first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester. Full
+`mvn test` is **BUILD SUCCESS** across all 20 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
 
 ### ✅ Tree state on resume
 
 Sessions 21–24 committed in `67bac92`; Session 25 (`ExpirationWatchdog`) in `0be9069`; Session 26
-(env-variable system) committed too. `git status` should be clean (branch ahead of `origin/main` —
-push when ready). **Phase 1 is now functionally complete** — the env-variable system was the last
-unstarted Phase-1 foundation. Remaining Phase-1 items are `[-]` polish (cert DER/PKCS12 export +
-bundle import + CSR; `ProfileValidator`; threading `${VAR}` through each protocol view's send path).
+(env-variable system), S27–28 (`${VAR}` adoption) committed; Session 29 adds the **RabbitMQ** module
++ view. `git status` should be clean (branch ahead of `origin/main` — push when ready). **Phase 1 is
+functionally complete** — the env-variable system was the last unstarted Phase-1 foundation.
+Remaining Phase-1 items are `[-]` polish (cert DER/PKCS12 export + bundle import + CSR; `ProfileValidator`).
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
-   after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
-2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
+1. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
    (the "agent testing" endgame), via the Anthropic SDK tool-runner.
+2. **RabbitMQ depth** (Phase 5.5) — Management REST API (queue depths/connections), publisher
+   confirms, manual ack/nack/requeue, message-properties editor, DLX viewer. _Needs a broker for
+   live E2E (CloudAMQP free tier or `docker run rabbitmq:3-management`)._
 3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
    (cookies, waterfall timeline, test assertions).
 4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
    drag-and-drop, CSR generation.
 5. **`ProfileValidator`** (Phase 1.3) — per-protocol pre-save validation of connection profiles.
 
-_(Done Session 28: `${VAR}` interpolation now applies in every protocol view.)_
+_(Done Session 29: RabbitMQ first cut — `nexuslink-protocol-rabbitmq` module + `RabbitMqView`,
+declare/publish/consume, `${VAR}` in every field, 7/7 tests. Session 28: `${VAR}` in every view.)_
 
 ### How to resume
 

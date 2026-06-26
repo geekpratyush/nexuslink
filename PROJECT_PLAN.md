@@ -58,6 +58,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-s3         ← S3 / object storage (AWS SDK v2)
 ├── nexuslink-protocol-kafka      ← Kafka (admin/producer/consumer)
 ├── nexuslink-protocol-mqtt       ← MQTT (Eclipse Paho; connect/subscribe/publish)
+├── nexuslink-protocol-rabbitmq   ← RabbitMQ (AMQP 0.9.1; declare/publish/consume)
 ├── nexuslink-protocol-redis      ← Redis (Lettuce)
 ├── nexuslink-protocol-azure      ← Azure Blob Storage
 ├── nexuslink-protocol-gcs        ← Google Cloud Storage
@@ -66,7 +67,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-ftp        ← FTP / FTPS (Apache Commons Net)
 ├── nexuslink-ui                  ← shell (MainWindow), all protocol views, Help system
 └── nexuslink-app                 ← JavaFX entry point (the ONLY runnable module)
-    + planned: protocol-messaging (RabbitMQ/JMS), protocol-file, protocol-enterprise (IBM MQ/Solace)
+    + planned: protocol-messaging (JMS), protocol-file, protocol-enterprise (IBM MQ/Solace)
 ```
 
 > **Why you start the app from `nexuslink-app`:** the parent POM is a pure aggregator and the
@@ -100,6 +101,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Redis client** | protocol-redis | Lettuce; key browser with typed value rendering + command console. _(Needs a live server for E2E.)_ |
 | **Kafka client** | protocol-kafka | Admin topic explorer, produce, consume. _(First cut; needs a broker for E2E.)_ |
 | **MQTT client** | protocol-mqtt | Eclipse Paho; connect, subscribe to topic filters, publish. **Verified live (HiveMQ public broker).** _(First cut.)_ |
+| **RabbitMQ client** | protocol-rabbitmq | Official `amqp-client` (AMQP 0.9.1); declare exchange/queue/binding, publish, consume into a live log; `${VAR}` in every field; pure `factoryFor` seam **7/7 unit tests**. _(First cut; needs a broker for E2E.)_ |
 | **SSE client** | protocol-http | Live `text/event-stream` log with event-type filter. **Verified live (Wikimedia firehose).** |
 | **GraphQL client** | protocol-http | Query/variables editor + one-click introspection. **Verified live.** |
 | **gRPC client** | protocol-grpc | Reflection-based service/method discovery + unary invoke (JSON ↔ DynamicMessage). **Verified live (grpcb.in).** |
@@ -109,7 +111,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **AI / LLM tester** | protocol-ai | Anthropic Java SDK, `claude-opus-4-8` default with adaptive thinking. |
 
 Many protocol tab types coexist in the workspace: **REST · WS · SSE · GraphQL · gRPC · SQL ·
-Mongo · Redis · Kafka · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
+Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
 
 ---
 
@@ -122,7 +124,7 @@ Mongo · Redis · Kafka · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (+OAuth2 client-creds, code-gen), WS, **SSE** done; REST depth (more auth flows, viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
-| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (connect/subscribe/publish, verified live) done; RabbitMQ/JMS/IBM MQ/Solace/cloud pending |
+| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (verified live) + **RabbitMQ** (declare/publish/consume, first cut) done; RabbitMQ management REST + JMS/IBM MQ/Solace/cloud pending |
 | **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** browse/read done; local pane + transfer queue + uploads pending |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC + Mongo (power features) + **Redis** done; LDAP/SSH/SNMP pending |
@@ -130,17 +132,18 @@ Mongo · Redis · Kafka · SFTP/FTP · S3/Azure/GCS · MCP · Agent.**
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~48% of tracked tasks complete** (125 done · 28 in-progress · 100 not started; see `TASKS.md`). **Phase-1 foundations are complete.**
+**Overall: ~48% of tracked tasks complete** (127 done · 28 in-progress · 98 not started; see `TASKS.md`). **Phase-1 foundations are complete.**
 
 ---
 
 ## 6. Highest-value next steps
 
-1. **Enterprise messaging (Phase 5)** — RabbitMQ next (AMQP 0.9.1 + management REST), then
-   JMS / cloud messaging. _(MQTT first cut is done.)_
-2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
+1. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
    them (the "agent testing" endgame), using the Anthropic SDK tool-runner. _(MCP now supports
    Bearer-token auth; next: vault the token + an OAuth/PKCE flow.)_
+2. **Enterprise messaging (Phase 5)** — RabbitMQ depth next (management REST API, publisher
+   confirms, manual ack/nack/requeue, DLX viewer), then JMS / cloud messaging. _(MQTT + RabbitMQ
+   first cuts are done.)_
 3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
    richer response viewers (cookies, waterfall timeline, test assertions).
 4. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
@@ -149,8 +152,9 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
-✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **certificate manager
-(+ expiry watchdog)** · ✅ **environment-variable system (+ `${VAR}` live in every protocol view)**.
+✅ dark/light theming · ✅ MCP Bearer auth · ✅ **MQTT first cut** · ✅ **RabbitMQ first cut** ·
+✅ **certificate manager (+ expiry watchdog)** ·
+✅ **environment-variable system (+ `${VAR}` live in every protocol view)**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

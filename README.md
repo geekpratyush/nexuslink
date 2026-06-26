@@ -65,7 +65,8 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **MCP Inspector** (tools/resources/prompts, Bearer-token auth) | ✅ Working (tested; OAuth/PKCE + vaulting TODO) |
 | **AI Agent / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
 | **MQTT** (Eclipse Paho; connect/subscribe/publish) | 🟡 First cut (verified live vs. HiveMQ public broker) |
-| RabbitMQ · JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
+| **RabbitMQ** (AMQP 0.9.1; declare/publish/consume) | 🟡 First cut (needs a broker for E2E) |
+| JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
 | LDAP / Active Directory · SSH terminal · SNMP | ⏳ Not started |
 
 **Cross-cutting / polish**
@@ -118,6 +119,8 @@ See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
 - **Kafka** — topic/partition explorer, produce, and consume (first cut; needs a broker).
 - **MQTT** — connect to a broker, subscribe to topic filters, and publish (Eclipse Paho; first
   cut, verified live against the HiveMQ public broker).
+- **RabbitMQ** — declare exchanges/queues/bindings, publish to an exchange + routing key, and
+  consume a queue into a live log (AMQP 0.9.1; first cut, needs a broker for E2E).
 - **File transfer** — SFTP / FTP / FTPS remote directory browsing and file read.
 - **Object storage** — S3 / Azure Blob / GCS bucket→object browsers behind one shared view.
 - **MCP Inspector** — connect to a Model Context Protocol server (HTTP or stdio), with optional
@@ -149,13 +152,14 @@ nexuslink-protocol-mongo    MongoDB client
 nexuslink-protocol-redis    Redis client
 nexuslink-protocol-kafka    Kafka client
 nexuslink-protocol-mqtt     MQTT client (Eclipse Paho)
+nexuslink-protocol-rabbitmq RabbitMQ client (AMQP 0.9.1; amqp-client)
 nexuslink-protocol-grpc     gRPC client (reflection-based)
 nexuslink-protocol-sftp     SFTP client (Apache MINA SSHD)
 nexuslink-protocol-ftp      FTP / FTPS client (Apache Commons Net)
 nexuslink-protocol-s3       S3 / S3-compatible object storage (AWS SDK v2)
 nexuslink-protocol-azure    Azure Blob Storage
 nexuslink-protocol-gcs      Google Cloud Storage
-nexuslink-protocol-messaging  (reserved — RabbitMQ/JMS, not yet implemented)
+nexuslink-protocol-messaging  (reserved — JMS, not yet implemented)
 nexuslink-protocol-enterprise (reserved — IBM MQ/Solace, not yet implemented)
 nexuslink-protocol-file       (reserved — additional file protocols)
 nexuslink-ui                JavaFX shell, help system, protocol views, theming

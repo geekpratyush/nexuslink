@@ -21,6 +21,7 @@ import com.nexuslink.ui.llm.LlmTesterView;
 import com.nexuslink.ui.mcp.McpInspectorView;
 import com.nexuslink.ui.mongo.MongoClientView;
 import com.nexuslink.ui.mqtt.MqttView;
+import com.nexuslink.ui.rabbitmq.RabbitMqView;
 import com.nexuslink.ui.redis.RedisView;
 import com.nexuslink.ui.rest.RestClientView;
 import com.nexuslink.ui.s3.S3View;
@@ -348,6 +349,13 @@ public final class MainWindow {
         return view;
     }
 
+    private RabbitMqView openRabbitMqTab() {
+        RabbitMqView view = new RabbitMqView();
+        view.setLogger(this::log);
+        addTab("RabbitMQ " + (++newTabCounter), view);
+        return view;
+    }
+
     private RedisView openRedisTab() {
         RedisView view = new RedisView();
         view.setLogger(this::log);
@@ -592,6 +600,7 @@ public final class MainWindow {
                 new ProtocolDef("ftp", "FTP", "New FTP Browser", "server", this::openFtpTab),
                 new ProtocolDef("kafka", "Kafka", "New Kafka Client", "topic", this::openKafkaTab),
                 new ProtocolDef("mqtt", "MQTT", "New MQTT Client", "topic", this::openMqttTab),
+                new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
                 new ProtocolDef("llm", "AI Agent / LLM", "New AI Agent / LLM Tester", "ai", this::openLlmTab));

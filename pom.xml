@@ -23,6 +23,7 @@
         <module>nexuslink-protocol-s3</module>
         <module>nexuslink-protocol-kafka</module>
         <module>nexuslink-protocol-mqtt</module>
+        <module>nexuslink-protocol-rabbitmq</module>
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
@@ -78,6 +79,9 @@
 
         <!-- MQTT -->
         <paho.version>1.2.5</paho.version>
+
+        <!-- RabbitMQ (AMQP 0.9.1) -->
+        <rabbitmq.version>5.21.0</rabbitmq.version>
 
         <!-- HikariCP -->
         <hikari.version>5.1.0</hikari.version>
@@ -167,8 +171,20 @@
             </dependency>
             <dependency>
                 <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-rabbitmq</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-redis</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- RabbitMQ AMQP 0.9.1 client -->
+            <dependency>
+                <groupId>com.rabbitmq</groupId>
+                <artifactId>amqp-client</artifactId>
+                <version>${rabbitmq.version}</version>
             </dependency>
 
             <!-- Redis client -->
