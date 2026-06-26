@@ -93,8 +93,9 @@ public final class SseView extends BorderPane {
 
     private void toggleConnect() {
         if (connected) { service.disconnect(); return; }
-        String url = urlField.getText().trim();
-        if (url.isEmpty()) { statusLabel.setText("Enter a stream URL first"); return; }
+        String raw = urlField.getText().trim();
+        if (raw.isEmpty()) { statusLabel.setText("Enter a stream URL first"); return; }
+        String url = com.nexuslink.ui.env.Env.resolve(raw);   // resolve ${VAR} against active environment
         statusLabel.setText("Connecting…");
         connectBtn.setDisable(true);
         logger.accept("SSE connect → " + url);

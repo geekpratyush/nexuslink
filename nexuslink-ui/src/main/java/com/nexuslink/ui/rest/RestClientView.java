@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexuslink.core.connection.AuthMethod;
 import com.nexuslink.core.connection.ConnectionProfile;
+import com.nexuslink.core.env.EnvironmentService;
 import com.nexuslink.core.history.HistoryEntry;
+import com.nexuslink.ui.env.Env;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
 import com.nexuslink.protocol.http.rest.RestResponse;
@@ -497,11 +499,18 @@ public final class RestClientView extends BorderPane {
         statusLabel.setText("Sending…");
         timingLabel.setText("");
         sizeLabel.setText("");
-        logger.accept(request.getMethod() + " " + request.effectiveUrl());
+
+        // Resolve ${VAR} references against the active environment at send time. The on-screen request
+        // stays templated (so history/replay re-resolve later); only this copy carries real values.
+        EnvironmentService env = Env.service();
+        final RestRequest exec = env == null ? request : request.interpolated(env::interpolate);
+        String loggedUrl = exec.effectiveUrl();
+        if (env != null) loggedUrl = env.masker().scrub(loggedUrl);   // never log resolved secrets
+        logger.accept(exec.getMethod() + " " + loggedUrl);
 
         Task<RestResponse> task = new Task<>() {
             @Override protected RestResponse call() {
-                return executor.execute(request);
+                return executor.execute(exec);
             }
         };
         task.setOnSucceeded(e -> { renderResponse(task.getValue()); finishSend(); });

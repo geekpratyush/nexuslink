@@ -136,9 +136,9 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started
 
 ## 6. Highest-value next steps
 
-1. **`${VAR}` adoption** — thread `EnvironmentService.interpolate(...)` through each protocol
-   view's send path (REST first: URL/headers/params/body). The engine + active environment are
-   already live via `AppContext.resolve(EnvironmentService.class)`.
+1. **Finish `${VAR}` adoption** — REST/WebSocket/SSE/GraphQL resolve `${VAR}` at send time
+   (Session 27, via `RestRequest.interpolated()` + the shared `ui.env.Env` helper); extend the same
+   to the remaining views (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/LLM).
 2. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so the model can call
    them (the "agent testing" endgame), using the Anthropic SDK tool-runner. _(MCP now supports
    Bearer-token auth; next: vault the token + an OAuth/PKCE flow.)_

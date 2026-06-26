@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
  * Mutable builder-style model for a REST request.
@@ -98,6 +99,45 @@ public final class RestRequest {
 
     public boolean isFollowRedirects() { return followRedirects; }
     public void setFollowRedirects(boolean v) { this.followRedirects = v; }
+
+    /**
+     * Returns a deep copy of this request with every string field passed through {@code fn}, used to
+     * resolve {@code ${VAR}} references at send time without mutating the editor's bound model. The
+     * UI keeps the templated request (so history/replay stay parameterised); only the executed copy
+     * carries resolved values.
+     */
+    public RestRequest interpolated(UnaryOperator<String> fn) {
+        RestRequest r = new RestRequest();
+        r.method = method;
+        r.url = fn.apply(url);
+        for (KeyValue kv : queryParams) {
+            KeyValue c = new KeyValue(fn.apply(kv.key), fn.apply(kv.value));
+            c.enabled = kv.enabled;
+            r.queryParams.add(c);
+        }
+        for (KeyValue kv : headers) {
+            KeyValue c = new KeyValue(fn.apply(kv.key), fn.apply(kv.value));
+            c.enabled = kv.enabled;
+            r.headers.add(c);
+        }
+        r.bodyType = bodyType;
+        r.body = fn.apply(body);
+        r.authType = authType;
+        r.authUsername = fn.apply(authUsername);
+        r.authPassword = fn.apply(authPassword);
+        r.authToken = fn.apply(authToken);
+        r.apiKeyName = fn.apply(apiKeyName);
+        r.apiKeyValue = fn.apply(apiKeyValue);
+        r.apiKeyLocation = apiKeyLocation;
+        r.oauthTokenUrl = fn.apply(oauthTokenUrl);
+        r.oauthClientId = fn.apply(oauthClientId);
+        r.oauthClientSecret = fn.apply(oauthClientSecret);
+        r.oauthScope = fn.apply(oauthScope);
+        r.connectTimeoutMs = connectTimeoutMs;
+        r.readTimeoutMs = readTimeoutMs;
+        r.followRedirects = followRedirects;
+        return r;
+    }
 
     /** Content-Type implied by the body type. */
     public String contentType() {

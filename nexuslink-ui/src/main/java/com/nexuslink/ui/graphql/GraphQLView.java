@@ -113,14 +113,16 @@ public final class GraphQLView extends BorderPane {
     }
 
     private void run() {
-        String endpoint = endpointField.getText().trim();
-        if (endpoint.isEmpty()) { statusLabel.setText("Enter a GraphQL endpoint first"); return; }
+        String rawEndpoint = endpointField.getText().trim();
+        if (rawEndpoint.isEmpty()) { statusLabel.setText("Enter a GraphQL endpoint first"); return; }
+        // Resolve ${VAR} against the active environment for the endpoint, query, and variables.
+        String endpoint = com.nexuslink.ui.env.Env.resolve(rawEndpoint);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Running…");
         logger.accept("GraphQL → " + endpoint);
 
-        String query = queryEditor.getText();
-        String variables = variablesEditor.getText();
+        String query = com.nexuslink.ui.env.Env.resolve(queryEditor.getText());
+        String variables = com.nexuslink.ui.env.Env.resolve(variablesEditor.getText());
         Task<GraphQLService.Result> task = new Task<>() {
             @Override protected GraphQLService.Result call() {
                 return service.execute(endpoint, query, variables, Map.of());

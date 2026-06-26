@@ -125,8 +125,10 @@
       secret), New/Delete/Set-Active, reveal-secrets toggle; **Tools ▸ Environments…** (nexuslink-ui)
 - [x] `SecretMaskingFilter` — `looksSecret` name heuristic (auto-flags secrets), `scrub` removes
       secret values from logs/rendered requests (longest-first), `maskValue` for UI fields (core)
-- [-] _Adoption_: interpolation engine + active env live via `AppContext.resolve(EnvironmentService)`;
-      threading `${VAR}` through every protocol view's send path is an incremental follow-up
+- [-] _Adoption_: `${VAR}` now resolved at send time in **REST** (URL/params/headers/body/auth, via
+      `RestRequest.interpolated()`; secrets scrubbed from the log line), **WebSocket**, **SSE**, and
+      **GraphQL** (endpoint/query/variables) via the shared `ui.env.Env` helper. Remaining views
+      (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/LLM) still read raw fields — follow-up.
 
 ### 1.5 History Store
 - [x] `HistoryStore` — SQLite with FTS5 (full-text search) + LIKE fallback
@@ -530,6 +532,18 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 27 — `${VAR}` adoption in the HTTP-family views (applies the Phase-1.4 engine).**
+  - `RestRequest.interpolated(UnaryOperator<String>)` — returns a deep copy with every string field
+    (URL, query params, headers, body, all auth fields) resolved, **without mutating** the editor's
+    bound model, so history/replay stay templated and re-resolve at replay time. Unit-tested (7/7).
+  - `RestClientView.send()` now executes the interpolated copy against the active environment and
+    **scrubs resolved secrets** from the logged URL via `EnvironmentService.masker()`.
+  - New shared `com.nexuslink.ui.env.Env` helper (`service()` / `resolve()`) — no-op when no
+    `EnvironmentService` is registered. Adopted in **WebSocket** + **SSE** (connect URL) and
+    **GraphQL** (endpoint + query + variables); REST refactored to use it too.
+  - **VERIFIED:** `RestRequestTest` 7/7; full `mvn test` **BUILD SUCCESS**; UI compiles clean.
+  - Follow-up: thread the same through the remaining views (gRPC/SQL/Mongo/Redis/Kafka/MQTT/
+    file/object-storage/MCP/LLM).
 - 2026-06-26: **Session 26 — Environment-variable system (Phase 1.4, last unstarted Phase-1 foundation).**
   - New `com.nexuslink.core.env` package:
     - `Environment` / `EnvVariable` — a named variable set (dev/staging/prod) with per-var secret flags.
@@ -837,7 +851,7 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 26)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 27)
 
 **Where the project stands:** ~48% of tracked tasks done (125 `[x]` · 28 `[-]` · 100 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
@@ -856,9 +870,9 @@ bundle import + CSR; `ProfileValidator`; threading `${VAR}` through each protoco
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **`${VAR}` adoption** — thread `EnvironmentService.interpolate(...)` through each protocol view's
-   send path (REST first: URL/headers/params/body), so the env system is actually applied, not just
-   available. Engine + active env already live via `AppContext.resolve(EnvironmentService.class)`.
+1. **Finish `${VAR}` adoption** — REST/WebSocket/SSE/GraphQL now resolve at send time (Session 27);
+   extend the same to the remaining views (gRPC/SQL/Mongo/Redis/Kafka/MQTT/file/object-storage/MCP/
+   LLM) via the `ui.env.Env` helper, so the env system applies everywhere.
 2. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
    after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
 3. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them

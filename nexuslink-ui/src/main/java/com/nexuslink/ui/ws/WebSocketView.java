@@ -98,8 +98,9 @@ public final class WebSocketView extends BorderPane {
             service.close();
             return;
         }
-        String url = urlField.getText().trim();
-        if (url.isEmpty()) { statusLabel.setText("Enter a URL first"); return; }
+        String raw = urlField.getText().trim();
+        if (raw.isEmpty()) { statusLabel.setText("Enter a URL first"); return; }
+        String url = com.nexuslink.ui.env.Env.resolve(raw);   // resolve ${VAR} against active environment
         statusLabel.setText("Connecting…");
         connectBtn.setDisable(true);
         logger.accept("WS connect → " + url);
