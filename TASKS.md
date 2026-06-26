@@ -198,7 +198,10 @@
   - [x] Basic Auth
   - [x] Bearer Token (manual)
   - [x] API Key (header / query placement) — applied in `RestExecutionService`; 4/4 `RestRequestTest` pass _(cookie placement TODO)_
-  - [-] OAuth 2.0 — **client-credentials grant** done (`OAuth2TokenClient` with token caching/auto-refresh, Auth-tab fields, applied in `RestExecutionService`); _authorization-code / PKCS / implicit / password flows TODO_
+  - [-] OAuth 2.0 — **client-credentials** (`OAuth2TokenClient`, cached/auto-refresh, applied in `RestExecutionService`)
+    + **authorization-code with PKCE** (`OAuth2AuthorizationCode`: S256 challenge per RFC 7636, auth-URL build,
+    redirect parse, token exchange; interactive `OAuth2AuthCodeDialog` opens the browser → applies a Bearer token;
+    **8/8 tests** incl. the RFC 7636 known-answer vector); _implicit / password / device-code flows TODO_
   - [ ] Digest, NTLM, AWS SigV4, HMAC, Custom Script
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
@@ -540,6 +543,19 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 32 — REST OAuth 2.0 Authorization Code + PKCE (REST depth, offline-testable).**
+  - New `OAuth2AuthorizationCode` (`nexuslink-protocol-http`): the pure flow pieces — PKCE pair generation,
+    `S256` challenge derivation (base64url(sha256), unpadded), authorization-URL construction (preserving
+    existing query params, URL-encoding), redirect-callback parsing (code/state/error), and token-response
+    parsing — plus a live `exchangeCode` (HTTP Basic for confidential clients, `client_id`-only for public
+    PKCE clients). **8/8 tests**, including the **RFC 7636 Appendix-B known-answer vector**.
+  - Interactive **`OAuth2AuthCodeDialog`** (`nexuslink-ui/rest`): fill endpoints/client → **Open
+    authorization URL** (generates PKCE + state, launches the browser) → approve → paste the redirect
+    URL → **Exchange for token** (state-mismatch/CSRF guard) → returns the access token, which the REST
+    client applies as a **Bearer** credential. Reached from a button in the REST Auth tab's OAuth 2.0
+    section (prefilled from the existing token-URL/client fields); `${VAR}` resolved throughout.
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 21 modules); `OAuth2AuthorizationCodeTest`
+    8/8. The token exchange needs a live OAuth provider; the crypto/URL/parse logic is fully offline-tested.
 - 2026-06-27: **Session 31 — LDAP / Active Directory client (Phase 8.4), opens directory services.**
   - New module **`nexuslink-protocol-ldap`** (reactor now 21 modules): `LdapService` over the UnboundID
     LDAP SDK — connect plain or **LDAPS** (trust-all, testing tool) with an optional bind DN+password,
@@ -917,7 +933,7 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 31)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 32)
 
 **Where the project stands:** ~49% of tracked tasks done (129 `[x]` · 29 `[-]` · 95 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
@@ -936,19 +952,19 @@ S27–28 (`${VAR}` adoption) committed; S29 (`4ed4410`) **RabbitMQ** module+view
 fully complete** — `ProfileValidator` was the last unchecked Phase-1 item. Remaining Phase-1 polish
 is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
-### ⏭ Highest-value next steps (pick per priority)
+### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/SigV4 auth, more
-   response viewers (cookies, waterfall timeline, test assertions).
-2. **SNMP browser** (Phase 8.6) — SNMP4J v1/v2c/v3 GET/WALK; the OID/PDU build + table parse are
+1. **SNMP browser** (Phase 8.6) — SNMP4J v1/v2c/v3 GET/WALK; the OID/PDU build + table parse are
    unit-testable offline (a live agent is only needed for E2E).
-3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack/requeue,
-   DLX viewer. _Needs a broker for live E2E._
-4. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR.
+2. **REST depth (more auth)** — Digest, NTLM, AWS SigV4, HMAC (signing logic is pure/testable);
+   richer response viewers (cookies, waterfall timeline, test assertions).
+3. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
+   generation (all offline-testable round-trips).
+4. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
 5. **LDAP depth** — DIT tree browser, LDIF entry editor (add/modify/delete), filter builder, StartTLS.
 
-_(Done Session 31: LDAP / Active Directory — `nexuslink-protocol-ldap` (`LdapService`, 6/6 end-to-end
-tests against the in-memory server) + `LdapView`. Session 30: `ProfileValidator` + MCP→Agent loop.)_
+_(Done Session 32: REST OAuth 2.0 **authorization-code + PKCE** — `OAuth2AuthorizationCode` (8/8 incl.
+RFC 7636 vector) + interactive `OAuth2AuthCodeDialog`. Session 31: LDAP. Session 30: ProfileValidator + Agent loop.)_
 
 ### How to resume
 

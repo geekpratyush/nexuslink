@@ -393,6 +393,16 @@ public final class RestClientView extends BorderPane {
         grid.add(clientSecretLbl, 0, 9); grid.add(oauthClientSecret, 1, 9);
         grid.add(scopeLbl, 0, 10);       grid.add(oauthScope, 1, 10);
 
+        Label grantLbl = new Label("Grant:");
+        grantLbl.getStyleClass().add("meta-label");
+        Label grantHint = new Label("Token URL above = client-credentials (automatic on Send).");
+        grantHint.getStyleClass().add("meta-label");
+        Button authCodeBtn = new Button("Authorization Code + PKCE…");
+        authCodeBtn.getStyleClass().add("btn-secondary");
+        authCodeBtn.setOnAction(e -> runAuthorizationCodeFlow());
+        javafx.scene.layout.VBox grantBox = new javafx.scene.layout.VBox(4, authCodeBtn, grantHint);
+        grid.add(grantLbl, 0, 11);       grid.add(grantBox, 1, 11);
+
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
@@ -403,7 +413,7 @@ public final class RestClientView extends BorderPane {
             setRowVisible(bearer, tokenLbl, authToken);
             setRowVisible(apiKey, keyNameLbl, apiKeyName, keyValueLbl, apiKeyValue, keyInLbl, apiKeyLocation);
             setRowVisible(oauth, tokenUrlLbl, oauthTokenUrl, clientIdLbl, oauthClientId,
-                    clientSecretLbl, oauthClientSecret, scopeLbl, oauthScope);
+                    clientSecretLbl, oauthClientSecret, scopeLbl, oauthScope, grantLbl, grantBox);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
@@ -413,6 +423,16 @@ public final class RestClientView extends BorderPane {
 
     private static void setRowVisible(boolean visible, javafx.scene.Node... nodes) {
         for (javafx.scene.Node n : nodes) { n.setVisible(visible); n.setManaged(visible); }
+    }
+
+    /** Runs the interactive Authorization Code + PKCE flow; applies the token as a Bearer credential. */
+    private void runAuthorizationCodeFlow() {
+        OAuth2AuthCodeDialog dlg = new OAuth2AuthCodeDialog(
+                oauthTokenUrl.getText(), oauthClientId.getText(), oauthClientSecret.getText(), oauthScope.getText());
+        dlg.showAndWait().ifPresent(token -> {
+            authTypeCombo.setValue(RestRequest.AuthType.BEARER);
+            authToken.setText(token);
+        });
     }
 
     private GridPane buildSettingsTab() {
