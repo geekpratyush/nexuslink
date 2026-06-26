@@ -4,6 +4,7 @@ import com.nexuslink.security.cert.CertificateGenerator;
 import com.nexuslink.security.cert.CertificateInfo;
 import com.nexuslink.security.cert.CertificateParser;
 import com.nexuslink.security.cert.CertificateStore;
+import com.nexuslink.security.cert.ExpirationWatchdog;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -14,9 +15,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.ZoneId;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -33,6 +38,8 @@ public final class CertificateManagerView extends BorderPane {
     private final ListView<String> aliasList = new ListView<>();
     private final TextArea details = new TextArea();
     private final Label statusLabel = new Label();
+    private final Label expiryLabel = new Label();
+    private final ExpirationWatchdog watchdog = new ExpirationWatchdog(this::snapshotCerts);
 
     private Consumer<String> logger = s -> {};
 
@@ -92,7 +99,9 @@ public final class CertificateManagerView extends BorderPane {
         row.setPadding(new Insets(10));
 
         statusLabel.getStyleClass().add("meta-label");
-        HBox statusRow = new HBox(statusLabel);
+        expiryLabel.getStyleClass().add("meta-label");
+        HBox statusRow = new HBox(10, statusLabel, expiryLabel);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
         return new VBox(row, statusRow);
     }
@@ -140,9 +149,52 @@ public final class CertificateManagerView extends BorderPane {
             if (selected != null && aliasList.getItems().contains(selected)) {
                 aliasList.getSelectionModel().select(selected);
             }
+            updateExpiryWarnings();
         } catch (Exception e) {
             statusLabel.setText("Store error: " + e.getMessage());
         }
+    }
+
+    /** A live snapshot of the working store's parsed certificates, keyed by alias. */
+    private Map<String, CertificateInfo> snapshotCerts() {
+        Map<String, CertificateInfo> certs = new LinkedHashMap<>();
+        if (store == null) return certs;
+        try {
+            for (String alias : store.aliases()) {
+                CertificateInfo info = store.info(alias);
+                if (info != null) certs.put(alias, info);
+            }
+        } catch (Exception ignored) {
+            // a single unreadable entry shouldn't suppress warnings for the rest
+        }
+        return certs;
+    }
+
+    /**
+     * Re-evaluates every certificate against the watchdog's 30/7/1-day thresholds and summarises the
+     * result next to the store count, logging each freshly-surfaced alert. {@link ExpirationWatchdog#reset()}
+     * is called first so the summary always reflects the current store rather than past scans.
+     */
+    private void updateExpiryWarnings() {
+        watchdog.reset();
+        List<ExpirationWatchdog.Alert> alerts = watchdog.scan(Instant.now());
+        if (alerts.isEmpty()) {
+            expiryLabel.setText("");
+            expiryLabel.getStyleClass().removeAll("status-4xx", "status-err");
+            return;
+        }
+        alerts.sort(Comparator.comparingInt((ExpirationWatchdog.Alert a) -> a.level().ordinal()).reversed());
+        for (ExpirationWatchdog.Alert a : alerts) logger.accept(a.message());
+
+        long expired = alerts.stream().filter(a -> a.level() == ExpirationWatchdog.Level.EXPIRED).count();
+        long soon = alerts.size() - expired;
+        StringBuilder sb = new StringBuilder("⚠ ");
+        if (soon > 0) sb.append(soon).append(" expiring soon");
+        if (expired > 0) sb.append(soon > 0 ? ", " : "").append(expired).append(" expired");
+        sb.append(" — ").append(alerts.get(0).message());
+        expiryLabel.setText(sb.toString());
+        expiryLabel.getStyleClass().removeAll("status-4xx", "status-err");
+        expiryLabel.getStyleClass().add(expired > 0 ? "status-err" : "status-4xx");
     }
 
     private void showDetails(String alias) {

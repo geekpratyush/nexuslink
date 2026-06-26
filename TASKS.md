@@ -96,7 +96,10 @@
       configurable validity + SAN (DNS/IP), BouncyCastle; PEM export of cert or key
 - [-] `CertificateImporter` — PEM/DER **file import** done (`CertificateManagerView`); _PKCS12/JKS bundle import + drag-and-drop TODO_
 - [-] `CertificateExporter` — **PEM export** done; _DER/PKCS12-with-password TODO_
-- [ ] `ExpirationWatchdog` — background thread, fires events at 30/7/1 day
+- [x] `ExpirationWatchdog` — clock-injectable, side-effect-free `scan()` fires once per 30/7/1-day
+      threshold crossing (escalating, never repeating) + once on expiry; daemon `start(interval)` for
+      background scanning; listeners + `aliasesNeedingAttention()`. Wired into `CertificateManagerView`
+      (status-bar expiry summary, colour-coded, alerts logged). **6/6 pass** (`ExpirationWatchdogTest`)
 - [x] `CertificateManagerView` — list + detail panel + generate/import/export/delete +
       save/open keystore; wired into **Tools ▸ Certificate Manager…** (programmatic, not FXML)
 - [x] Certificate list with status icons (valid=green, warning=amber, expired=red)
@@ -520,6 +523,21 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 25 — `ExpirationWatchdog` (finishes Phase 1.2 cert follow-ups, priority #1).**
+  - `nexuslink-security/.../cert/ExpirationWatchdog` — periodically scans a `Supplier<Map<alias,
+    CertificateInfo>>` and fires an `Alert` the first time each cert crosses a 30/7/1-day threshold
+    (escalating, never re-firing the same stage) and again on expiry. `scan(Instant)` is clock-
+    injectable and side-effect-free (returns the freshly-fired alerts) so it unit-tests without wall
+    clock; `start(Duration)` runs a daemon scanner; listeners + `aliasesNeedingAttention()`.
+  - **Fixed a real escalation bug found by the tests:** with thresholds sorted ascending `[1,7,30]`
+    the original `stageFor` returned `i+1`, so creeping *toward* expiry produced a *lower* stage and
+    the `stage <= previous` guard swallowed the escalation. Stages now map nearest-expiry → highest
+    stage, so urgency increases monotonically.
+  - Wired into `CertificateManagerView`: on every `refresh()` the watchdog re-scans the working store
+    and shows a colour-coded status-bar summary (`⚠ N expiring soon, M expired — <most-urgent>`),
+    amber for warnings / red when anything has expired, logging each alert through the view logger.
+  - **VERIFIED:** `ExpirationWatchdogTest` **6/6**; security module **16/16**; full `mvn test`
+    **BUILD SUCCESS**; UI compiles clean.
 - 2026-06-25: **Session 24 — Certificate Manager (Phase 1.2, the second unstarted Phase-1 foundation).**
   - New `cert` package in `nexuslink-security` (BouncyCastle added to the module; both bcprov +
     bcpkix were already in `dependencyManagement`):
@@ -538,8 +556,8 @@
   - **VERIFIED:** `CertificateManagerTest` **5/5** (generate RSA+EC → parse round-trip, validity-
     window status, PEM round-trip, keystore persist/reload of key + trusted entries); security
     module 10/10; `-pl …-security,ui,app -am install` builds clean. Changes uncommitted.
-  - Follow-ups (left `[ ]`/`[-]` in §1.2): `ExpirationWatchdog` (30/7/1-day events), DER/PKCS12-
-    with-password export, PKCS12/JKS bundle import + drag-and-drop, CSR generation.
+  - Follow-ups (left `[-]` in §1.2): DER/PKCS12-with-password export, PKCS12/JKS bundle import +
+    drag-and-drop, CSR generation. (`ExpirationWatchdog` done — Session 25.)
 - 2026-06-25: **Session 23 — MQTT client (Phase 5 kickoff) + all tracking docs refreshed.**
   - **Refreshed every tracking markdown** to match reality (they had drifted ~10 sessions
     behind): `README.md`, `PROJECT_PLAN.md`, `docs/ARCHITECTURE.md`, `RUN.md`, and the
@@ -794,41 +812,35 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-25, after Session 24)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 25)
 
-**Where the project stands:** ~46% of tracked tasks done (120 `[x]` · 27 `[-]` · 105 `[ ]`).
+**Where the project stands:** ~46% of tracked tasks done (121 `[x]` · 27 `[-]` · 104 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, history, and protocol clients — REST, WebSocket, SSE, GraphQL, gRPC,
 SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP
 Inspector (Bearer auth), AI/LLM tester. Full `mvn test` is **BUILD SUCCESS** (Mongo IT
 Docker-gated via `-DrunMongoIT=true`).
 
-### ⚠️ FIRST THING ON RESUME — there is uncommitted work in the tree
+### ✅ Tree state on resume
 
-Sessions 21–24 are **all uncommitted** (`git status` to confirm). They build clean and tests
-pass. Review and **commit** them before starting new work. The uncommitted changes are:
-- **Session 21** — MCP Inspector fixes (status dot, MCP-Protocol-Version header, capability gating, layout).
-- **Session 22** — MCP Bearer-token auth (`McpInspectorView` token field → `Authorization` header).
-- **Session 23** — **MQTT client** (new `nexuslink-protocol-mqtt` module + `MqttView`, HiveMQ sample,
-  verified live) + **all tracking docs refreshed** (README/PROJECT_PLAN/ARCHITECTURE/RUN/spec banner).
-- **Session 24** — **Certificate Manager** (new `cert` package in `nexuslink-security`:
-  parser/generator/store + `CertificateManagerView` under Tools ▸ Certificate Manager…; 5/5 tests).
-
-Untracked new dirs: `nexuslink-protocol-mqtt/`, `nexuslink-security/src/{main,test}/.../cert/`,
-`nexuslink-ui/src/main/java/com/nexuslink/ui/{cert,mqtt}/`.
+Sessions 21–24 were committed in `67bac92` ("Progress till today"). **Session 25
+(`ExpirationWatchdog` + cert-view wiring) is committed too** — `git status` should be clean
+(branch may be ahead of `origin/main`; push when ready). Phase-1.2's `ExpirationWatchdog`
+follow-up is now done; the remaining §1.2 items are `[-]` polish (DER/PKCS12 export, bundle
+import + drag-and-drop, CSR generation).
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **`ExpirationWatchdog`** (Phase 1.2) — background thread firing 30/7/1-day events for stored
-   certs; surface in the cert list + status bar. Finishes the cert-manager thread cleanly.
-2. **Environment-variable system** (Phase 1.4) — `EnvironmentService` + `${VAR}` interpolation +
+1. **Environment-variable system** (Phase 1.4) — `EnvironmentService` + `${VAR}` interpolation +
    per-profile dev/staging/prod sets + secret masking. The last unstarted Phase-1 foundation.
-3. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
+2. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
    after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
-4. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
+3. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them
    (the "agent testing" endgame), via the Anthropic SDK tool-runner.
-5. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
+4. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCS/PKCE), more response viewers
    (cookies, waterfall timeline, test assertions).
+5. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import +
+   drag-and-drop, CSR generation.
 
 ### How to resume
 
