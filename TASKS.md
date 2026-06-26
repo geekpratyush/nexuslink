@@ -116,10 +116,17 @@
 - [ ] `ProfileValidator` — per-protocol pre-save validation
 
 ### 1.4 Environment Variable System
-- [ ] `EnvironmentService` — merge system env + `.env` file + profile vars
-- [ ] `VariableInterpolator` — `${VAR}` substitution across all string fields
-- [ ] `EnvEditorDialog` — per-profile variable sets (dev/staging/prod)
-- [ ] `SecretMaskingFilter` — mask in logs and UI, reveal toggle
+- [x] `EnvironmentService` — named environments (dev/staging/prod) + active selection, persisted to
+      `~/.nexuslink/environments.json`; resolves `${VAR}` with precedence active env → `.env` file
+      (`~/.nexuslink/.env`) → system env; `interpolate`/`interpolateAll`/`resolver`/`masker` (core)
+- [x] `VariableInterpolator` — `${VAR}` + `${VAR:-default}` + `$$` escape + nested refs with cycle
+      guard; unknown names left literal so the user sees what didn't resolve (core, 7/7 tests)
+- [x] `EnvEditorDialog` → `EnvironmentManagerView` tab — per-environment variable table (name/value/
+      secret), New/Delete/Set-Active, reveal-secrets toggle; **Tools ▸ Environments…** (nexuslink-ui)
+- [x] `SecretMaskingFilter` — `looksSecret` name heuristic (auto-flags secrets), `scrub` removes
+      secret values from logs/rendered requests (longest-first), `maskValue` for UI fields (core)
+- [-] _Adoption_: interpolation engine + active env live via `AppContext.resolve(EnvironmentService)`;
+      threading `${VAR}` through every protocol view's send path is an incremental follow-up
 
 ### 1.5 History Store
 - [x] `HistoryStore` — SQLite with FTS5 (full-text search) + LIKE fallback
@@ -523,6 +530,24 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-26: **Session 26 — Environment-variable system (Phase 1.4, last unstarted Phase-1 foundation).**
+  - New `com.nexuslink.core.env` package:
+    - `Environment` / `EnvVariable` — a named variable set (dev/staging/prod) with per-var secret flags.
+    - `EnvironmentService` — owns the environments + active selection, persisted to
+      `~/.nexuslink/environments.json`; resolves `${VAR}` with precedence **active env → `.env` file
+      (`~/.nexuslink/.env`) → system env**; convenience `interpolate`/`interpolateAll`/`resolver`/`masker`.
+    - `VariableInterpolator` — `${VAR}`, `${VAR:-default}`, `$$` escape, nested refs with a cycle guard;
+      unknown names stay literal so unresolved refs are visible.
+    - `SecretMaskingFilter` — `looksSecret` name heuristic (auto-flags password/token/key/…), `scrub`
+      strips secret values from arbitrary text (longest-first), `maskValue` for masked UI fields.
+  - UI: `EnvironmentManagerView` tab (`nexuslink-ui/.../env`) — environment list with an active ●
+    marker, an editable name/value/secret variable table, New/Delete/Set-Active, and a reveal-secrets
+    toggle. Wired into **Tools ▸ Environments…**; `EnvironmentService` registered in `AppContext` so any
+    view can interpolate. Rewrote `environment-vars.md` help from a roadmap stub into real usage docs.
+  - **VERIFIED:** core env tests **18/18** (`VariableInterpolatorTest` 7, `EnvironmentServiceTest` 6,
+    `SecretMaskingFilterTest` 5); full `mvn test` **BUILD SUCCESS**; UI compiles clean.
+  - Follow-up left `[-]`: thread `${VAR}` through each protocol view's send path (engine + active env
+    already available via `AppContext.resolve(EnvironmentService.class)`).
 - 2026-06-26: **Session 25 — `ExpirationWatchdog` (finishes Phase 1.2 cert follow-ups, priority #1).**
   - `nexuslink-security/.../cert/ExpirationWatchdog` — periodically scans a `Supplier<Map<alias,
     CertificateInfo>>` and fires an `Alert` the first time each cert crosses a 30/7/1-day threshold
@@ -812,27 +837,28 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 25)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-26, after Session 26)
 
-**Where the project stands:** ~46% of tracked tasks done (121 `[x]` · 27 `[-]` · 104 `[ ]`).
+**Where the project stands:** ~48% of tracked tasks done (125 `[x]` · 28 `[-]` · 100 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
-**certificate manager**, history, and protocol clients — REST, WebSocket, SSE, GraphQL, gRPC,
-SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP
-Inspector (Bearer auth), AI/LLM tester. Full `mvn test` is **BUILD SUCCESS** (Mongo IT
-Docker-gated via `-DrunMongoIT=true`).
+**certificate manager**, **environment-variable system**, history, and protocol clients — REST,
+WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, SFTP,
+FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester. Full `mvn test` is
+**BUILD SUCCESS** (Mongo IT Docker-gated via `-DrunMongoIT=true`).
 
 ### ✅ Tree state on resume
 
-Sessions 21–24 were committed in `67bac92` ("Progress till today"). **Session 25
-(`ExpirationWatchdog` + cert-view wiring) is committed too** — `git status` should be clean
-(branch may be ahead of `origin/main`; push when ready). Phase-1.2's `ExpirationWatchdog`
-follow-up is now done; the remaining §1.2 items are `[-]` polish (DER/PKCS12 export, bundle
-import + drag-and-drop, CSR generation).
+Sessions 21–24 committed in `67bac92`; Session 25 (`ExpirationWatchdog`) in `0be9069`; Session 26
+(env-variable system) committed too. `git status` should be clean (branch ahead of `origin/main` —
+push when ready). **Phase 1 is now functionally complete** — the env-variable system was the last
+unstarted Phase-1 foundation. Remaining Phase-1 items are `[-]` polish (cert DER/PKCS12 export +
+bundle import + CSR; `ProfileValidator`; threading `${VAR}` through each protocol view's send path).
 
 ### ⏭ Highest-value next steps (pick per priority)
 
-1. **Environment-variable system** (Phase 1.4) — `EnvironmentService` + `${VAR}` interpolation +
-   per-profile dev/staging/prod sets + secret masking. The last unstarted Phase-1 foundation.
+1. **`${VAR}` adoption** — thread `EnvironmentService.interpolate(...)` through each protocol view's
+   send path (REST first: URL/headers/params/body), so the env system is actually applied, not just
+   available. Engine + active env already live via `AppContext.resolve(EnvironmentService.class)`.
 2. **RabbitMQ** (Phase 5.5) — AMQP 0.9.1 client + management REST; continues enterprise messaging
    after MQTT. _Needs a broker for live E2E (CloudAMQP free tier or local Docker)._
 3. **MCP → Agent loop** — feed an MCP server's tools into the LLM tester so Claude can call them

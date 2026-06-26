@@ -2,10 +2,13 @@ package com.nexuslink.ui.main;
 
 import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.connection.ConnectionStore;
+import com.nexuslink.core.di.AppContext;
+import com.nexuslink.core.env.EnvironmentService;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
 import com.nexuslink.ui.azure.AzureBlobView;
 import com.nexuslink.ui.connection.ConnectionsPanel;
+import com.nexuslink.ui.env.EnvironmentManagerView;
 import com.nexuslink.ui.ftp.FtpView;
 import com.nexuslink.ui.cert.CertificateManagerView;
 import com.nexuslink.ui.gcs.GcsView;
@@ -65,7 +68,10 @@ public final class MainWindow {
     private VBox protocolButtons;
     private final ProtocolPrefs protocolPrefs = new ProtocolPrefs();
     private final ConnectionStore connectionStore = new ConnectionStore();
+    private final EnvironmentService environmentService = new EnvironmentService();
     private ConnectionsPanel connectionsPanel;
+
+    { AppContext.get().registerInstance(EnvironmentService.class, environmentService); }
 
     public Scene createScene() {
         initHistoryStore();
@@ -157,7 +163,9 @@ public final class MainWindow {
         lockVault.setOnAction(e -> { VaultSession.get().lock(); log("Vault locked."); });
         MenuItem certManager = new MenuItem("Certificate Manager…");
         certManager.setOnAction(e -> openCertManagerTab());
-        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager);
+        MenuItem environments = new MenuItem("Environments…");
+        environments.setOnAction(e -> openEnvironmentsTab());
+        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager, environments);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
@@ -409,6 +417,13 @@ public final class MainWindow {
         CertificateManagerView view = new CertificateManagerView();
         view.setLogger(this::log);
         addTab("Certificates " + (++newTabCounter), view);
+        return view;
+    }
+
+    private EnvironmentManagerView openEnvironmentsTab() {
+        EnvironmentManagerView view = new EnvironmentManagerView(environmentService);
+        view.setLogger(this::log);
+        addTab("Environments " + (++newTabCounter), view);
         return view;
     }
 
