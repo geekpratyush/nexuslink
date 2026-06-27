@@ -87,6 +87,11 @@ public final class CertificateManagerView extends BorderPane {
         exportBtn.getStyleClass().add("btn-secondary");
         exportBtn.setOnAction(e -> exportSelected());
 
+        Button bundleBtn = new Button("Build Bundle…");
+        bundleBtn.getStyleClass().add("btn-secondary");
+        bundleBtn.setOnAction(e -> new CertificateBundleDialog(
+                store, getScene() == null ? null : getScene().getWindow(), logger).show());
+
         Button deleteBtn = new Button("Delete");
         deleteBtn.getStyleClass().add("btn-secondary");
         deleteBtn.setOnAction(e -> deleteSelected());
@@ -103,7 +108,7 @@ public final class CertificateManagerView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("certificate-manager"));
 
-        HBox row = new HBox(8, genBtn, csrBtn, importBtn, importBundleBtn, exportBtn, deleteBtn,
+        HBox row = new HBox(8, genBtn, csrBtn, importBtn, importBundleBtn, exportBtn, bundleBtn, deleteBtn,
                 new Separator(javafx.geometry.Orientation.VERTICAL), openBtn, saveBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
