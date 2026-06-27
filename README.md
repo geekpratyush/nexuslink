@@ -45,7 +45,7 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Per-user protocol visibility (View ▸ Protocols…) | ✅ Working |
 | Connection profiles / saved connections | 🟡 Persisted + samples (folders/tags/import-export TODO) |
 | Certificate manager (generate, parse, PEM/DER/PKCS12 export, bundle import, CSR, **bundle builder**, expiry watchdog) | ✅ Working |
-| TLS / mTLS for connections (CA trust store + client key store, in the REST client) | ✅ Working (other protocols pending) |
+| TLS / mTLS for connections (CA trust store + client key store) | ✅ Working in REST, WebSocket, gRPC, Kafka (SQL/JDBC pending) |
 | Environment-variable system (`${VAR}` envs, `.env`, secret masking) | ✅ Working (per-view send-path adoption TODO) |
 
 **Protocols**

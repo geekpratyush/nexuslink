@@ -563,6 +563,22 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 38 — TLS/mTLS extended to WebSocket, gRPC, and Kafka (user asked to parallelize).**
+  - Attempted 3 parallel fork agents (worktree-isolated, one per protocol) — a transient **server-side
+    rate limit** cut them off ~32 min in; only the gRPC backend (`GrpcService` netty SslContext + pom)
+    was salvageable. Completed all three integrations directly instead.
+  - **WebSocket** (`WebSocketService`/`WebSocketView`): `wss://` builds a dedicated `HttpClient` with a
+    custom `SSLContext` from `TlsContextFactory`; collapsible TLS/mTLS pane (trust store + client key
+    store + trust-all).
+  - **gRPC** (`GrpcService`/`GrpcView`): TLS targets build a netty client `SslContext` via
+    `GrpcSslContexts` from the trust store (`TrustManagerFactory`) and/or client key store
+    (`KeyManagerFactory`), or `InsecureTrustManagerFactory` for trust-all; `protocol-grpc` now depends on
+    `nexuslink-security`. TLS material section shown when TLS is on.
+  - **Kafka** (`KafkaView`): for SSL/SASL_SSL, `securityProps()` emits `ssl.truststore.*`,
+    `ssl.keystore.*` + `ssl.key.password`, and optional empty `ssl.endpoint.identification.algorithm`
+    (skip hostname check). Backend already accepted an ssl.* prop map.
+  - All reuse the REST client's trust-store/client-key-store UX. **VERIFIED:** full `mvn clean install`
+    **BUILD SUCCESS** (22 modules). _Lesson: spawning many concurrent Opus agents tripped a server rate limit._
 - 2026-06-27: **Session 37 — Certificate Bundle Builder + TLS/mTLS connection material (user-requested).**
   - **Certificate Bundle Builder** (`CertificateBundleDialog`, cert manager **Build Bundle…**): pick certs
     from the store, order them leaf→root, choose a target format — **full-chain PEM** (web servers),
@@ -1022,7 +1038,7 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 37)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 38)
 
 **Where the project stands:** ~53% of tracked tasks done (136 `[x]` · 29 `[-]` · 90 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
@@ -1044,8 +1060,8 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **Extend TLS/mTLS** to the other TLS protocols (WebSocket/gRPC/Kafka/SQL drivers accept an
-   `SSLContext`/`SSLSocketFactory`) reusing `TlsContextFactory`.
+1. **SQL/JDBC TLS** — driver-specific TLS params (Postgres `ssl`/`sslmode`/`sslrootcert`, MySQL
+   `trustCertificateKeyStoreUrl`, etc.) in the SQL view (WebSocket/gRPC/Kafka TLS are now done).
 2. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
    (NTLM, HMAC, custom-script).
 3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
