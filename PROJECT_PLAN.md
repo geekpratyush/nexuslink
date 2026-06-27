@@ -133,11 +133,11 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** browse/read done; local pane + transfer queue + uploads pending |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC + Mongo (power features) + **Redis** + **LDAP** (browse + search) + **SNMP** (v1/v2c GET/WALK) done; SSH + SNMPv3/traps pending |
-| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | ⬜ Not started |
+| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (throughput/error-rate/P50-P95-P99 + live chart) done; tracing/external vaults/native pkg pending |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~51% of tracked tasks complete** (132 done · 29 in-progress · 92 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~52% of tracked tasks complete** (134 done · 29 in-progress · 90 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
@@ -160,7 +160,7 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
 (Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
-✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR**.
+✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

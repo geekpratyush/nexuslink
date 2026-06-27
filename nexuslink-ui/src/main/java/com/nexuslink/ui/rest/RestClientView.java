@@ -616,6 +616,7 @@ public final class RestClientView extends BorderPane {
                     + "\n\nPress F1 → Troubleshooting for common fixes.");
             responseHeaders.clear();
             logger.accept("FAILED — " + resp.errorMessage());
+            com.nexuslink.ui.metrics.Metrics.record("REST", resp.timing().totalMs(), false, 0);
             recordHistory("✖ " + request.getMethod() + " " + request.getUrl()
                     + " — " + resp.errorMessage(), 0, resp.timing().totalMs());
             return;
@@ -631,6 +632,8 @@ public final class RestClientView extends BorderPane {
         responseHeaders.setText(formatHeaders(resp.headers()));
         logger.accept(resp.statusCode() + " " + resp.statusText()
                 + "  " + resp.timing().totalMs() + "ms  " + resp.prettyBytes());
+        com.nexuslink.ui.metrics.Metrics.record("REST", resp.timing().totalMs(),
+                resp.statusClass() < 4, resp.bodyBytes());
         recordHistory(request.getMethod() + " " + request.getUrl()
                 + " → " + resp.statusCode(), resp.statusCode(), resp.timing().totalMs());
     }

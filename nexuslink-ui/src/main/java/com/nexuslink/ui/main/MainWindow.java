@@ -74,9 +74,13 @@ public final class MainWindow {
     private final ProtocolPrefs protocolPrefs = new ProtocolPrefs();
     private final ConnectionStore connectionStore = new ConnectionStore();
     private final EnvironmentService environmentService = new EnvironmentService();
+    private final com.nexuslink.core.metrics.MetricsCollector metricsCollector = new com.nexuslink.core.metrics.MetricsCollector();
     private ConnectionsPanel connectionsPanel;
 
-    { AppContext.get().registerInstance(EnvironmentService.class, environmentService); }
+    {
+        AppContext.get().registerInstance(EnvironmentService.class, environmentService);
+        AppContext.get().registerInstance(com.nexuslink.core.metrics.MetricsCollector.class, metricsCollector);
+    }
 
     public Scene createScene() {
         initHistoryStore();
@@ -170,7 +174,9 @@ public final class MainWindow {
         certManager.setOnAction(e -> openCertManagerTab());
         MenuItem environments = new MenuItem("Environments…");
         environments.setOnAction(e -> openEnvironmentsTab());
-        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager, environments);
+        MenuItem metrics = new MenuItem("Metrics Dashboard…");
+        metrics.setOnAction(e -> openMetricsTab());
+        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager, environments, metrics);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
@@ -457,6 +463,12 @@ public final class MainWindow {
         EnvironmentManagerView view = new EnvironmentManagerView(environmentService);
         view.setLogger(this::log);
         addTab("Environments " + (++newTabCounter), view);
+        return view;
+    }
+
+    private com.nexuslink.ui.metrics.MetricsView openMetricsTab() {
+        com.nexuslink.ui.metrics.MetricsView view = new com.nexuslink.ui.metrics.MetricsView();
+        addTab("Metrics " + (++newTabCounter), view);
         return view;
     }
 

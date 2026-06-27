@@ -115,7 +115,8 @@ public final class HelpService {
             new Object[]{"snmp",               "SNMP Browser",             "Enterprise",      "/com/nexuslink/ui/help/snmp.md",                List.of("mib", "oid", "trap", "walk", "snmpv3")},
             new Object[]{"troubleshooting",    "Troubleshooting",          "General",         "/com/nexuslink/ui/help/troubleshooting.md",     List.of("error", "fix", "problem", "connection refused", "ssl handshake", "timeout", "auth failed")},
             new Object[]{"plugins",            "Plugin Development",       "Advanced",        "/com/nexuslink/ui/help/plugins.md",             List.of("spi", "extension", "custom", "protocol", "plugin api")},
-            new Object[]{"agent",              "AI Agent (MCP tools)",     "AI",              "/com/nexuslink/ui/help/agent.md",               List.of("agent", "mcp", "tool use", "tool calling", "claude", "anthropic", "loop", "tools")}
+            new Object[]{"agent",              "AI Agent (MCP tools)",     "AI",              "/com/nexuslink/ui/help/agent.md",               List.of("agent", "mcp", "tool use", "tool calling", "claude", "anthropic", "loop", "tools")},
+            new Object[]{"metrics",            "Metrics Dashboard",        "General",         "/com/nexuslink/ui/help/metrics.md",             List.of("metrics", "monitoring", "throughput", "latency", "percentile", "p95", "p99", "error rate", "dashboard")}
         );
 
         for (Object[] def : topicDefs) {

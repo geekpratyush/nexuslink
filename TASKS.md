@@ -464,9 +464,12 @@
 ## PHASE 9 — MONITORING, METRICS & POLISH
 
 ### 9.1 Metrics Dashboard
-- [ ] `MetricsCollector` — aggregates per-connection metrics (throughput, latency, errors)
-- [ ] Real-time charts: JavaFX LineChart / AreaChart (update on 1s timer)
-- [ ] P50/P95/P99 histogram
+- [x] `MetricsCollector` — thread-safe per-channel throughput / error-rate / latency aggregation;
+      lifetime totals exact + bounded-window percentiles; pure nearest-rank `percentile` helper
+      (`nexuslink-core/metrics`, **8/8 tests**); registered in `AppContext`, fed by the REST view via `Metrics`
+- [x] `MetricsView` (Tools ▸ Metrics Dashboard…) — live per-channel table + requests/sec LineChart,
+      1s `Timeline` refresh, Reset button; **P50/P95/P99** columns
+- [ ] Per-endpoint breakdown, exportable reports, alerting thresholds
 - [ ] Connection state panel (active/idle/failed counts)
 
 ### 9.2 Distributed Tracing
@@ -553,6 +556,15 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 36 — Monitoring metrics dashboard (Phase 9.1, offline-testable aggregation).**
+  - `MetricsCollector` (`nexuslink-core/metrics`): thread-safe per-channel request metrics — exact
+    lifetime count/errors/bytes/min/max/mean + latency **P50/P95/P99** over a bounded recent-sample
+    window + requests/sec over a trailing window. Pure nearest-rank `percentile` helper. **8/8 tests.**
+  - Registered in `AppContext`; the REST view records each response (latency/success/bytes) via a small
+    `ui.metrics.Metrics` helper (no-op when unregistered). `MetricsView` (**Tools ▸ Metrics Dashboard…**)
+    shows a live per-channel table + a requests/sec LineChart, refreshed by a 1s `Timeline`, with Reset.
+    New **Metrics Dashboard** help topic.
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 22 modules); `MetricsCollectorTest` 8/8.
 - 2026-06-27: **Session 35 — Certificate-manager §1.2 polish (export/import/CSR, all offline round-trips).**
   - `CertificateExporter` (`nexuslink-security/cert`): export a cert as **DER**, a **concatenated PEM
     bundle**, or a **password-protected PKCS#12** keystore (key + chain, or a cert-only trust store).
@@ -988,9 +1000,9 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 35)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 36)
 
-**Where the project stands:** ~51% of tracked tasks done (132 `[x]` · 29 `[-]` · 92 `[ ]`).
+**Where the project stands:** ~52% of tracked tasks done (134 `[x]` · 29 `[-]` · 90 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
