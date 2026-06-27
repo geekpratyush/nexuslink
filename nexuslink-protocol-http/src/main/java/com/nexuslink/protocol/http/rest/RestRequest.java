@@ -44,6 +44,13 @@ public final class RestRequest {
     private String awsSecretKey = "";
     private String awsSessionToken = "";
 
+    // TLS / mTLS (trust store verifies the server; key store presents a client cert for mutual TLS)
+    private String tlsTrustStorePath = "";
+    private String tlsTrustStorePassword = "";
+    private String tlsKeyStorePath = "";
+    private String tlsKeyStorePassword = "";
+    private boolean tlsTrustAll = false;
+
     // Settings
     private int connectTimeoutMs = 10_000;
     private int readTimeoutMs = 30_000;
@@ -112,6 +119,31 @@ public final class RestRequest {
     public String getAwsSessionToken() { return awsSessionToken; }
     public void setAwsSessionToken(String v) { this.awsSessionToken = v; }
 
+    public String getTlsTrustStorePath() { return tlsTrustStorePath; }
+    public void setTlsTrustStorePath(String v) { this.tlsTrustStorePath = v; }
+
+    public String getTlsTrustStorePassword() { return tlsTrustStorePassword; }
+    public void setTlsTrustStorePassword(String v) { this.tlsTrustStorePassword = v; }
+
+    public String getTlsKeyStorePath() { return tlsKeyStorePath; }
+    public void setTlsKeyStorePath(String v) { this.tlsKeyStorePath = v; }
+
+    public String getTlsKeyStorePassword() { return tlsKeyStorePassword; }
+    public void setTlsKeyStorePassword(String v) { this.tlsKeyStorePassword = v; }
+
+    public boolean isTlsTrustAll() { return tlsTrustAll; }
+    public void setTlsTrustAll(boolean v) { this.tlsTrustAll = v; }
+
+    /** Builds the {@link TlsConfig} for this request (empty paths ⇒ JDK default trust). */
+    public com.nexuslink.security.tls.TlsConfig tlsConfig() {
+        return new com.nexuslink.security.tls.TlsConfig(
+                blankToNull(tlsTrustStorePath), tlsTrustStorePassword == null ? null : tlsTrustStorePassword.toCharArray(), null,
+                blankToNull(tlsKeyStorePath), tlsKeyStorePassword == null ? null : tlsKeyStorePassword.toCharArray(), null,
+                tlsTrustAll);
+    }
+
+    private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s; }
+
     public int getConnectTimeoutMs() { return connectTimeoutMs; }
     public void setConnectTimeoutMs(int v) { this.connectTimeoutMs = v; }
 
@@ -159,6 +191,11 @@ public final class RestRequest {
         r.awsAccessKey = fn.apply(awsAccessKey);
         r.awsSecretKey = fn.apply(awsSecretKey);
         r.awsSessionToken = fn.apply(awsSessionToken);
+        r.tlsTrustStorePath = fn.apply(tlsTrustStorePath);
+        r.tlsTrustStorePassword = fn.apply(tlsTrustStorePassword);
+        r.tlsKeyStorePath = fn.apply(tlsKeyStorePath);
+        r.tlsKeyStorePassword = fn.apply(tlsKeyStorePassword);
+        r.tlsTrustAll = tlsTrustAll;
         r.connectTimeoutMs = connectTimeoutMs;
         r.readTimeoutMs = readTimeoutMs;
         r.followRedirects = followRedirects;

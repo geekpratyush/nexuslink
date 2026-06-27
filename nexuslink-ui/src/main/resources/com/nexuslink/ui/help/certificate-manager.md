@@ -39,7 +39,19 @@ The working set lives in memory until you **Save Store…** to a password-protec
 keystore (key entries keep their private keys). Reopen it later with **Open Store…**. JKS
 keystores can also be opened.
 
-## Not yet supported
+## Export, import & bundles
 
-A background expiry watchdog (30/7/1-day alerts), PKCS12/DER export, and CSR generation are
-on the roadmap. TLS is otherwise configured per connection — see **Security & Authentication**.
+- **Export…** writes the selected certificate as **PEM**, **DER**, or a password-protected
+  **PKCS#12** (the format is chosen by the file extension you pick).
+- **Import…** loads a single PEM/DER certificate; **Import Bundle…** loads every entry of a
+  **PKCS#12 / JKS** bundle (cert chains + private keys).
+- **Generate CSR…** makes a key pair + PKCS#10 certificate-signing request to send to a CA.
+- **Build Bundle…** is a guided builder: pick certificates, order them leaf → root, and produce a
+  full-chain PEM, a PKCS#12 with the private key, or a CA trust bundle/store — with on-screen
+  guidance about where each format is used.
+
+## Using certificates to connect (TLS / mTLS)
+
+To trust a private/self-signed server or present a client certificate for mutual TLS, build a
+trust store / client key store here, then point the connection at it in the protocol tab's
+**Settings ▸ TLS / mTLS** section. See **TLS & Mutual TLS (certificates)**.

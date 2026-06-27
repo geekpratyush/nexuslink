@@ -22,11 +22,15 @@ public final class RestExecutionService {
     public RestResponse execute(RestRequest req) {
         long start = System.nanoTime();
         try {
-            HttpClient client = HttpClient.newBuilder()
+            HttpClient.Builder clientBuilder = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofMillis(req.getConnectTimeoutMs()))
                     .followRedirects(req.isFollowRedirects()
-                            ? HttpClient.Redirect.NORMAL : HttpClient.Redirect.NEVER)
-                    .build();
+                            ? HttpClient.Redirect.NORMAL : HttpClient.Redirect.NEVER);
+            // Custom TLS material (CA trust store and/or client cert for mTLS), when configured.
+            if (req.tlsConfig().isCustom()) {
+                clientBuilder.sslContext(com.nexuslink.security.tls.TlsContextFactory.create(req.tlsConfig()));
+            }
+            HttpClient client = clientBuilder.build();
 
             long sendStart = System.nanoTime();
             HttpResponse<String> resp = client.send(buildRequest(req, null),

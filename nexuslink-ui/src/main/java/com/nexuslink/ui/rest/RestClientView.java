@@ -72,6 +72,11 @@ public final class RestClientView extends BorderPane {
     private final TextField awsAccessKey = new TextField();
     private final PasswordField awsSecretKey = new PasswordField();
     private final TextField awsSessionToken = new TextField();
+    private final TextField tlsTrustStore = new TextField();
+    private final PasswordField tlsTrustStorePw = new PasswordField();
+    private final TextField tlsKeyStore = new TextField();
+    private final PasswordField tlsKeyStorePw = new PasswordField();
+    private final CheckBox tlsTrustAll = new CheckBox("Trust all certificates (insecure — testing only)");
     private final TextField connectTimeoutField = new TextField();
     private final TextField readTimeoutField = new TextField();
     private final CheckBox followRedirectsBox = new CheckBox("Follow redirects automatically");
@@ -484,7 +489,47 @@ public final class RestClientView extends BorderPane {
         grid.add(ctLbl, 0, 0); grid.add(connectTimeoutField, 1, 0);
         grid.add(rtLbl, 0, 1); grid.add(readTimeoutField, 1, 1);
         grid.add(followRedirectsBox, 1, 2);
+
+        // ---- TLS / mTLS ----
+        Label tlsHeader = new Label("TLS / mTLS");
+        tlsHeader.getStyleClass().add("sidebar-title");
+        Label tlsHint = new Label("Point at a CA trust store to verify a private/self-signed server, "
+                + "and a client key store (.p12/.jks) to present a client certificate for mutual TLS.");
+        tlsHint.getStyleClass().add("meta-label");
+        tlsHint.setWrapText(true);
+
+        for (TextField f : new TextField[]{tlsTrustStore, tlsKeyStore}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(300); }
+        for (PasswordField f : new PasswordField[]{tlsTrustStorePw, tlsKeyStorePw}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(160); }
+        tlsTrustStore.setPromptText("CA trust store (.p12 / .jks) — verifies the server");
+        tlsKeyStore.setPromptText("client key store (.p12 / .jks) — your client cert for mTLS");
+        tlsTrustStorePw.setPromptText("password");
+        tlsKeyStorePw.setPromptText("password");
+
+        Label tsLbl = new Label("Trust store:");   tsLbl.getStyleClass().add("meta-label");
+        Label ksLbl = new Label("Client key store:"); ksLbl.getStyleClass().add("meta-label");
+
+        grid.add(tlsHeader, 0, 4);
+        grid.add(tlsHint, 0, 5, 3, 1);
+        grid.add(tsLbl, 0, 6); grid.add(new HBox(6, tlsTrustStore, browseStore(tlsTrustStore), tlsTrustStorePw), 1, 6, 2, 1);
+        grid.add(ksLbl, 0, 7); grid.add(new HBox(6, tlsKeyStore, browseStore(tlsKeyStore), tlsKeyStorePw), 1, 7, 2, 1);
+        grid.add(tlsTrustAll, 1, 8, 2, 1);
         return grid;
+    }
+
+    /** A "Browse…" button that fills {@code target} with a chosen keystore file path. */
+    private Button browseStore(TextField target) {
+        Button b = new Button("Browse…");
+        b.getStyleClass().add("btn-secondary");
+        b.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Choose keystore");
+            fc.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter("Keystore", "*.p12", "*.pfx", "*.jks"),
+                    new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+            java.io.File f = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (f != null) target.setText(f.getAbsolutePath());
+        });
+        return b;
     }
 
     private static int parseIntOr(String s, int fallback) {
@@ -602,6 +647,11 @@ public final class RestClientView extends BorderPane {
         request.setAwsAccessKey(awsAccessKey.getText());
         request.setAwsSecretKey(awsSecretKey.getText());
         request.setAwsSessionToken(awsSessionToken.getText());
+        request.setTlsTrustStorePath(tlsTrustStore.getText());
+        request.setTlsTrustStorePassword(tlsTrustStorePw.getText());
+        request.setTlsKeyStorePath(tlsKeyStore.getText());
+        request.setTlsKeyStorePassword(tlsKeyStorePw.getText());
+        request.setTlsTrustAll(tlsTrustAll.isSelected());
         request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
         request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
         request.setFollowRedirects(followRedirectsBox.isSelected());
@@ -670,6 +720,10 @@ public final class RestClientView extends BorderPane {
         root.put("awsRegion", request.getAwsRegion());
         root.put("awsService", request.getAwsService());
         root.put("awsAccessKey", request.getAwsAccessKey());
+        // TLS: persist store paths + trust-all (passwords are re-entered, like other secrets)
+        root.put("tlsTrustStorePath", request.getTlsTrustStorePath());
+        root.put("tlsKeyStorePath", request.getTlsKeyStorePath());
+        root.put("tlsTrustAll", request.isTlsTrustAll());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         return root.toString();
@@ -708,6 +762,9 @@ public final class RestClientView extends BorderPane {
             awsRegion.setText(root.path("awsRegion").asText("us-east-1"));
             awsService.setText(root.path("awsService").asText("execute-api"));
             awsAccessKey.setText(root.path("awsAccessKey").asText(""));
+            tlsTrustStore.setText(root.path("tlsTrustStorePath").asText(""));
+            tlsKeyStore.setText(root.path("tlsKeyStorePath").asText(""));
+            tlsTrustAll.setSelected(root.path("tlsTrustAll").asBoolean(false));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
         } catch (Exception e) {

@@ -21,6 +21,10 @@
             <artifactId>nexuslink-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-security</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>

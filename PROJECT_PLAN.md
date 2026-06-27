@@ -93,7 +93,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **Markdown + Mermaid** | ui | `MarkdownView` (WebView) renders GFM Markdown + Mermaid diagrams; powers Help content and DB **ER diagrams**. |
 | **Help system** | ui | 3-pane searchable dialog (Markdown-rendered), live debounced search, context-sensitive `F1`, tips. |
 | **Credential vault** | security + ui | AES-256-GCM + PBKDF2 (200k); master-password dialog, auto-lock, status-bar lock toggle. Saved-connection secrets stored as vault refs (no plaintext). |
-| **Certificate manager** | security + ui | Generate self-signed RSA/ECDSA, import/export PEM/DER, persist to PKCS12/JKS keystore, colour-coded validity + 30/7/1-day **expiry watchdog**. |
+| **Certificate manager** | security + ui | Generate self-signed RSA/ECDSA, **CSR**, import/export PEM/DER/PKCS12, **PKCS12/JKS bundle import**, guided **bundle builder**, keystore persist, **expiry watchdog**. |
 | **Environment variables** | core + ui | Named `${VAR}` environments (dev/staging/prod) + active selection; resolution active env → `.env` → system env; `${VAR:-default}`/nested/escape; secrets masked in UI + scrubbed from logs. **Resolved at send/connect time in every protocol view.** |
 | **History** | core | SQLite + FTS5 full-text search, favorites, one-click replay. |
 | **REST client** | protocol-http | HTTP/2, params/headers/body/auth tabs, color-coded status, timing, JSON pretty-print. |
@@ -137,7 +137,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~52% of tracked tasks complete** (134 done · 29 in-progress · 90 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~53% of tracked tasks complete** (136 done · 29 in-progress · 90 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
@@ -160,7 +160,7 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
 (Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
-✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)**.
+✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)** · ✅ **cert bundle builder + TLS/mTLS connection material**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

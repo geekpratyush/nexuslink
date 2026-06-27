@@ -26,10 +26,10 @@ workbench you use for REST and Kafka.
 ## Current Status
 
 NexusLink is under active development and **not yet feature-complete** against the full
-specification (`NexusLink_Specification.md`). As of the latest session, roughly **48% of the
-tracked tasks are done** (125 done · 28 in-progress · 100 not started), and the **Phase-1
-foundations are now complete**. `TASKS.md` is the live, phase-by-phase tracker and the source
-of truth; the table below summarizes it.
+specification (`NexusLink_Specification.md`). As of the latest session, roughly **53% of the
+tracked tasks are done** (136 done · 29 in-progress · 90 not started), and **Phase 1 is
+complete**. `TASKS.md` is the live, phase-by-phase tracker and the source of truth; the table
+below summarizes it.
 
 Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
@@ -44,7 +44,8 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Dark/light theming (palette variables, Ctrl+Shift+T) | ✅ Working (font bundling + system auto-detect TODO) |
 | Per-user protocol visibility (View ▸ Protocols…) | ✅ Working |
 | Connection profiles / saved connections | 🟡 Persisted + samples (folders/tags/import-export TODO) |
-| Certificate manager (generate, parse, PEM/DER/PKCS12 export, PKCS12/JKS bundle import, CSR, expiry watchdog) | ✅ Working |
+| Certificate manager (generate, parse, PEM/DER/PKCS12 export, bundle import, CSR, **bundle builder**, expiry watchdog) | ✅ Working |
+| TLS / mTLS for connections (CA trust store + client key store, in the REST client) | ✅ Working (other protocols pending) |
 | Environment-variable system (`${VAR}` envs, `.env`, secret masking) | ✅ Working (per-view send-path adoption TODO) |
 
 **Protocols**
@@ -76,7 +77,8 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
 | Area | Status |
 |------|--------|
-| Metrics dashboard · distributed tracing · team collaboration | ⏳ Not started |
+| Metrics dashboard (throughput / error-rate / P50-P95-P99 + live chart) | ✅ Working (REST feeds it; per-endpoint + export TODO) |
+| Distributed tracing · team collaboration | ⏳ Not started |
 | External secret vaults (HashiCorp/AWS/Azure/CyberArk) | ⏳ Not started |
 | Global code generation SPI (beyond REST) | ⏳ Not started |
 | Native packaging (`jlink` / `jpackage`, auto-update) | ⏳ Not started |

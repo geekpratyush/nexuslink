@@ -116,7 +116,8 @@ public final class HelpService {
             new Object[]{"troubleshooting",    "Troubleshooting",          "General",         "/com/nexuslink/ui/help/troubleshooting.md",     List.of("error", "fix", "problem", "connection refused", "ssl handshake", "timeout", "auth failed")},
             new Object[]{"plugins",            "Plugin Development",       "Advanced",        "/com/nexuslink/ui/help/plugins.md",             List.of("spi", "extension", "custom", "protocol", "plugin api")},
             new Object[]{"agent",              "AI Agent (MCP tools)",     "AI",              "/com/nexuslink/ui/help/agent.md",               List.of("agent", "mcp", "tool use", "tool calling", "claude", "anthropic", "loop", "tools")},
-            new Object[]{"metrics",            "Metrics Dashboard",        "General",         "/com/nexuslink/ui/help/metrics.md",             List.of("metrics", "monitoring", "throughput", "latency", "percentile", "p95", "p99", "error rate", "dashboard")}
+            new Object[]{"metrics",            "Metrics Dashboard",        "General",         "/com/nexuslink/ui/help/metrics.md",             List.of("metrics", "monitoring", "throughput", "latency", "percentile", "p95", "p99", "error rate", "dashboard")},
+            new Object[]{"tls-mtls",           "TLS & Mutual TLS (certs)", "Security",        "/com/nexuslink/ui/help/tls-mtls.md",            List.of("tls", "ssl", "mtls", "mutual tls", "truststore", "keystore", "client cert", "ca", "self-signed", "pkix", "handshake")}
         );
 
         for (Object[] def : topicDefs) {

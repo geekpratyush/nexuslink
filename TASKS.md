@@ -99,6 +99,13 @@
       cert chain + private key, `typeForFileName` autodetect); wired to **Import Bundle…**; _drag-and-drop TODO_
 - [x] `CertificateExporter` — **PEM / DER / PKCS#12-with-password** export (key+chain or cert-only
       trust store); wired to the **Export…** format chooser + **Generate CSR…**. **7/7 round-trip tests**
+- [x] **Certificate Bundle Builder** (`CertificateBundleDialog`) — guided: pick certs, order leaf→root,
+      pick a format (full-chain PEM / PKCS#12-with-key / CA trust bundle PEM / CA trust store PKCS#12)
+      with live guidance, Build & Save. Reachable from the cert manager **Build Bundle…** button
+- [x] **TLS / mTLS context** (`security/tls`: `TlsConfig` + `TlsContextFactory`) — build an `SSLContext`
+      from a CA trust store and/or a client key store (mutual TLS), or trust-all; autodetects JKS/PKCS12.
+      Wired into the **REST** client (Settings ▸ TLS/mTLS: trust-store/key-store browse + passwords +
+      trust-all), applied in `RestExecutionService`. **6/6 tests** incl. real loopback TLS + mTLS handshakes
 - [x] `ExpirationWatchdog` — clock-injectable, side-effect-free `scan()` fires once per 30/7/1-day
       threshold crossing (escalating, never repeating) + once on expiry; daemon `start(interval)` for
       background scanning; listeners + `aliasesNeedingAttention()`. Wired into `CertificateManagerView`
@@ -556,6 +563,21 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 37 — Certificate Bundle Builder + TLS/mTLS connection material (user-requested).**
+  - **Certificate Bundle Builder** (`CertificateBundleDialog`, cert manager **Build Bundle…**): pick certs
+    from the store, order them leaf→root, choose a target format — **full-chain PEM** (web servers),
+    **PKCS#12 with private key** (Java/Windows/client mTLS), **CA trust bundle (PEM)**, or **CA trust
+    store (PKCS#12)** — each with live on-screen guidance about where it's used. Reuses `CertificateExporter`.
+  - **TLS / mTLS material** (`nexuslink-security/tls`): `TlsConfig` (trust store + key store + trust-all,
+    JKS/PKCS12 autodetect) and `TlsContextFactory.create` → an `SSLContext` with a key manager (client
+    cert for mutual TLS) and/or trust manager (CAs to trust) or trust-all. **6/6 tests**, including **real
+    loopback TLS and mTLS handshakes** + an untrusted-server rejection — no live server needed.
+  - Wired into the **REST** client: a **Settings ▸ TLS / mTLS** section (trust-store / client-key-store
+    Browse… + passwords + trust-all checkbox, `${VAR}`-resolved, non-secret paths persisted);
+    `RestExecutionService` builds the `HttpClient` with the custom `SSLContext` when configured.
+    `protocol-http` now depends on `nexuslink-security` (acyclic). New **TLS & Mutual TLS** + updated
+    **Certificate Manager** help topics explain how to get the files and point a connection at them.
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 22 modules); `TlsContextFactoryTest` 6/6.
 - 2026-06-27: **Session 36 — Monitoring metrics dashboard (Phase 9.1, offline-testable aggregation).**
   - `MetricsCollector` (`nexuslink-core/metrics`): thread-safe per-channel request metrics — exact
     lifetime count/errors/bytes/min/max/mean + latency **P50/P95/P99** over a bounded recent-sample
@@ -1000,9 +1022,9 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 36)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 37)
 
-**Where the project stands:** ~52% of tracked tasks done (134 `[x]` · 29 `[-]` · 90 `[ ]`).
+**Where the project stands:** ~53% of tracked tasks done (136 `[x]` · 29 `[-]` · 90 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
@@ -1022,16 +1044,16 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math (P50/P95/P99,
-   throughput, error rate) is unit-testable offline.
+1. **Extend TLS/mTLS** to the other TLS protocols (WebSocket/gRPC/Kafka/SQL drivers accept an
+   `SSLContext`/`SSLSocketFactory`) reusing `TlsContextFactory`.
 2. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
    (NTLM, HMAC, custom-script).
 3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
 4. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB names, trap receiver.
 5. **Code-gen depth** — more languages/clients for the request code generator (pure string output, testable).
 
-_(Done Session 35: cert §1.2 polish — DER/PKCS#12 export + PKCS12/JKS **bundle import** + **CSR
-generation** (`CertificateExporter`/`CertificateImporter`/`generateCsr`, 7/7 round-trips). Session 34: AWS SigV4 + Digest.)_
+_(Done Session 37: Certificate Bundle Builder + TLS/mTLS material (`TlsContextFactory`, 6/6 incl. real
+mTLS handshake) wired into REST. Session 36: metrics dashboard. Session 35: cert export/import/CSR.)_
 
 ### How to resume
 
