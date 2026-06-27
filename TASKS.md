@@ -93,9 +93,12 @@
       key algo+size, sig algo, CA flag, SHA-256 fingerprint) via the JDK `CertificateFactory`;
       `CertificateInfo` carries a VALID/EXPIRING_SOON/EXPIRED/NOT_YET_VALID status
 - [x] `CertificateGenerator` — self-signed **RSA (2048/4096) / ECDSA (P-256/P-384)** with
-      configurable validity + SAN (DNS/IP), BouncyCastle; PEM export of cert or key
-- [-] `CertificateImporter` — PEM/DER **file import** done (`CertificateManagerView`); _PKCS12/JKS bundle import + drag-and-drop TODO_
-- [-] `CertificateExporter` — **PEM export** done; _DER/PKCS12-with-password TODO_
+      configurable validity + SAN (DNS/IP), BouncyCastle; PEM export of cert or key; **PKCS#10 CSR
+      generation** (`generateCsr` → CSR PEM + key, SANs in a requested-extensions attribute)
+- [x] `CertificateImporter` — PEM/DER **file import** + **PKCS12/JKS bundle import** (every alias →
+      cert chain + private key, `typeForFileName` autodetect); wired to **Import Bundle…**; _drag-and-drop TODO_
+- [x] `CertificateExporter` — **PEM / DER / PKCS#12-with-password** export (key+chain or cert-only
+      trust store); wired to the **Export…** format chooser + **Generate CSR…**. **7/7 round-trip tests**
 - [x] `ExpirationWatchdog` — clock-injectable, side-effect-free `scan()` fires once per 30/7/1-day
       threshold crossing (escalating, never repeating) + once on expiry; daemon `start(interval)` for
       background scanning; listeners + `aliasesNeedingAttention()`. Wired into `CertificateManagerView`
@@ -550,6 +553,19 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-27: **Session 35 — Certificate-manager §1.2 polish (export/import/CSR, all offline round-trips).**
+  - `CertificateExporter` (`nexuslink-security/cert`): export a cert as **DER**, a **concatenated PEM
+    bundle**, or a **password-protected PKCS#12** keystore (key + chain, or a cert-only trust store).
+  - `CertificateImporter`: load **PKCS#12 / JKS bundles** — every alias decoded to its leaf cert, full
+    chain, and private key (when present); `typeForFileName` autodetects JKS vs PKCS12.
+  - `CertificateGenerator.generateCsr`: generate a key pair + **PKCS#10 CSR** (PEM), SANs carried in a
+    requested-extensions attribute — what you send a CA to be issued a real certificate.
+  - **7/7 round-trip tests** (`CertificateExportImportTest`), all offline: DER/PEM re-parse to the same
+    cert, PKCS#12 re-loads its key + chain, wrong-password rejected, CSR is well-formed PEM for the subject.
+  - `CertificateManagerView` wired: **Export…** (PEM/DER/PKCS12 chosen by extension, password-prompted for
+    p12), **Import Bundle…** (adds every keystore entry), and **Generate CSR…** (saves the CSR + matching
+    private-key PEM).
+  - **VERIFIED:** full `mvn clean install` **BUILD SUCCESS** (all 22 modules); security module 18/18.
 - 2026-06-27: **Session 34 — REST AWS SigV4 + Digest auth (REST depth, offline-testable signers).**
   - `AwsSigV4Signer` (`nexuslink-protocol-http`): full AWS Signature v4 (canonical request → string-to-sign
     → date/region/service/`aws4_request` signing-key chain → `Authorization` header), plus `X-Amz-Date`
@@ -972,9 +988,9 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 34)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 35)
 
-**Where the project stands:** ~50% of tracked tasks done (130 `[x]` · 31 `[-]` · 92 `[ ]`).
+**Where the project stands:** ~51% of tracked tasks done (132 `[x]` · 29 `[-]` · 92 `[ ]`).
 Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
 **certificate manager**, **environment-variable system**, history, and protocol clients — REST,
 WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
@@ -994,17 +1010,16 @@ is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **Cert-manager §1.2 polish** — DER/PKCS12-with-password export, PKCS12/JKS bundle import + CSR
-   generation (all offline-testable round-trips with the existing BouncyCastle dep).
-2. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math (P50/P95/P99,
-   throughput) is unit-testable offline.
-3. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
+1. **Phase 9 (monitoring)** — `MetricsCollector` + JavaFX charts; the aggregation math (P50/P95/P99,
+   throughput, error rate) is unit-testable offline.
+2. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
    (NTLM, HMAC, custom-script).
-4. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
-5. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB names, trap receiver.
+3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
+4. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB names, trap receiver.
+5. **Code-gen depth** — more languages/clients for the request code generator (pure string output, testable).
 
-_(Done Session 34: REST **AWS SigV4** + **Digest** auth — `AwsSigV4Signer` (vs aws-sig-v4-test-suite) +
-`DigestAuthenticator` (vs RFC 2617), wired into the executor + Auth tab. Session 33: SNMP. Session 32: OAuth2 PKCE.)_
+_(Done Session 35: cert §1.2 polish — DER/PKCS#12 export + PKCS12/JKS **bundle import** + **CSR
+generation** (`CertificateExporter`/`CertificateImporter`/`generateCsr`, 7/7 round-trips). Session 34: AWS SigV4 + Digest.)_
 
 ### How to resume
 

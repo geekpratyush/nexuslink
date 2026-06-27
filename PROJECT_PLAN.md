@@ -125,7 +125,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | Phase | Theme | Status |
 |-------|-------|--------|
 | **0** | Project scaffold (Maven, JPMS, core infra) | ✅ Substantially done |
-| **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ **Complete** — vault (+UI/auto-lock), history, profiles + store + public samples + **`ProfileValidator`**, **certificate manager (+ expiry watchdog)**, **environment-variable system**; only cert export/import polish remains as `[-]` |
+| **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ **Complete** — vault (+UI/auto-lock), history, profiles + store + public samples + **`ProfileValidator`**, **certificate manager** (gen/parse/watchdog + **DER/PKCS12 export, PKCS12/JKS bundle import, CSR**), **environment-variable system** |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (auth: Basic/Bearer/API-key/**OAuth2 client-creds+auth-code-PKCE**/**AWS SigV4**/**Digest**, code-gen), WS, **SSE** done; REST depth (NTLM/HMAC, more viewers) pending |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
@@ -137,7 +137,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~50% of tracked tasks complete** (130 done · 31 in-progress · 92 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~51% of tracked tasks complete** (132 done · 29 in-progress · 92 not started; see `TASKS.md`). **Phase 1 is complete.**
 
 ---
 
@@ -160,7 +160,7 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
 (Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
-✅ **REST AWS SigV4 + Digest auth**.
+✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

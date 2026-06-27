@@ -44,7 +44,7 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Dark/light theming (palette variables, Ctrl+Shift+T) | ✅ Working (font bundling + system auto-detect TODO) |
 | Per-user protocol visibility (View ▸ Protocols…) | ✅ Working |
 | Connection profiles / saved connections | 🟡 Persisted + samples (folders/tags/import-export TODO) |
-| Certificate manager (generate/import/export, PKCS12/JKS, expiry watchdog) | ✅ Working (DER/PKCS12 export + bundle import + CSR TODO) |
+| Certificate manager (generate, parse, PEM/DER/PKCS12 export, PKCS12/JKS bundle import, CSR, expiry watchdog) | ✅ Working |
 | Environment-variable system (`${VAR}` envs, `.env`, secret masking) | ✅ Working (per-view send-path adoption TODO) |
 
 **Protocols**
@@ -135,8 +135,9 @@ See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
   and result stream into a live transcript.
 - **Vault** — AES-256-GCM credential vault with a master-password dialog and 5-min auto-lock;
   saved-connection secrets are stored as vault refs, never plaintext.
-- **Certificate manager** — generate self-signed RSA/ECDSA certs, import/export PEM/DER, persist
-  to a PKCS12/JKS keystore, and get colour-coded 30/7/1-day expiry warnings (expiry watchdog).
+- **Certificate manager** — generate self-signed RSA/ECDSA certs, generate PKCS#10 CSRs, import
+  certs (PEM/DER) and whole PKCS12/JKS bundles, export as PEM/DER/PKCS12, persist to a keystore,
+  and get colour-coded 30/7/1-day expiry warnings (expiry watchdog).
 - **Environment variables** — named `${VAR}` environments (dev/staging/prod), a `.env` file, and
   system-env fallback, with secret values masked in the UI and scrubbed from logs.
 - **History** — every request is persisted (SQLite + full-text search) and replayable.

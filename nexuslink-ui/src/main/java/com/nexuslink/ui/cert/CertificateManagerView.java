@@ -1,6 +1,8 @@
 package com.nexuslink.ui.cert;
 
+import com.nexuslink.security.cert.CertificateExporter;
 import com.nexuslink.security.cert.CertificateGenerator;
+import com.nexuslink.security.cert.CertificateImporter;
 import com.nexuslink.security.cert.CertificateInfo;
 import com.nexuslink.security.cert.CertificateParser;
 import com.nexuslink.security.cert.CertificateStore;
@@ -69,11 +71,19 @@ public final class CertificateManagerView extends BorderPane {
         genBtn.getStyleClass().add("btn-primary");
         genBtn.setOnAction(e -> generateDialog());
 
+        Button csrBtn = new Button("Generate CSR…");
+        csrBtn.getStyleClass().add("btn-secondary");
+        csrBtn.setOnAction(e -> generateCsrDialog());
+
         Button importBtn = new Button("Import…");
         importBtn.getStyleClass().add("btn-secondary");
         importBtn.setOnAction(e -> importCertificate());
 
-        Button exportBtn = new Button("Export PEM…");
+        Button importBundleBtn = new Button("Import Bundle…");
+        importBundleBtn.getStyleClass().add("btn-secondary");
+        importBundleBtn.setOnAction(e -> importBundle());
+
+        Button exportBtn = new Button("Export…");
         exportBtn.getStyleClass().add("btn-secondary");
         exportBtn.setOnAction(e -> exportSelected());
 
@@ -93,7 +103,7 @@ public final class CertificateManagerView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("certificate-manager"));
 
-        HBox row = new HBox(8, genBtn, importBtn, exportBtn, deleteBtn,
+        HBox row = new HBox(8, genBtn, csrBtn, importBtn, importBundleBtn, exportBtn, deleteBtn,
                 new Separator(javafx.geometry.Orientation.VERTICAL), openBtn, saveBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
@@ -292,19 +302,126 @@ public final class CertificateManagerView extends BorderPane {
         String alias = aliasList.getSelectionModel().getSelectedItem();
         if (alias == null) return;
         FileChooser fc = new FileChooser();
-        fc.setTitle("Export Certificate as PEM");
+        fc.setTitle("Export Certificate");
         fc.setInitialFileName(alias + ".pem");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PEM", "*.pem"));
+        fc.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("PEM certificate", "*.pem", "*.crt"),
+                new FileChooser.ExtensionFilter("DER certificate", "*.der", "*.cer"),
+                new FileChooser.ExtensionFilter("PKCS#12 keystore (with key)", "*.p12", "*.pfx"));
         java.io.File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
         if (file == null) return;
+        String name = file.getName().toLowerCase();
         try {
-            String pem = CertificateGenerator.toPem(store.getCertificate(alias));
-            Files.writeString(file.toPath(), pem);
+            X509Certificate cert = store.getCertificate(alias);
+            if (name.endsWith(".der") || name.endsWith(".cer")) {
+                Files.write(file.toPath(), CertificateExporter.toDer(cert));
+            } else if (name.endsWith(".p12") || name.endsWith(".pfx")) {
+                if (!store.hasKey(alias)) { error("Export failed", "'" + alias + "' has no private key — export it as PEM/DER instead."); return; }
+                var pw = passwordPrompt("Export PKCS#12", "Set a password for the keystore:");
+                if (pw.isEmpty()) return;
+                byte[] p12 = CertificateExporter.toPkcs12(alias, store.getKey(alias),
+                        pw.get().toCharArray(), List.of(store.getChain(alias)));
+                Files.write(file.toPath(), p12);
+            } else {
+                Files.writeString(file.toPath(), CertificateGenerator.toPem(cert));
+            }
             logger.accept("Exported '" + alias + "' → " + file.getName());
             statusLabel.setText("Exported '" + alias + "' to " + file.getName());
         } catch (Exception e) {
             error("Export failed", e.getMessage());
         }
+    }
+
+    /** Imports every entry of a PKCS#12 / JKS bundle (cert chains + private keys) into the store. */
+    private void importBundle() {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Import Keystore Bundle (PKCS#12 / JKS)");
+        fc.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Keystore bundle", "*.p12", "*.pfx", "*.jks"),
+                new FileChooser.ExtensionFilter("All files", "*.*"));
+        java.io.File file = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        passwordPrompt("Import Bundle", "Bundle password:").ifPresent(pw -> {
+            try {
+                byte[] data = Files.readAllBytes(file.toPath());
+                String type = CertificateImporter.typeForFileName(file.getName());
+                List<CertificateImporter.Entry> entries = CertificateImporter.load(data, type, pw.toCharArray());
+                int imported = 0;
+                String last = null;
+                for (CertificateImporter.Entry e : entries) {
+                    if (e.certificate() == null) continue;
+                    String base = e.alias() == null || e.alias().isBlank()
+                            ? CertificateParser.toInfo(e.certificate()).commonName() : e.alias();
+                    String alias = uniqueAlias(base);
+                    if (e.hasPrivateKey()) {
+                        store.importKeyPair(alias, e.privateKey(), e.chain().toArray(new X509Certificate[0]));
+                    } else {
+                        store.importCertificate(alias, e.certificate());
+                    }
+                    imported++;
+                    last = alias;
+                }
+                logger.accept("Imported " + imported + " entr" + (imported == 1 ? "y" : "ies")
+                        + " from bundle " + file.getName());
+                refresh();
+                if (last != null) aliasList.getSelectionModel().select(last);
+            } catch (Exception e) {
+                error("Bundle import failed", e.getMessage());
+            }
+        });
+    }
+
+    /** Generates a key pair + PKCS#10 CSR, saving the CSR and the private key as PEM files. */
+    private void generateCsrDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Generate Certificate Signing Request (CSR)");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        TextField cn = new TextField("example.com");
+        TextField org = new TextField("NexusLink");
+        ComboBox<CertificateGenerator.KeyType> keyType = new ComboBox<>();
+        keyType.getItems().addAll(CertificateGenerator.KeyType.values());
+        keyType.setValue(CertificateGenerator.KeyType.RSA_2048);
+        TextField sans = new TextField("example.com, DNS:www.example.com");
+
+        GridPane g = new GridPane();
+        g.setHgap(8); g.setVgap(8); g.setPadding(new Insets(12));
+        g.addRow(0, new Label("Common Name:"), cn);
+        g.addRow(1, new Label("Organization:"), org);
+        g.addRow(2, new Label("Key type:"), keyType);
+        g.addRow(3, new Label("SANs (comma-sep):"), sans);
+        dialog.getDialogPane().setContent(g);
+
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        try {
+            List<String> sanList = java.util.Arrays.stream(sans.getText().split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).toList();
+            var csr = CertificateGenerator.generateCsr(cn.getText().trim(), org.getText().trim(),
+                    keyType.getValue(), sanList);
+
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Save CSR (PEM)");
+            fc.setInitialFileName(safeFile(cn.getText().trim()) + ".csr");
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSR (PEM)", "*.csr", "*.pem"));
+            java.io.File csrFile = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+            if (csrFile == null) return;
+            Files.writeString(csrFile.toPath(), csr.csrPem());
+
+            // Save the matching private key alongside (you need it once the CA returns the cert).
+            java.nio.file.Path keyPath = csrFile.toPath().resolveSibling(safeFile(cn.getText().trim()) + ".key.pem");
+            Files.writeString(keyPath, CertificateGenerator.toPem(csr.privateKey()));
+
+            logger.accept("Generated CSR → " + csrFile.getName() + " (key: " + keyPath.getFileName() + ")");
+            statusLabel.setText("CSR saved to " + csrFile.getName() + "; private key to " + keyPath.getFileName());
+        } catch (Exception e) {
+            error("CSR generation failed", e.getMessage());
+        }
+    }
+
+    private static String safeFile(String name) {
+        String s = name == null || name.isBlank() ? "request" : name.trim();
+        return s.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     private void deleteSelected() {

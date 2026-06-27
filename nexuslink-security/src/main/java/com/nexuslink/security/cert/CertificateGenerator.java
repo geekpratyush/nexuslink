@@ -8,15 +8,20 @@ import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.asn1.x509.ExtensionsGenerator;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 
 import java.io.StringWriter;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
@@ -39,6 +44,9 @@ public final class CertificateGenerator {
 
     /** A freshly generated self-signed certificate plus its private key. */
     public record GeneratedCertificate(X509Certificate certificate, PrivateKey privateKey) {}
+
+    /** A PKCS#10 certificate-signing request (PEM) plus the key pair it was generated for. */
+    public record CsrResult(String csrPem, PrivateKey privateKey, PublicKey publicKey) {}
 
     /**
      * Builds a self-signed certificate.
@@ -79,6 +87,34 @@ public final class CertificateGenerator {
                 .getCertificate(builder.build(signer));
         cert.verify(keyPair.getPublic()); // sanity-check the self-signature
         return new GeneratedCertificate(cert, keyPair.getPrivate());
+    }
+
+    /**
+     * Generates a fresh key pair and a PKCS#10 certificate-signing request (CSR) for it — what you
+     * send to a CA to be issued a certificate. SANs, when given, go into a requested-extensions
+     * attribute. Returns the CSR as PEM ({@code -----BEGIN CERTIFICATE REQUEST-----}) plus the keys.
+     */
+    public static CsrResult generateCsr(String commonName, String org, KeyType keyType,
+                                        List<String> sans) throws Exception {
+        KeyPair keyPair = newKeyPair(keyType);
+
+        StringBuilder dn = new StringBuilder("CN=").append(commonName);
+        if (org != null && !org.isBlank()) dn.append(", O=").append(org);
+        X500Name subject = new X500Name(dn.toString());
+
+        JcaPKCS10CertificationRequestBuilder builder =
+                new JcaPKCS10CertificationRequestBuilder(subject, keyPair.getPublic());
+        if (sans != null && !sans.isEmpty()) {
+            GeneralName[] names = sans.stream().map(CertificateGenerator::toGeneralName).toArray(GeneralName[]::new);
+            ExtensionsGenerator extensions = new ExtensionsGenerator();
+            extensions.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(names));
+            builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensions.generate());
+        }
+
+        String sigAlg = keyType.name().startsWith("RSA") ? "SHA256withRSA" : "SHA256withECDSA";
+        ContentSigner signer = new JcaContentSignerBuilder(sigAlg).build(keyPair.getPrivate());
+        PKCS10CertificationRequest csr = builder.build(signer);
+        return new CsrResult(toPem(csr), keyPair.getPrivate(), keyPair.getPublic());
     }
 
     private static GeneralName toGeneralName(String san) {
