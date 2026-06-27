@@ -5,9 +5,16 @@ import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.util.JsonFormat;
+import com.nexuslink.security.tls.TlsConfig;
+import com.nexuslink.security.tls.TlsContextFactory;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext;
+import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
+import io.grpc.netty.shaded.io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.reflection.v1alpha.ServerReflectionGrpc;
 import io.grpc.reflection.v1alpha.ServerReflectionRequest;
@@ -15,6 +22,12 @@ import io.grpc.reflection.v1alpha.ServerReflectionResponse;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,10 +53,61 @@ public final class GrpcService implements AutoCloseable {
     private final Map<String, Descriptors.FileDescriptor> fdByName = new ConcurrentHashMap<>();
 
     public void connect(String host, int port, boolean tls) {
+        connect(host, port, tls, null);
+    }
+
+    /**
+     * Connects with optional custom TLS material. When {@code tls} is false the channel is plaintext.
+     * When {@code tls} is true and {@code tlsConfig} is {@link TlsConfig#isCustom() custom}, a netty
+     * client SSL context is built from the configured trust store (the CAs to verify the server) and/or
+     * client key store (a client certificate for mutual TLS), or trust-all; otherwise the system default
+     * TLS is used.
+     */
+    public void connect(String host, int port, boolean tls, TlsConfig tlsConfig) {
         close();
-        ManagedChannelBuilder<?> b = ManagedChannelBuilder.forAddress(host, port);
-        if (tls) b.useTransportSecurity(); else b.usePlaintext();
-        channel = b.build();
+        if (!tls) {
+            channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+            return;
+        }
+        if (tlsConfig != null && tlsConfig.isCustom()) {
+            try {
+                channel = NettyChannelBuilder.forAddress(host, port).sslContext(buildSslContext(tlsConfig)).build();
+            } catch (Exception e) {
+                throw new RuntimeException("TLS setup failed: " + e.getMessage(), e);
+            }
+        } else {
+            channel = ManagedChannelBuilder.forAddress(host, port).useTransportSecurity().build();
+        }
+    }
+
+    /** Builds a netty client {@link SslContext} from a {@link TlsConfig}'s key/trust stores. */
+    private static SslContext buildSslContext(TlsConfig cfg) throws Exception {
+        SslContextBuilder builder = GrpcSslContexts.forClient();
+        if (cfg.trustAll()) {
+            builder.trustManager(InsecureTrustManagerFactory.INSTANCE);
+        } else if (cfg.hasTrustStore()) {
+            KeyStore ts = loadStore(cfg.trustStorePath(),
+                    TlsContextFactory.typeFor(cfg.trustStoreType(), cfg.trustStorePath()), cfg.trustStorePassword());
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ts);
+            builder.trustManager(tmf);
+        }
+        if (cfg.hasKeyStore()) {
+            KeyStore ks = loadStore(cfg.keyStorePath(),
+                    TlsContextFactory.typeFor(cfg.keyStoreType(), cfg.keyStorePath()), cfg.keyStorePassword());
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, cfg.keyStorePassword());
+            builder.keyManager(kmf);
+        }
+        return builder.build();
+    }
+
+    private static KeyStore loadStore(String path, String type, char[] password) throws Exception {
+        KeyStore ks = KeyStore.getInstance(type);
+        try (InputStream in = Files.newInputStream(Path.of(path))) {
+            ks.load(in, password);
+        }
+        return ks;
     }
 
     public boolean isConnected() { return channel != null; }

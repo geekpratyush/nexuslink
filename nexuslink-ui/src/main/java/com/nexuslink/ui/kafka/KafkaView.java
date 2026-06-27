@@ -34,6 +34,11 @@ public final class KafkaView extends BorderPane {
     private final ComboBox<String> saslMechCombo = new ComboBox<>();
     private final TextField saslUser = new TextField();
     private final PasswordField saslPass = new PasswordField();
+    private final TextField tlsTrustStore = new TextField();
+    private final PasswordField tlsTrustStorePw = new PasswordField();
+    private final TextField tlsKeyStore = new TextField();
+    private final PasswordField tlsKeyStorePw = new PasswordField();
+    private final CheckBox tlsSkipHostnameCheck = new CheckBox("Skip hostname check");
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
@@ -96,10 +101,39 @@ public final class KafkaView extends BorderPane {
         row2.setAlignment(Pos.CENTER_LEFT);
         row2.setPadding(new Insets(0, 10, 6, 10));
 
+        // TLS material row — relevant for SSL / SASL_SSL; shown only then.
+        for (TextField f : new TextField[]{tlsTrustStore, tlsKeyStore}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(180); }
+        for (PasswordField f : new PasswordField[]{tlsTrustStorePw, tlsKeyStorePw}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(120); }
+        tlsTrustStore.setPromptText("trust store (.p12/.jks)");
+        tlsKeyStore.setPromptText("client key store (.p12/.jks)");
+        tlsTrustStorePw.setPromptText("password");
+        tlsKeyStorePw.setPromptText("password");
+        HBox tlsRow = new HBox(8, label("TLS:"), tlsTrustStore, browseStore(tlsTrustStore), tlsTrustStorePw,
+                tlsKeyStore, browseStore(tlsKeyStore), tlsKeyStorePw, tlsSkipHostnameCheck);
+        tlsRow.setAlignment(Pos.CENTER_LEFT);
+        tlsRow.setPadding(new Insets(0, 10, 6, 10));
+        tlsRow.visibleProperty().bind(protocolCombo.valueProperty().isEqualTo("SSL").or(protocolCombo.valueProperty().isEqualTo("SASL_SSL")));
+        tlsRow.managedProperty().bind(tlsRow.visibleProperty());
+
         statusLabel.getStyleClass().add("meta-label");
         HBox statusRow = new HBox(statusLabel);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
-        return new VBox(row1, row2, statusRow);
+        return new VBox(row1, row2, tlsRow, statusRow);
+    }
+
+    private Button browseStore(TextField target) {
+        Button b = new Button("…");
+        b.getStyleClass().add("btn-secondary");
+        b.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Choose keystore");
+            fc.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter("Keystore", "*.p12", "*.pfx", "*.jks"),
+                    new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+            java.io.File f = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (f != null) target.setText(f.getAbsolutePath());
+        });
+        return b;
     }
 
     private SplitPane buildBody() {
@@ -183,7 +217,31 @@ public final class KafkaView extends BorderPane {
             props.put("sasl.jaas.config", module + " required username=\"" + Env.resolve(saslUser.getText())
                     + "\" password=\"" + Env.resolve(saslPass.getText()) + "\";");
         }
+        // TLS material (applies to SSL / SASL_SSL): CA trust store + optional client key store (mTLS).
+        if (protocol.endsWith("SSL")) {
+            String ts = Env.resolve(tlsTrustStore.getText().trim());
+            if (!ts.isBlank()) {
+                props.put("ssl.truststore.location", ts);
+                props.put("ssl.truststore.type", storeType(ts));
+                if (!tlsTrustStorePw.getText().isEmpty()) props.put("ssl.truststore.password", tlsTrustStorePw.getText());
+            }
+            String ks = Env.resolve(tlsKeyStore.getText().trim());
+            if (!ks.isBlank()) {
+                props.put("ssl.keystore.location", ks);
+                props.put("ssl.keystore.type", storeType(ks));
+                if (!tlsKeyStorePw.getText().isEmpty()) {
+                    props.put("ssl.keystore.password", tlsKeyStorePw.getText());
+                    props.put("ssl.key.password", tlsKeyStorePw.getText());
+                }
+            }
+            if (tlsSkipHostnameCheck.isSelected()) props.put("ssl.endpoint.identification.algorithm", "");
+        }
         return props;
+    }
+
+    /** Kafka keystore type from a file extension ({@code .jks} → JKS, else PKCS12). */
+    private static String storeType(String path) {
+        return path.toLowerCase().endsWith(".jks") ? "JKS" : "PKCS12";
     }
 
     private void connect() {

@@ -18,6 +18,10 @@
             <artifactId>nexuslink-plugin-api</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-security</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.grpc</groupId>
             <artifactId>grpc-netty-shaded</artifactId>
         </dependency>

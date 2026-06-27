@@ -21,6 +21,12 @@ public final class WebSocketView extends BorderPane {
 
     private final WebSocketService service = new WebSocketService();
     private final TextField urlField = new TextField("wss://echo.websocket.events");
+    private final TextField tlsTrustStore = new TextField();
+    private final PasswordField tlsTrustStorePw = new PasswordField();
+    private final TextField tlsKeyStore = new TextField();
+    private final PasswordField tlsKeyStorePw = new PasswordField();
+    private final CheckBox tlsTrustAll = new CheckBox("Trust all certificates (insecure)");
+    private final TitledPane tlsPane = new TitledPane();
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Disconnected");
     private final TextArea messageLog = new TextArea();
@@ -66,8 +72,58 @@ public final class WebSocketView extends BorderPane {
         statusLabel.getStyleClass().add("meta-label");
         HBox statusRow = new HBox(statusLabel);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
-        return new VBox(row, statusRow);
+        return new VBox(row, buildTlsPane(), statusRow);
     }
+
+    /** A collapsible TLS / mTLS section (for {@code wss://} servers with private CAs or client certs). */
+    private TitledPane buildTlsPane() {
+        for (TextField f : new TextField[]{tlsTrustStore, tlsKeyStore}) { f.getStyleClass().add("nl-field"); HBox.setHgrow(f, Priority.ALWAYS); }
+        for (PasswordField f : new PasswordField[]{tlsTrustStorePw, tlsKeyStorePw}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(140); }
+        tlsTrustStore.setPromptText("CA trust store (.p12/.jks) — verifies the server");
+        tlsKeyStore.setPromptText("client key store (.p12/.jks) — for mutual TLS");
+        tlsTrustStorePw.setPromptText("password");
+        tlsKeyStorePw.setPromptText("password");
+        Label tsl = new Label("Trust store:"); tsl.getStyleClass().add("meta-label");
+        Label ksl = new Label("Client key store:"); ksl.getStyleClass().add("meta-label");
+        HBox tsRow = new HBox(8, tsl, tlsTrustStore, browseStore(tlsTrustStore), tlsTrustStorePw);
+        HBox ksRow = new HBox(8, ksl, tlsKeyStore, browseStore(tlsKeyStore), tlsKeyStorePw);
+        tsRow.setAlignment(Pos.CENTER_LEFT); ksRow.setAlignment(Pos.CENTER_LEFT);
+        VBox content = new VBox(6, tsRow, ksRow, tlsTrustAll);
+        content.setPadding(new Insets(6, 10, 6, 10));
+        tlsPane.setText("TLS / mTLS (for wss:// with a private CA or client cert)");
+        tlsPane.setContent(content);
+        tlsPane.setExpanded(false);
+        return tlsPane;
+    }
+
+    private Button browseStore(TextField target) {
+        Button b = new Button("Browse…");
+        b.getStyleClass().add("btn-secondary");
+        b.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Choose keystore");
+            fc.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter("Keystore", "*.p12", "*.pfx", "*.jks"),
+                    new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+            java.io.File f = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (f != null) target.setText(f.getAbsolutePath());
+        });
+        return b;
+    }
+
+    private com.nexuslink.security.tls.TlsConfig tlsConfig() {
+        return new com.nexuslink.security.tls.TlsConfig(
+                blankToNull(com.nexuslink.ui.env.Env.resolve(tlsTrustStore.getText().trim())), pw(tlsTrustStorePw), null,
+                blankToNull(com.nexuslink.ui.env.Env.resolve(tlsKeyStore.getText().trim())), pw(tlsKeyStorePw), null,
+                tlsTrustAll.isSelected());
+    }
+
+    private static char[] pw(PasswordField f) {
+        String t = f.getText();
+        return t == null || t.isEmpty() ? null : t.toCharArray();
+    }
+
+    private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s; }
 
     private VBox buildLog() {
         messageLog.getStyleClass().add("code-area");
@@ -105,7 +161,7 @@ public final class WebSocketView extends BorderPane {
         connectBtn.setDisable(true);
         logger.accept("WS connect → " + url);
 
-        service.connect(url, new WebSocketService.Listener() {
+        service.connect(url, new WebSocketService.Listener() { // (TLS config passed below)
             @Override public void onOpen() {
                 Platform.runLater(() -> {
                     connected = true;
@@ -144,7 +200,7 @@ public final class WebSocketView extends BorderPane {
                     logger.accept("WS error: " + error.getMessage());
                 });
             }
-        });
+        }, url.toLowerCase().startsWith("wss") ? tlsConfig() : null);
     }
 
     private void send() {

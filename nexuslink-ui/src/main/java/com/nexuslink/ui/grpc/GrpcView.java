@@ -28,6 +28,13 @@ public final class GrpcView extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
+    // TLS / mTLS material (shown when TLS is enabled)
+    private final TextField tlsTrustStore = new TextField();
+    private final PasswordField tlsTrustStorePw = new PasswordField();
+    private final TextField tlsKeyStore = new TextField();
+    private final PasswordField tlsKeyStorePw = new PasswordField();
+    private final CheckBox tlsTrustAll = new CheckBox("Trust all certificates (insecure)");
+
     private final ComboBox<String> serviceCombo = new ComboBox<>();
     private final ComboBox<GrpcService.MethodInfo> methodCombo = new ComboBox<>();
     private final TextArea requestEditor = new TextArea();
@@ -81,8 +88,56 @@ public final class GrpcView extends BorderPane {
         statusLabel.getStyleClass().add("meta-label");
         HBox statusRow = new HBox(statusLabel);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
-        return new VBox(row, statusRow);
+
+        // TLS / mTLS material — only relevant when TLS is on.
+        for (TextField f : new TextField[]{tlsTrustStore, tlsKeyStore}) { f.getStyleClass().add("nl-field"); HBox.setHgrow(f, Priority.ALWAYS); }
+        for (PasswordField f : new PasswordField[]{tlsTrustStorePw, tlsKeyStorePw}) { f.getStyleClass().add("nl-field"); f.setPrefWidth(140); }
+        tlsTrustStore.setPromptText("CA trust store (.p12/.jks) — verifies the server");
+        tlsKeyStore.setPromptText("client key store (.p12/.jks) — for mutual TLS");
+        tlsTrustStorePw.setPromptText("password");
+        tlsKeyStorePw.setPromptText("password");
+        Label tsl = new Label("Trust store:"); tsl.getStyleClass().add("meta-label");
+        Label ksl = new Label("Client key store:"); ksl.getStyleClass().add("meta-label");
+        HBox tsRow = new HBox(8, tsl, tlsTrustStore, browseStore(tlsTrustStore), tlsTrustStorePw);
+        HBox ksRow = new HBox(8, ksl, tlsKeyStore, browseStore(tlsKeyStore), tlsKeyStorePw);
+        tsRow.setAlignment(Pos.CENTER_LEFT); ksRow.setAlignment(Pos.CENTER_LEFT);
+        VBox tlsBoxPane = new VBox(6, tsRow, ksRow, tlsTrustAll);
+        tlsBoxPane.setPadding(new Insets(0, 10, 6, 10));
+        tlsBoxPane.visibleProperty().bind(tlsBox.selectedProperty());
+        tlsBoxPane.managedProperty().bind(tlsBox.selectedProperty());
+        return new VBox(row, tlsBoxPane, statusRow);
     }
+
+    /** A "Browse…" button that fills {@code target} with a chosen keystore file path. */
+    private Button browseStore(TextField target) {
+        Button b = new Button("Browse…");
+        b.getStyleClass().add("btn-secondary");
+        b.setOnAction(e -> {
+            javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+            fc.setTitle("Choose keystore");
+            fc.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter("Keystore", "*.p12", "*.pfx", "*.jks"),
+                    new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+            java.io.File f = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (f != null) target.setText(f.getAbsolutePath());
+        });
+        return b;
+    }
+
+    /** Builds a {@link com.nexuslink.security.tls.TlsConfig} from the TLS fields (paths ${VAR}-resolved). */
+    private com.nexuslink.security.tls.TlsConfig tlsConfig() {
+        return new com.nexuslink.security.tls.TlsConfig(
+                blankToNull(Env.resolve(tlsTrustStore.getText().trim())), pw(tlsTrustStorePw), null,
+                blankToNull(Env.resolve(tlsKeyStore.getText().trim())), pw(tlsKeyStorePw), null,
+                tlsTrustAll.isSelected());
+    }
+
+    private static char[] pw(PasswordField f) {
+        String t = f.getText();
+        return t == null || t.isEmpty() ? null : t.toCharArray();
+    }
+
+    private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s; }
 
     private SplitPane buildBody() {
         serviceCombo.setMaxWidth(Double.MAX_VALUE);
@@ -139,7 +194,7 @@ public final class GrpcView extends BorderPane {
         logger.accept("gRPC connect → " + host + ":" + port);
         Task<List<String>> task = new Task<>() {
             @Override protected List<String> call() throws Exception {
-                service.connect(host, port, tlsBox.isSelected());
+                service.connect(host, port, tlsBox.isSelected(), tlsBox.isSelected() ? tlsConfig() : null);
                 return service.listServices();
             }
         };

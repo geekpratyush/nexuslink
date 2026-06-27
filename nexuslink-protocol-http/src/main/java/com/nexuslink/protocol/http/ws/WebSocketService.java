@@ -1,5 +1,8 @@
 package com.nexuslink.protocol.http.ws;
 
+import com.nexuslink.security.tls.TlsConfig;
+import com.nexuslink.security.tls.TlsContextFactory;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -31,7 +34,25 @@ public final class WebSocketService {
 
     /** Asynchronously opens a connection to {@code url}. */
     public void connect(String url, Listener listener) {
-        http.newWebSocketBuilder()
+        connect(url, listener, null);
+    }
+
+    /**
+     * Opens a connection with optional custom TLS material. For {@code wss://} URLs a {@code tls}
+     * config with a trust store (CAs to verify the server), a client key store (mutual TLS), or
+     * trust-all builds a dedicated {@code HttpClient}; otherwise the shared default client is used.
+     */
+    public void connect(String url, Listener listener, TlsConfig tls) {
+        final HttpClient client;
+        try {
+            client = (tls != null && tls.isCustom())
+                    ? HttpClient.newBuilder().sslContext(TlsContextFactory.create(tls)).build()
+                    : http;
+        } catch (Exception e) {
+            listener.onError(e);
+            return;
+        }
+        client.newWebSocketBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .buildAsync(URI.create(url), new Adapter(listener))
                 .whenComplete((ws, err) -> {
