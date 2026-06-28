@@ -278,7 +278,10 @@
 ### 4.5 Message Browser
 - [ ] Poll-based browser (no consumer group side effects)
 - [ ] Filters: offset range, timestamp range, key contains, value contains, header filter
-- [ ] Export selected messages as JSON/CSV
+- [x] Export selected messages as JSON/CSV — consume panel upgraded to a multi-select `TableView`
+      (time/partition/offset/key/value, bounded at 10k rows); **Export JSON/CSV** writes selected rows
+      (or all when none selected) via FileChooser. `KafkaMessageExporter` (protocol-kafka, hand-rolled
+      RFC 8259 JSON + RFC 4180 CSV, no new deps) — 6 tests
 
 ### 4.6 Consumer Group Monitor
 - [ ] `ConsumerLagService` — polls AdminClient on 5s interval (Caffeine cache)

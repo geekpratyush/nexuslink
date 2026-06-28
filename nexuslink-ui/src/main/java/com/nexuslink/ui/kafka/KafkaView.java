@@ -2,19 +2,31 @@ package com.nexuslink.ui.kafka;
 
 import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
+import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaService;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.time.Instant;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -52,6 +64,11 @@ public final class KafkaView extends BorderPane {
     private final CheckBox fromBeginning = new CheckBox("From beginning");
     private final ToggleButton consumeToggle = new ToggleButton("Start consuming");
     private final TextArea consumeLog = new TextArea();
+    private final ObservableList<KafkaService.KafkaMessage> consumedMessages = FXCollections.observableArrayList();
+    private final TableView<KafkaService.KafkaMessage> messageTable = new TableView<>(consumedMessages);
+
+    /** Cap on retained consumed messages so a long-running stream stays bounded. */
+    private static final int MAX_MESSAGES = 10_000;
 
     private Consumer<String> logger = s -> {};
 
@@ -183,19 +200,79 @@ public final class KafkaView extends BorderPane {
         consumeGroup.setPromptText("group (optional)");
         consumeLog.getStyleClass().add("code-area");
         consumeLog.setEditable(false);
-        consumeLog.setPromptText("Consumed records appear here…");
+        consumeLog.setPrefRowCount(3);
+        consumeLog.setPromptText("Status messages appear here…");
         consumeToggle.getStyleClass().add("btn-primary");
         consumeToggle.setOnAction(e -> toggleConsume());
+
+        buildMessageTable();
+
+        Button exportJson = new Button("Export JSON…");
+        exportJson.getStyleClass().add("btn-secondary");
+        exportJson.setOnAction(e -> exportMessages(true));
+        Button exportCsv = new Button("Export CSV…");
+        exportCsv.getStyleClass().add("btn-secondary");
+        exportCsv.setOnAction(e -> exportMessages(false));
         Button clear = new Button("Clear");
         clear.getStyleClass().add("btn-secondary");
-        clear.setOnAction(e -> consumeLog.clear());
+        clear.setOnAction(e -> { consumedMessages.clear(); consumeLog.clear(); });
 
-        HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup, fromBeginning, consumeToggle, clear);
+        HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup,
+                fromBeginning, consumeToggle, exportJson, exportCsv, clear);
         top.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, top, consumeLog);
+        VBox box = new VBox(8, top, messageTable, consumeLog);
         box.setPadding(new Insets(8));
-        VBox.setVgrow(consumeLog, Priority.ALWAYS);
+        VBox.setVgrow(messageTable, Priority.ALWAYS);
         return box;
+    }
+
+    private void buildMessageTable() {
+        messageTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        messageTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        messageTable.setPlaceholder(new Label("Consumed records appear here. Start consuming to populate."));
+
+        TableColumn<KafkaService.KafkaMessage, String> time = new TableColumn<>("Time");
+        time.setCellValueFactory(c -> new SimpleStringProperty(Instant.ofEpochMilli(c.getValue().timestamp())
+                .atZone(ZoneId.systemDefault()).toLocalTime().format(TIME)));
+        time.setMaxWidth(120);
+        TableColumn<KafkaService.KafkaMessage, Number> part = new TableColumn<>("Partition");
+        part.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().partition()));
+        part.setMaxWidth(90);
+        TableColumn<KafkaService.KafkaMessage, Number> off = new TableColumn<>("Offset");
+        off.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().offset()));
+        off.setMaxWidth(110);
+        TableColumn<KafkaService.KafkaMessage, String> key = new TableColumn<>("Key");
+        key.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().key()));
+        key.setMaxWidth(160);
+        TableColumn<KafkaService.KafkaMessage, String> value = new TableColumn<>("Value");
+        value.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().value()));
+
+        messageTable.getColumns().addAll(List.of(time, part, off, key, value));
+    }
+
+    /** Exports selected rows (or all when none selected) to a JSON or CSV file. */
+    private void exportMessages(boolean asJson) {
+        var selected = messageTable.getSelectionModel().getSelectedItems();
+        List<KafkaService.KafkaMessage> toExport = selected.isEmpty()
+                ? List.copyOf(consumedMessages) : List.copyOf(selected);
+        if (toExport.isEmpty()) { logger.accept("Kafka export: no messages to export."); return; }
+
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Export consumed messages");
+        String ext = asJson ? "json" : "csv";
+        fc.setInitialFileName("kafka-messages." + ext);
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(ext.toUpperCase() + " files", "*." + ext));
+        File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+
+        String content = asJson
+                ? KafkaMessageExporter.toJson(toExport) : KafkaMessageExporter.toCsv(toExport);
+        try {
+            Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+            logger.accept("Kafka export: wrote " + toExport.size() + " message(s) to " + file.getName());
+        } catch (Exception ex) {
+            logger.accept("Kafka export FAILED: " + ex.getMessage());
+        }
     }
 
     private Label label(String text) {
@@ -307,8 +384,10 @@ public final class KafkaView extends BorderPane {
             service.startConsuming(topic, Env.resolve(consumeGroup.getText().trim()), fromBeginning.isSelected(),
                     new KafkaService.MessageListener() {
                         @Override public void onMessage(KafkaService.KafkaMessage m) {
-                            Platform.runLater(() -> append("◀ p" + m.partition() + "@" + m.offset()
-                                    + (m.key() == null ? "" : " [" + m.key() + "]") + "  " + m.value()));
+                            Platform.runLater(() -> {
+                                consumedMessages.add(m);
+                                if (consumedMessages.size() > MAX_MESSAGES) consumedMessages.remove(0);
+                            });
                         }
                         @Override public void onError(Throwable t) {
                             Platform.runLater(() -> append("⚠ " + t.getMessage()));
