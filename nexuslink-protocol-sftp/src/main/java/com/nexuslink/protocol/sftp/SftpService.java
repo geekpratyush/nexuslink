@@ -6,10 +6,13 @@ import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * SFTP client over Apache MINA SSHD. Connect with host/port + password (or an SSH private key),
@@ -77,6 +80,82 @@ public final class SftpService implements AutoCloseable {
             return new String(buf, java.nio.charset.StandardCharsets.UTF_8);
         }
     }
+
+    /** Downloads a remote file to a local path, reporting bytes transferred to {@code progress}. */
+    public void download(String remotePath, Path localTarget, LongConsumer progress) throws Exception {
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        try (InputStream in = sftp.read(remotePath);
+             OutputStream out = Files.newOutputStream(localTarget)) {
+            copy(in, out, progress);
+        }
+    }
+
+    /** Uploads a local file to a remote path, reporting bytes transferred to {@code progress}. */
+    public void upload(Path localSource, String remotePath, LongConsumer progress) throws Exception {
+        try (InputStream in = Files.newInputStream(localSource);
+             OutputStream out = sftp.write(remotePath)) {
+            copy(in, out, progress);
+        }
+    }
+
+    private static void copy(InputStream in, OutputStream out, LongConsumer progress) throws Exception {
+        byte[] buf = new byte[64 * 1024];
+        long total = 0;
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+            total += n;
+            if (progress != null) progress.accept(total);
+        }
+    }
+
+    /** Creates a remote directory. */
+    public void mkdir(String path) throws Exception { sftp.mkdir(path); }
+
+    /** Renames (or moves) a remote file or directory. */
+    public void rename(String from, String to) throws Exception { sftp.rename(from, to); }
+
+    /** Removes a remote file. */
+    public void deleteFile(String path) throws Exception { sftp.remove(path); }
+
+    /** Removes a remote directory (must be empty). */
+    public void deleteDir(String path) throws Exception { sftp.rmdir(path); }
+
+    /** Recursively removes a remote file or directory tree. */
+    public void deleteRecursive(String path) throws Exception {
+        SftpClient.Attributes a = sftp.stat(path);
+        if (a.isDirectory()) {
+            for (SftpEntry child : list(path)) deleteRecursive(child.path());
+            sftp.rmdir(path);
+        } else {
+            sftp.remove(path);
+        }
+    }
+
+    /** Changes the POSIX permission bits (e.g. {@code 0644}) of a remote file. */
+    public void chmod(String path, int octalPermissions) throws Exception {
+        SftpClient.Attributes attrs = new SftpClient.Attributes();
+        attrs.setPermissions(octalPermissions);
+        sftp.setStat(path, attrs);
+    }
+
+    /** Resolves the remote working directory (the user's home), falling back to {@code /}. */
+    public String home() throws Exception {
+        try { return sftp.canonicalPath("."); }
+        catch (Exception e) { return "/"; }
+    }
+
+    /** Returns the absolute, canonical form of a remote path. */
+    public String canonical(String path) throws Exception { return sftp.canonicalPath(path); }
+
+    /** Parses an octal-permission string like {@code "0644"} or {@code "644"} into bits. */
+    public static int parseOctal(String text) {
+        String t = text == null ? "" : text.trim();
+        return t.isEmpty() ? 0 : Integer.parseInt(t, 8);
+    }
+
+    /** Renders the low 9 permission bits as an {@code rwxr-xr-x}-style string. */
+    public static String rwxString(int perms) { return permString(perms).substring(1); }
 
     private static String permString(int perms) {
         char[] s = "----------".toCharArray();

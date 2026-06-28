@@ -1,9 +1,9 @@
 package com.nexuslink.ui.ftp;
 
-import com.nexuslink.protocol.ftp.FtpExplorer;
 import com.nexuslink.protocol.ftp.FtpService;
 import com.nexuslink.ui.env.Env;
-import com.nexuslink.ui.explorer.ResourceExplorerView;
+import com.nexuslink.ui.files.DualPaneBrowser;
+import com.nexuslink.ui.files.LocalFileSystem;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -14,12 +14,12 @@ import java.util.function.Consumer;
 
 /**
  * FTP / FTPS client tab — connect with host/port + username/password (anonymous supported) and
- * browse the remote filesystem as a lazily-loaded directory tree.
+ * manage files through a WinSCP/MobaXterm-style two-pane commander: the local disk on the left, the
+ * remote server on the right, with upload/download, new-folder, rename and delete.
  */
 public final class FtpView extends BorderPane {
 
     private final FtpService service = new FtpService();
-    private final ResourceExplorerView explorer = new ResourceExplorerView("Remote files");
 
     private final TextField hostField = new TextField("test.rebex.net");
     private final TextField portField = new TextField("21");
@@ -28,20 +28,33 @@ public final class FtpView extends BorderPane {
     private final CheckBox passiveBox = new CheckBox("Passive");
     private final CheckBox tlsBox = new CheckBox("FTPS");
     private final Button connectBtn = new Button("Connect");
+    private final Button disconnectBtn = new Button("Disconnect");
     private final Label statusLabel = new Label("Not connected");
+    private final StackPane bodyHost = new StackPane(placeholder());
 
+    private DualPaneBrowser browser;
     private Consumer<String> logger = s -> {};
 
     public FtpView() {
         getStyleClass().add("ftp-view");
         passiveBox.setSelected(true);
         setTop(buildBar());
-        setCenter(explorer);
+        setCenter(bodyHost);
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
-        explorer.setLogger(this.logger);
+    }
+
+    private Label placeholder() {
+        Label l = new Label("Connect to an FTP/FTPS server to manage files.\n\n"
+                + "Once connected you get a two-pane file manager:\n"
+                + "   • Local files on the left, remote files on the right\n"
+                + "   • Upload → / ← Download, double-click a file to transfer\n"
+                + "   • New Folder, Rename (F2) and Delete (Del)");
+        l.getStyleClass().add("meta-label");
+        l.setAlignment(Pos.CENTER);
+        return l;
     }
 
     /** Pre-fills connection details (used when opening a saved/sample connection). */
@@ -69,13 +82,16 @@ public final class FtpView extends BorderPane {
 
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> connect());
+        disconnectBtn.getStyleClass().add("btn-secondary");
+        disconnectBtn.setDisable(true);
+        disconnectBtn.setOnAction(e -> disconnect());
 
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
         HBox row = new HBox(8, lbl("Host:"), hostField, lbl("Port:"), portField,
-                lbl("User:"), userField, passField, passiveBox, tlsBox, connectBtn, helpBtn);
+                lbl("User:"), userField, passField, passiveBox, tlsBox, connectBtn, disconnectBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -98,19 +114,19 @@ public final class FtpView extends BorderPane {
         String pass = Env.resolve(passField.getText());
         logger.accept("FTP connect → " + user + "@" + host + ":" + port);
 
-        Task<Integer> task = new Task<>() {
-            @Override protected Integer call() throws Exception {
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() throws Exception {
                 service.connect(host, port, user, pass, passiveBox.isSelected(), tlsBox.isSelected());
-                return service.list("/").size();
+                return null;
             }
         };
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Connected — " + task.getValue() + " item(s) in /");
+            statusLabel.setText("Connected — " + user + "@" + host);
             logger.accept("FTP connected");
-            explorer.setExplorer(new FtpExplorer(service, "/"));
-            explorer.load();
+            showBrowser();
             connectBtn.setDisable(false);
+            disconnectBtn.setDisable(false);
         });
         task.setOnFailed(e -> {
             statusLabel.getStyleClass().setAll("status-err");
@@ -121,6 +137,24 @@ public final class FtpView extends BorderPane {
         Thread t = new Thread(task, "ftp-task");
         t.setDaemon(true);
         t.start();
+    }
+
+    private void showBrowser() {
+        FtpFileSystem remote = new FtpFileSystem(service);
+        browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
+        browser.setLogger(logger);
+        bodyHost.getChildren().setAll(browser);
+        browser.start();
+    }
+
+    private void disconnect() {
+        service.close();
+        browser = null;
+        bodyHost.getChildren().setAll(placeholder());
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Not connected");
+        disconnectBtn.setDisable(true);
+        logger.accept("FTP disconnected");
     }
 
     private int parsePort() {

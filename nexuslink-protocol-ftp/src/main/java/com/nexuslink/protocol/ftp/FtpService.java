@@ -7,9 +7,14 @@ import org.apache.commons.net.ftp.FTPReply;
 import org.apache.commons.net.ftp.FTPSClient;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * FTP / FTPS client over Apache Commons Net. Connect with host/port + username/password (anonymous
@@ -71,6 +76,74 @@ public final class FtpService implements AutoCloseable {
         byte[] bytes = out.toByteArray();
         int len = Math.min(bytes.length, maxBytes);
         return new String(bytes, 0, len, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /** The current remote working directory (used as the browser's start path). */
+    public String pwd() throws Exception {
+        String wd = ftp.printWorkingDirectory();
+        return wd == null || wd.isBlank() ? "/" : wd;
+    }
+
+    /** Downloads a remote file to a local path, reporting bytes transferred to {@code progress}. */
+    public void download(String remotePath, Path localTarget, LongConsumer progress) throws Exception {
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        try (InputStream in = ftp.retrieveFileStream(remotePath);
+             OutputStream out = Files.newOutputStream(localTarget)) {
+            if (in == null) throw new IllegalStateException("Server refused download: " + ftp.getReplyString().trim());
+            copy(in, out, progress);
+        }
+        if (!ftp.completePendingCommand()) throw new IllegalStateException("Download did not complete: " + ftp.getReplyString().trim());
+    }
+
+    /** Uploads a local file to a remote path, reporting bytes transferred to {@code progress}. */
+    public void upload(Path localSource, String remotePath, LongConsumer progress) throws Exception {
+        try (InputStream in = Files.newInputStream(localSource);
+             OutputStream out = ftp.storeFileStream(remotePath)) {
+            if (out == null) throw new IllegalStateException("Server refused upload: " + ftp.getReplyString().trim());
+            copy(in, out, progress);
+        }
+        if (!ftp.completePendingCommand()) throw new IllegalStateException("Upload did not complete: " + ftp.getReplyString().trim());
+    }
+
+    private static void copy(InputStream in, OutputStream out, LongConsumer progress) throws Exception {
+        byte[] buf = new byte[64 * 1024];
+        long total = 0;
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+            total += n;
+            if (progress != null) progress.accept(total);
+        }
+    }
+
+    /** Creates a remote directory. */
+    public void mkdir(String path) throws Exception {
+        if (!ftp.makeDirectory(path)) throw new IllegalStateException("mkdir failed: " + ftp.getReplyString().trim());
+    }
+
+    /** Renames (or moves) a remote file or directory. */
+    public void rename(String from, String to) throws Exception {
+        if (!ftp.rename(from, to)) throw new IllegalStateException("rename failed: " + ftp.getReplyString().trim());
+    }
+
+    /** Removes a remote file. */
+    public void deleteFile(String path) throws Exception {
+        if (!ftp.deleteFile(path)) throw new IllegalStateException("delete failed: " + ftp.getReplyString().trim());
+    }
+
+    /** Removes a remote directory (must be empty). */
+    public void deleteDir(String path) throws Exception {
+        if (!ftp.removeDirectory(path)) throw new IllegalStateException("rmdir failed: " + ftp.getReplyString().trim());
+    }
+
+    /** Recursively removes a remote file or directory tree. */
+    public void deleteRecursive(FtpEntry entry) throws Exception {
+        if (entry.directory()) {
+            for (FtpEntry child : list(entry.path())) deleteRecursive(child);
+            deleteDir(entry.path());
+        } else {
+            deleteFile(entry.path());
+        }
     }
 
     @Override
