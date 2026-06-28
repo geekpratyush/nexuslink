@@ -16,13 +16,19 @@ public final class RestCodeGenerator {
     private RestCodeGenerator() {}
 
     /** Supported output targets, in display order. */
-    public enum Language { CURL, PYTHON, JAVASCRIPT, JAVA, POWERSHELL;
+    public enum Language { CURL, PYTHON, JAVASCRIPT, NODE_AXIOS, JAVA, CSHARP, GO, RUST, PHP, RUBY, POWERSHELL;
         public String label() {
             return switch (this) {
                 case CURL -> "cURL";
-                case PYTHON -> "Python";
-                case JAVASCRIPT -> "JavaScript";
-                case JAVA -> "Java";
+                case PYTHON -> "Python (requests)";
+                case JAVASCRIPT -> "JavaScript (fetch)";
+                case NODE_AXIOS -> "Node.js (axios)";
+                case JAVA -> "Java (HttpClient)";
+                case CSHARP -> "C# (HttpClient)";
+                case GO -> "Go (net/http)";
+                case RUST -> "Rust (reqwest)";
+                case PHP -> "PHP (curl)";
+                case RUBY -> "Ruby (net/http)";
                 case POWERSHELL -> "PowerShell";
             };
         }
@@ -33,7 +39,13 @@ public final class RestCodeGenerator {
             case CURL -> curl(r);
             case PYTHON -> python(r);
             case JAVASCRIPT -> javascript(r);
+            case NODE_AXIOS -> nodeAxios(r);
             case JAVA -> java(r);
+            case CSHARP -> csharp(r);
+            case GO -> go(r);
+            case RUST -> rust(r);
+            case PHP -> php(r);
+            case RUBY -> ruby(r);
             case POWERSHELL -> powershell(r);
         };
     }
@@ -132,6 +144,152 @@ public final class RestCodeGenerator {
         if (hasBody(r)) sb.append(" -Body ").append(q(r.getBody()));
         sb.append('\n');
         return sb.toString();
+    }
+
+    // ---- Node.js (axios) ----
+    private static String nodeAxios(RestRequest r) {
+        StringBuilder sb = new StringBuilder("const axios = require('axios');\n\n");
+        sb.append("const res = await axios({\n");
+        sb.append("  method: ").append(q(r.getMethod().toUpperCase())).append(",\n");
+        sb.append("  url: ").append(q(r.requestUri())).append(",\n");
+        sb.append("  headers: {\n");
+        headers(r).forEach((k, v) -> sb.append("    ").append(q(k)).append(": ").append(q(v)).append(",\n"));
+        sb.append("  },\n");
+        if (hasBody(r)) sb.append("  data: ").append(q(r.getBody())).append(",\n");
+        sb.append("});\nconsole.log(res.status);\nconsole.log(res.data);\n");
+        return sb.toString();
+    }
+
+    // ---- C# (System.Net.Http.HttpClient) ----
+    private static String csharp(RestRequest r) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("using System;\n");
+        sb.append("using System.Net.Http;\n");
+        sb.append("using System.Text;\n\n");
+        sb.append("var client = new HttpClient();\n");
+        sb.append("var request = new HttpRequestMessage(new HttpMethod(")
+                .append(q(r.getMethod().toUpperCase())).append("), ").append(q(r.requestUri())).append(");\n");
+        String contentType = null;
+        for (Map.Entry<String, String> e : headers(r).entrySet()) {
+            if (e.getKey().equalsIgnoreCase("Content-Type")) { contentType = e.getValue(); continue; }
+            sb.append("request.Headers.TryAddWithoutValidation(").append(q(e.getKey()))
+                    .append(", ").append(q(e.getValue())).append(");\n");
+        }
+        if (hasBody(r)) {
+            String ct = contentType != null ? contentType
+                    : (r.contentType() != null ? r.contentType() : "text/plain");
+            sb.append("request.Content = new StringContent(").append(q(r.getBody()))
+                    .append(", Encoding.UTF8, ").append(q(ct)).append(");\n");
+        }
+        sb.append("\nvar response = await client.SendAsync(request);\n");
+        sb.append("Console.WriteLine((int)response.StatusCode);\n");
+        sb.append("Console.WriteLine(await response.Content.ReadAsStringAsync());\n");
+        return sb.toString();
+    }
+
+    // ---- Go (net/http) ----
+    private static String go(RestRequest r) {
+        boolean body = hasBody(r);
+        StringBuilder sb = new StringBuilder("package main\n\n");
+        sb.append("import (\n");
+        sb.append("\t\"fmt\"\n");
+        sb.append("\t\"io\"\n");
+        sb.append("\t\"net/http\"\n");
+        if (body) sb.append("\t\"strings\"\n");
+        sb.append(")\n\n");
+        sb.append("func main() {\n");
+        String reqBody = body ? "strings.NewReader(" + q(r.getBody()) + ")" : "nil";
+        if (body) sb.append("\tbody := ").append(reqBody).append("\n");
+        sb.append("\treq, _ := http.NewRequest(").append(q(r.getMethod().toUpperCase()))
+                .append(", ").append(q(r.requestUri())).append(", ").append(body ? "body" : "nil").append(")\n");
+        headers(r).forEach((k, v) -> sb.append("\treq.Header.Set(").append(q(k))
+                .append(", ").append(q(v)).append(")\n"));
+        sb.append("\tresp, err := http.DefaultClient.Do(req)\n");
+        sb.append("\tif err != nil {\n\t\tpanic(err)\n\t}\n");
+        sb.append("\tdefer resp.Body.Close()\n");
+        sb.append("\tdata, _ := io.ReadAll(resp.Body)\n");
+        sb.append("\tfmt.Println(resp.Status)\n");
+        sb.append("\tfmt.Println(string(data))\n");
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    // ---- Rust (reqwest) ----
+    private static String rust(RestRequest r) {
+        StringBuilder sb = new StringBuilder("use reqwest::header::{HeaderMap, HeaderValue};\n\n");
+        sb.append("#[tokio::main]\n");
+        sb.append("async fn main() -> Result<(), Box<dyn std::error::Error>> {\n");
+        sb.append("    let client = reqwest::Client::new();\n");
+        sb.append("    let mut headers = HeaderMap::new();\n");
+        headers(r).forEach((k, v) -> sb.append("    headers.insert(").append(q(k))
+                .append(", HeaderValue::from_static(").append(q(v)).append("));\n"));
+        sb.append("    let res = client\n");
+        sb.append("        .request(reqwest::Method::").append(r.getMethod().toUpperCase())
+                .append(", ").append(q(r.requestUri())).append(")\n");
+        sb.append("        .headers(headers)\n");
+        if (hasBody(r)) sb.append("        .body(").append(q(r.getBody())).append(")\n");
+        sb.append("        .send()\n");
+        sb.append("        .await?;\n");
+        sb.append("    println!(\"{}\", res.status());\n");
+        sb.append("    println!(\"{}\", res.text().await?);\n");
+        sb.append("    Ok(())\n");
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    // ---- PHP (curl) ----
+    private static String php(RestRequest r) {
+        StringBuilder sb = new StringBuilder("<?php\n");
+        sb.append("$ch = curl_init();\n");
+        sb.append("curl_setopt($ch, CURLOPT_URL, ").append(phpQ(r.requestUri())).append(");\n");
+        sb.append("curl_setopt($ch, CURLOPT_CUSTOMREQUEST, ")
+                .append(phpQ(r.getMethod().toUpperCase())).append(");\n");
+        sb.append("curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n");
+        sb.append("curl_setopt($ch, CURLOPT_HTTPHEADER, [\n");
+        headers(r).forEach((k, v) -> sb.append("    ").append(phpQ(k + ": " + v)).append(",\n"));
+        sb.append("]);\n");
+        if (hasBody(r)) sb.append("curl_setopt($ch, CURLOPT_POSTFIELDS, ")
+                .append(phpQ(r.getBody())).append(");\n");
+        sb.append("$response = curl_exec($ch);\n");
+        sb.append("echo curl_getinfo($ch, CURLINFO_HTTP_CODE) . \"\\n\";\n");
+        sb.append("echo $response;\n");
+        sb.append("curl_close($ch);\n");
+        return sb.toString();
+    }
+
+    // ---- Ruby (net/http) ----
+    private static String ruby(RestRequest r) {
+        StringBuilder sb = new StringBuilder("require 'net/http'\nrequire 'uri'\n\n");
+        sb.append("uri = URI(").append(rubyQ(r.requestUri())).append(")\n");
+        sb.append("http = Net::HTTP.new(uri.host, uri.port)\n");
+        sb.append("http.use_ssl = uri.scheme == \"https\"\n\n");
+        sb.append("request = Net::HTTP::").append(rubyMethod(r.getMethod())).append(".new(uri)\n");
+        headers(r).forEach((k, v) -> sb.append("request[").append(rubyQ(k)).append("] = ")
+                .append(rubyQ(v)).append("\n"));
+        if (hasBody(r)) sb.append("request.body = ").append(rubyQ(r.getBody())).append("\n");
+        sb.append("\nresponse = http.request(request)\n");
+        sb.append("puts response.code\n");
+        sb.append("puts response.body\n");
+        return sb.toString();
+    }
+
+    /** Title-cases an HTTP method to the matching {@code Net::HTTP} request class name. */
+    private static String rubyMethod(String m) {
+        String u = m == null ? "" : m.trim().toLowerCase();
+        if (u.isEmpty()) return "Get";
+        return Character.toUpperCase(u.charAt(0)) + u.substring(1);
+    }
+
+    /** PHP double-quoted string literal: escapes backslash, quote, {@code $} and newline. */
+    private static String phpQ(String s) {
+        return '"' + (s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("$", "\\$").replace("\n", "\\n")) + '"';
+    }
+
+    /** Ruby double-quoted string literal: escapes backslash, quote, {@code #} and newline. */
+    private static String rubyQ(String s) {
+        return '"' + (s == null ? "" : s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("#", "\\#").replace("\n", "\\n")) + '"';
     }
 
     private static String q(String s) {

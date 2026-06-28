@@ -1,5 +1,6 @@
 package com.nexuslink.ui.snmp;
 
+import com.nexuslink.protocol.snmp.OidRegistry;
 import com.nexuslink.protocol.snmp.SnmpService;
 import com.nexuslink.ui.env.Env;
 import javafx.beans.property.SimpleStringProperty;
@@ -22,14 +23,17 @@ public final class SnmpView extends BorderPane {
 
     /** Row model for the results table (JavaFX-bean style for PropertyValueFactory). */
     public static final class Row {
+        private final SimpleStringProperty name;
         private final SimpleStringProperty oid;
         private final SimpleStringProperty type;
         private final SimpleStringProperty value;
         Row(SnmpService.VarBind vb) {
+            this.name = new SimpleStringProperty(OidRegistry.nameFor(vb.oid()));   // symbolic MIB name (or numeric)
             this.oid = new SimpleStringProperty(vb.oid());
             this.type = new SimpleStringProperty(vb.type());
             this.value = new SimpleStringProperty(vb.value());
         }
+        public String getName() { return name.get(); }
         public String getOid() { return oid.get(); }
         public String getType() { return type.get(); }
         public String getValue() { return value.get(); }
@@ -99,7 +103,7 @@ public final class SnmpView extends BorderPane {
 
     private VBox buildBody() {
         oidField.getStyleClass().add("nl-field");
-        oidField.setPromptText("OID, e.g. 1.3.6.1.2.1.1.1.0 (sysDescr)");
+        oidField.setPromptText("OID or MIB name, e.g. 1.3.6.1.2.1.1.1.0 or sysDescr.0");
         HBox.setHgrow(oidField, Priority.ALWAYS);
         getBtn.getStyleClass().add("btn-secondary");
         getBtn.setOnAction(e -> doGet());
@@ -108,16 +112,19 @@ public final class SnmpView extends BorderPane {
         HBox opRow = new HBox(8, label("OID:"), oidField, getBtn, walkBtn);
         opRow.setAlignment(Pos.CENTER_LEFT);
 
+        TableColumn<Row, String> nameCol = new TableColumn<>("Name");
+        nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
+        nameCol.setPrefWidth(150);
         TableColumn<Row, String> oidCol = new TableColumn<>("OID");
         oidCol.setCellValueFactory(new PropertyValueFactory<>("oid"));
-        oidCol.setPrefWidth(280);
+        oidCol.setPrefWidth(250);
         TableColumn<Row, String> typeCol = new TableColumn<>("Type");
         typeCol.setCellValueFactory(new PropertyValueFactory<>("type"));
-        typeCol.setPrefWidth(120);
+        typeCol.setPrefWidth(110);
         TableColumn<Row, String> valueCol = new TableColumn<>("Value");
         valueCol.setCellValueFactory(new PropertyValueFactory<>("value"));
-        valueCol.setPrefWidth(360);
-        table.getColumns().addAll(List.of(oidCol, typeCol, valueCol));
+        valueCol.setPrefWidth(330);
+        table.getColumns().addAll(List.of(nameCol, oidCol, typeCol, valueCol));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Label("Open a session, then GET an OID or WALK a subtree."));
         VBox.setVgrow(table, Priority.ALWAYS);
@@ -174,15 +181,24 @@ public final class SnmpView extends BorderPane {
     }
 
     private void doGet() {
-        String oid = Env.resolve(oidField.getText().trim());   // resolve ${VAR} in the OID
+        String oid = resolveOid(oidField.getText().trim());   // resolve ${VAR} + symbolic MIB name
         if (!checkReady(oid)) return;
         runQuery("GET " + oid, () -> service.get(oid));
     }
 
     private void doWalk() {
-        String oid = Env.resolve(oidField.getText().trim());
+        String oid = resolveOid(oidField.getText().trim());
         if (!checkReady(oid)) return;
         runQuery("WALK " + oid, () -> service.walk(oid, 0));
+    }
+
+    /** Resolves {@code ${VAR}} then a symbolic MIB name (e.g. {@code sysDescr.0}) to a numeric OID. */
+    private String resolveOid(String raw) {
+        String resolved = Env.resolve(raw);
+        if (!SnmpService.isValidOid(resolved)) {
+            return OidRegistry.oidFor(resolved).orElse(resolved);   // fall back to the original on miss
+        }
+        return resolved;
     }
 
     private boolean checkReady(String oid) {
