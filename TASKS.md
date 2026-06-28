@@ -463,8 +463,10 @@
 - [x] **LDIF + DN model** — `LdifWriter`/`LdifReader` (RFC 2849: base64 `::`, 76-char folding, multi-entry),
       `Dn`/`Rdn` (RFC 4514 parse/escape, parent/child, normalized equality), `LdapEntry`; 29 tests, offline.
 - [-] `LdapView` — connect bar (host/port/bind/LDAPS), search (base/filter/scope/limit), DN result list +
-      attribute detail; naming contexts pre-fill the base; `${VAR}` in every field.
-      _DIT tree + LDIF import/export buttons (backend ready) + StartTLS TODO_
+      attribute detail; naming contexts pre-fill the base; `${VAR}` in every field. Left pane is now
+      tabbed: **List** + **Tree (DIT)** (hierarchy built from result DNs via `Dn.parent()`/`rdn()`,
+      select-to-show-attributes). **Import/Export LDIF** buttons via `LdifReader`/`LdifWriter` + FileChooser,
+      fully offline (export honors a selected DIT subtree); all file I/O off the FX thread. _StartTLS TODO_
 - [ ] Search dialog (custom filter builder + predefined filters), entry add/modify/delete
 
 ### 8.5 SSH Terminal
