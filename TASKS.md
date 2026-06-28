@@ -82,7 +82,10 @@
 - [x] `VaultStore` — JSON persistence (salt + per-secret ciphertext)
 - [x] `MasterPasswordDialog` — create (confirm + strength hint) / unlock (retry on bad password) (`nexuslink-ui/vault`)
 - [x] `AutoLockService` — built into `VaultSession` (5-min inactivity auto-lock, resets on use; manual Lock/Unlock in Tools menu + status-bar 🔒/🔓 toggle)
-- [ ] `VaultBackupService` — encrypted export/import (VaultStore is the basis)
+- [x] `VaultBackupService` — encrypted, versioned backup export/import over `CredentialVault` crypto:
+      export re-encrypts under a fresh backup passphrase (independent of the master), versioned header
+      (`format`/`version`/`createdAt`); import GCM-tag-verifies (wrong pass or tamper → dedicated checked
+      `VaultBackupException`, never a partial vault); `restoreInto` merges entries honoring `overwriteExisting`. 10 tests
 - [x] Unit tests for encryption round-trip (5/5 pass)
 - [x] **Wire vault into saved connections** — SQL passwords & credentialed Mongo URIs are stored as vault refs (`passwordRef`/`targetRef`), never plaintext in `connections.json`; resolved on open. _REST AuthTab vaulting still TODO._
 
