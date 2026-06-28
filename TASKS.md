@@ -412,7 +412,7 @@
       SQL view has a collapsible **TLS / SSL** pane. 11 tests, offline.
 - [x] `SqlClientView` — SQL editor (Ctrl+Enter), run button, result grid
 - [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
-- [-] Result grid: rendered _(sort/filter/JSON/CSV export TODO)_
+- [x] Result grid: rendered, **sortable** (header click), **live filter** (`SortedList`→`FilteredList`, any-cell case-insensitive), and **Export JSON/CSV** of the displayed rows via FileChooser. `ResultGridExporter` (protocol-db, hand-rolled RFC 8259/4180, no deps) — 8 tests
 - [x] **4/4 unit tests pass** (in-memory SQLite)
 - [x] **ER diagram** — `JdbcService.erDiagramMermaid()` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button renders it in the `MarkdownView`. Unit test covers entities + relationship.
 - [ ] Query history integration (reuse HistoryStore)
@@ -477,7 +477,11 @@
       tabbed: **List** + **Tree (DIT)** (hierarchy built from result DNs via `Dn.parent()`/`rdn()`,
       select-to-show-attributes). **Import/Export LDIF** buttons via `LdifReader`/`LdifWriter` + FileChooser,
       fully offline (export honors a selected DIT subtree); all file I/O off the FX thread. _StartTLS TODO_
-- [ ] Search dialog (custom filter builder + predefined filters), entry add/modify/delete
+- [x] Search dialog (custom filter builder + predefined filters), entry add/modify/delete —
+      `LdapFilterBuilder` (protocol-ldap, RFC 4515 compose + escape, predefined persons/groups/OUs/byUid/
+      byCn, 9 tests) behind a **Build…** filter dialog; `LdapService.addEntry/modifyEntry/deleteEntry`
+      (UnboundID, UI-friendly `Mod`/`ModType`, 4 in-memory-server tests); LdapView Add-child/Modify/Delete
+      via toolbar + context menus on the list and DIT tree, refreshing after each write
 
 ### 8.5 SSH Terminal
 - [ ] `SshTerminalService` — Apache MINA SSHD
