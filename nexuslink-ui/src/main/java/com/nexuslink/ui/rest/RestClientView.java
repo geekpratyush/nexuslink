@@ -60,6 +60,7 @@ public final class RestClientView extends BorderPane {
     private TextArea responseCookies;
     private TextArea responseTests;
     private Tab responseTestsTab;
+    private TimelineView responseTimeline;
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
@@ -640,6 +641,8 @@ public final class RestClientView extends BorderPane {
         responseTests.getStyleClass().add("code-area");
         responseTestsTab = new Tab("Test Results", responseTests);
 
+        responseTimeline = new TimelineView();
+
         TabPane respTabs = new TabPane();
         respTabs.getStyleClass().add("editor-tabs");
         respTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
@@ -647,6 +650,7 @@ public final class RestClientView extends BorderPane {
                 new Tab("Body", responseBody),
                 new Tab("Headers", responseHeaders),
                 new Tab("Cookies", responseCookies),
+                new Tab("Timeline", responseTimeline),
                 responseTestsTab);
 
         BorderPane pane = new BorderPane(respTabs);
@@ -745,6 +749,7 @@ public final class RestClientView extends BorderPane {
     private void renderResponse(RestResponse resp) {
         responseCookies.setText(formatCookies());
         renderTestResults(resp);
+        responseTimeline.setTiming(resp.timing());
         if (resp.failed()) {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("✖ " + resp.errorMessage());

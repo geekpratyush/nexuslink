@@ -227,7 +227,7 @@
   - [-] `BodyViewer` — raw + auto JSON pretty-print done; XML tree/HTML/image/hex TODO
   - [x] `HeadersViewer` — text view _(sortable table TODO)_
   - [x] `CookiesViewer` — `RestExecutionService` owns a per-session `CookieJar`: captures `Set-Cookie` (incl. on the Digest 401 challenge), auto-injects the matching `Cookie` header unless the user set one, toggle via `setCookieJarEnabled`; **Cookies** response tab renders the jar. 3 in-process-server wiring tests (73 total in http module)
-  - [ ] `TimelineViewer` — waterfall chart (DNS/TCP/TLS/Send/Wait/Receive)
+  - [x] `TimelineViewer` — `TimelineView` Canvas waterfall (DNS/Connect/TLS/Waiting/Download bars laid end-to-end, proportional widths + per-phase ms + total); **Timeline** response tab, redraws on resize. Cumulative model already supports the finer DNS/TCP/TLS split when the OkHttp breakdown lands _(JDK client currently fills Waiting+Download)_
   - [x] `TestResultsPanel` — editable **Tests** request tab (`AssertionSpec` rows: type combo + header/JSON-path + expected/min + max) compiles to the `ResponseAssertions` backend; evaluated after every call into a **Test Results** response tab (tab title shows `n/m passed`, ✔/✘ per assertion). Assertions persist in history replay; `${VAR}` resolved in expected values. `AssertionSpec` + 3 tests (76 in http module)
 - [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_
 - [ ] Request history sidebar integration
