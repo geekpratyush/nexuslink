@@ -390,6 +390,54 @@
 - [x] `FtpService` — Apache Commons Net (password/anonymous, passive, FTPS) + **upload/download (progress), mkdir, rename, delete (recursive), pwd**. **Verified live vs. test.rebex.net.**
 - [x] `FtpView` — **same two-pane commander** with drag-and-drop transfers (reuses `com.nexuslink.ui.files`)
 
+### 7.4 File Commander — parity & power features (shared `com.nexuslink.ui.files`)
+> The dual-pane commander, cross-pane drag-and-drop, multi-select, mkdir/rename/delete/chmod and a
+> transfer progress bar already exist (7.1/7.2). These extend it toward WinSCP/MobaXterm parity and
+> apply to **every** file-style connector (SFTP, FTP/FTPS, and later S3/Azure/GCS object storage).
+
+**Layout / always-visible panes**
+- [ ] **Show the LOCAL pane immediately** — before/without a remote connection (WinSCP-style); the remote
+      pane shows a "not connected" state and populates on connect. _(Today `SftpView.showBrowser()` only
+      runs on a successful connect, so with no live server you see a placeholder and **no panels** — the
+      reported gap.)_ Same fix for `FtpView`.
+- [ ] Keep the connect bar **and** the dual pane visible together (don't swap the whole body for a placeholder)
+
+**Per-pane navigation**
+- [ ] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history
+- [ ] Column sort (name/size/modified/permissions) with indicators; remember per-pane sort
+- [ ] Hidden-files toggle; in-pane quick filter/search box
+- [ ] Synchronized browsing — mirror navigation across both panes by relative path
+- [ ] Per-pane status line: item count, selected size, free space
+
+**Transfers**
+- [ ] `TransferQueue` panel — queued/active/done list, per-item progress + **speed & ETA**, pause/resume/
+      retry/cancel, reorder, bandwidth throttle (supersedes the single progress bar; cross-ref 7.1)
+- [ ] **Recursive directory transfers** — upload/download whole folders, not just single files
+- [ ] Conflict resolution on transfer — prompt **skip / overwrite / overwrite-if-newer / rename**, with
+      "apply to all" for batches
+- [ ] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors
+- [ ] Parallel/background transfers (configurable concurrency)
+- [ ] Post-transfer integrity check (size/mtime, optional hash/checksum)
+
+**Drag & drop**
+- [ ] **External DnD** — drag files in from the OS file manager (upload) and out to the desktop (download)
+- [ ] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local
+- [ ] Drop directly onto a **target folder row** (not only the pane's current directory)
+- [ ] Drag-over highlight / drop-target affordance for the above _(cross-pane highlight already done)_
+
+**File operations**
+- [ ] Batch/multi-file rename; duplicate; copy-path
+- [ ] Properties dialog (size, permissions, owner, timestamps)
+- [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
+- [ ] Compare directories (highlight new/changed/missing) — feeds `SyncService` (7.1)
+
+**Sessions & integration**
+- [ ] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session
+- [ ] Norton-Commander keyboard shortcuts (F5 copy · F6 move/rename · F7 mkdir · F8 delete · Tab switches panes)
+- [ ] Embedded SSH terminal alongside SFTP ("Open terminal here") — depends on 8.5 SSH Terminal
+- [ ] SCP transfer mode in addition to SFTP
+- [ ] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) once their upload/put lands (7.3)
+
 ### 7.x Connection-type visibility (per-user)
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
