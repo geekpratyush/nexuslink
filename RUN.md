@@ -24,10 +24,23 @@ mvn -DskipTests install
 ## Run it
 
 ### Option A — Maven plugin (simplest, run in your own terminal)
+
+From the **repo root**, target the app module (the `-am` also rebuilds changed modules first):
+```bash
+mvn -pl nexuslink-app -am javafx:run
+```
+
+Or from inside the app module:
 ```bash
 cd nexuslink-app
 mvn javafx:run
 ```
+
+> **Note:** `javafx:run` only works on the `nexuslink-app` module — that's where the
+> `mainClass` (`com.nexuslink.app.NexusLinkLauncher`) is configured. Running a bare
+> `mvn javafx:run` from the repo root fails with *"mainClass … missing or invalid"*
+> because the goal hits the aggregator `nexuslink-parent` first. Use `-pl nexuslink-app`
+> (above) or `cd nexuslink-app`.
 
 ### Option B — Direct java (most reliable)
 ```bash
