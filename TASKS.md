@@ -46,9 +46,9 @@
 - [x] `AppContext` — singleton DI container (no Spring; hand-rolled)
 - [x] `CaffeineCache` wrapper (`CacheRegion`) — typed, configurable TTL per cache region
 - [x] `CacheRegistry` — all 10 standard cache regions pre-registered
-- [ ] `ApplicationConfig` — Java Preferences API + JSON overlay
+- [x] `ApplicationConfig` — typed get/set (String/int/boolean/double + defaults) over `java.util.prefs.Preferences` + a portable JSON overlay at `~/.nexuslink/settings.json` (load on construct, save on change); tolerates missing/malformed file → defaults; injectable `Path` for tests. 7 tests
 - [-] `ThemeManager` — dark/light toggle + persistence done (`nexuslink-ui/theme`); _system auto-detect TODO_
-- [ ] `SettingsService` — read/write user preferences with defaults
+- [x] `SettingsService` — app-facing layer over `ApplicationConfig`: named typed prefs (theme, connect/read timeouts, last-used dir, telemetry opt-in) with defaults + lightweight `Consumer<String>` change listeners. 5 tests _(UI wiring into Preferences dialog TODO)_
 
 ### 0.3 Plugin API Module (`nexuslink.plugin.api`)
 - [x] `ProtocolConnector` SPI interface
