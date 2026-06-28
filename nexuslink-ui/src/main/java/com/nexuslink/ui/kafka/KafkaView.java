@@ -4,6 +4,7 @@ import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaService;
+import com.nexuslink.protocol.kafka.PayloadFormatter;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
@@ -66,6 +67,7 @@ public final class KafkaView extends BorderPane {
     private final TextArea consumeLog = new TextArea();
     private final ObservableList<KafkaService.KafkaMessage> consumedMessages = FXCollections.observableArrayList();
     private final TableView<KafkaService.KafkaMessage> messageTable = new TableView<>(consumedMessages);
+    private final ComboBox<PayloadFormatter.Format> formatCombo = new ComboBox<>();
 
     /** Cap on retained consumed messages so a long-running stream stays bounded. */
     private static final int MAX_MESSAGES = 10_000;
@@ -217,8 +219,13 @@ public final class KafkaView extends BorderPane {
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> { consumedMessages.clear(); consumeLog.clear(); });
 
+        formatCombo.getItems().addAll(PayloadFormatter.Format.values());
+        formatCombo.setValue(PayloadFormatter.Format.STRING);
+        // Re-render key/value cells through the newly selected formatter (raw data is untouched).
+        formatCombo.valueProperty().addListener((o, a, b) -> messageTable.refresh());
+
         HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup,
-                fromBeginning, consumeToggle, exportJson, exportCsv, clear);
+                fromBeginning, consumeToggle, label("Format:"), formatCombo, exportJson, exportCsv, clear);
         top.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8, top, messageTable, consumeLog);
         box.setPadding(new Insets(8));
@@ -242,10 +249,12 @@ public final class KafkaView extends BorderPane {
         off.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().offset()));
         off.setMaxWidth(110);
         TableColumn<KafkaService.KafkaMessage, String> key = new TableColumn<>("Key");
-        key.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().key()));
+        key.setCellValueFactory(c -> new SimpleStringProperty(
+                PayloadFormatter.format(c.getValue().key(), formatCombo.getValue())));
         key.setMaxWidth(160);
         TableColumn<KafkaService.KafkaMessage, String> value = new TableColumn<>("Value");
-        value.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().value()));
+        value.setCellValueFactory(c -> new SimpleStringProperty(
+                PayloadFormatter.format(c.getValue().value(), formatCombo.getValue())));
 
         messageTable.getColumns().addAll(List.of(time, part, off, key, value));
     }
