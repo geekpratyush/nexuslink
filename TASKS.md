@@ -273,7 +273,9 @@
 ### 4.4 Consumer
 - [x] `KafkaConsumerService` — `KafkaService.startConsuming()` background poll loop (group, earliest/latest, wakeup-stop)
 - [x] Consume panel — topic/group/from-beginning, Start/Stop, live record log (partition/offset/key/value)
-- [ ] Deserializer selector per key/value: String/JSON/Avro/Protobuf/Hex/Base64
+- [-] Deserializer selector per key/value: String/JSON/Hex/Base64 done (`PayloadFormatter`, protocol-kafka,
+      tolerant JSON pretty-printer + hex/base64, 9 tests; **Format** combo in the consume toolbar re-renders
+      the key/value columns, raw values still exported). _Avro/Protobuf (need schema deps) TODO_
 
 ### 4.5 Message Browser
 - [ ] Poll-based browser (no consumer group side effects)
