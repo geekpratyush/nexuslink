@@ -3,6 +3,8 @@ package com.nexuslink.protocol.db;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 /**
  * Universal SQL client over JDBC. Holds a single connection for the session and runs
@@ -19,13 +21,31 @@ public final class JdbcService implements AutoCloseable {
 
     /** Opens a connection. Optional username/password may be blank for embedded DBs. */
     public void connect(String url, String user, String password) throws SQLException {
+        connect(url, user, password, Map.of());
+    }
+
+    /**
+     * Opens a connection with extra driver properties (e.g. the TLS settings produced by
+     * {@link JdbcTlsParams#forDriver}). Username/password are folded into the same property set,
+     * so the call works for embedded DBs (blank user) and TLS-only configs alike.
+     */
+    public void connect(String url, String user, String password, Map<String, String> extraProps)
+            throws SQLException {
         close();
         this.url = url;
-        if (user == null || user.isBlank()) {
+        boolean hasUser = user != null && !user.isBlank();
+        boolean hasProps = extraProps != null && !extraProps.isEmpty();
+        if (!hasUser && !hasProps) {
             this.connection = DriverManager.getConnection(url);
-        } else {
-            this.connection = DriverManager.getConnection(url, user, password);
+            return;
         }
+        Properties props = new Properties();
+        if (hasProps) extraProps.forEach(props::setProperty);
+        if (hasUser) {
+            props.setProperty("user", user);
+            if (password != null) props.setProperty("password", password);
+        }
+        this.connection = DriverManager.getConnection(url, props);
     }
 
     public boolean isConnected() {

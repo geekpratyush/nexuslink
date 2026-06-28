@@ -8,7 +8,10 @@ import com.nexuslink.protocol.db.ExternalDriverLoader;
 import com.nexuslink.protocol.db.JdbcDriverRegistry;
 import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
+import com.nexuslink.protocol.db.JdbcTlsParams;
+import com.nexuslink.protocol.db.JdbcTlsSpec;
 import com.nexuslink.protocol.db.QueryResult;
+import com.nexuslink.protocol.db.SslMode;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
@@ -39,6 +42,16 @@ public final class SqlClientView extends BorderPane {
     private final PasswordField passField = new PasswordField();
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
+
+    // TLS / SSL material (driver-specific params are derived from these at connect time).
+    private final TitledPane tlsPane = new TitledPane();
+    private final ComboBox<SslMode> sslModeCombo = new ComboBox<>();
+    private final TextField caField = new TextField();
+    private final PasswordField caPwField = new PasswordField();
+    private final TextField clientCertField = new TextField();
+    private final TextField clientKeyField = new TextField();
+    private final PasswordField clientPwField = new PasswordField();
+    private final CheckBox trustAllCheck = new CheckBox("Trust any server certificate (no verification — testing only)");
 
     private final ResourceExplorerView explorer = new ResourceExplorerView("Schema");
     private final TextArea sqlEditor = new TextArea();
@@ -149,8 +162,115 @@ public final class SqlClientView extends BorderPane {
         statusLabel.getStyleClass().add("meta-label");
         HBox statusRow = new HBox(statusLabel);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
-        return new VBox(row, statusRow);
+        return new VBox(row, buildTlsPane(), statusRow);
     }
+
+    /**
+     * Collapsible TLS / SSL section. The fields are database-agnostic; at connect time
+     * {@link JdbcTlsParams} translates them into the selected driver's own parameters
+     * (PostgreSQL {@code sslmode}/{@code sslrootcert}, MySQL {@code sslMode}/keystore URLs, …).
+     */
+    private TitledPane buildTlsPane() {
+        sslModeCombo.getItems().setAll(SslMode.values());
+        sslModeCombo.getSelectionModel().select(SslMode.DEFAULT);
+        sslModeCombo.setButtonCell(sslModeCell());
+        sslModeCombo.setCellFactory(lv -> sslModeCell());
+
+        for (TextField f : new TextField[]{caField, clientCertField, clientKeyField}) {
+            f.getStyleClass().add("nl-field");
+            HBox.setHgrow(f, Priority.ALWAYS);
+        }
+        for (PasswordField f : new PasswordField[]{caPwField, clientPwField}) {
+            f.getStyleClass().add("nl-field");
+            f.setPrefWidth(120);
+            f.setPromptText("password");
+        }
+        caField.setPromptText("CA cert .pem  or  trust store .p12/.jks (verifies the server)");
+        clientCertField.setPromptText("client cert .pem  or  client key store .p12/.jks (mutual TLS)");
+        clientKeyField.setPromptText("client key .pem/.pk8  (only for a PEM client cert)");
+
+        Label modeL = new Label("SSL mode:"); modeL.getStyleClass().add("meta-label");
+        Label caL = new Label("Server CA / trust store:"); caL.getStyleClass().add("meta-label");
+        Label ccL = new Label("Client cert / key store:"); ccL.getStyleClass().add("meta-label");
+        Label ckL = new Label("Client key (PEM):"); ckL.getStyleClass().add("meta-label");
+
+        HBox modeRow = new HBox(8, modeL, sslModeCombo);
+        HBox caRow = new HBox(8, caL, caField, browseTls(caField), caPwField);
+        HBox ccRow = new HBox(8, ccL, clientCertField, browseTls(clientCertField), clientPwField);
+        HBox ckRow = new HBox(8, ckL, clientKeyField, browseTls(clientKeyField));
+        for (HBox h : new HBox[]{modeRow, caRow, ccRow, ckRow}) h.setAlignment(Pos.CENTER_LEFT);
+
+        VBox content = new VBox(6, modeRow, caRow, ccRow, ckRow, trustAllCheck);
+        content.setPadding(new Insets(6, 10, 6, 10));
+        tlsPane.setText("TLS / SSL  (for encrypted database connections — Postgres, MySQL, MariaDB, SQL Server)");
+        tlsPane.setContent(content);
+        tlsPane.setExpanded(false);
+        return tlsPane;
+    }
+
+    private ListCell<SslMode> sslModeCell() {
+        return new ListCell<>() {
+            @Override protected void updateItem(SslMode m, boolean empty) {
+                super.updateItem(m, empty);
+                setText(empty || m == null ? null : switch (m) {
+                    case DEFAULT -> "Default (use URL settings)";
+                    case DISABLE -> "Disable (no TLS)";
+                    case REQUIRE -> "Require (encrypt, no verify)";
+                    case VERIFY_CA -> "Verify CA";
+                    case VERIFY_FULL -> "Verify Full (CA + hostname)";
+                });
+            }
+        };
+    }
+
+    private Button browseTls(TextField target) {
+        Button b = new Button("Browse…");
+        b.getStyleClass().add("btn-secondary");
+        b.setOnAction(e -> {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Choose certificate or key store");
+            fc.getExtensionFilters().addAll(
+                    new FileChooser.ExtensionFilter("Certs & key stores", "*.pem", "*.crt", "*.cer", "*.der", "*.key", "*.pk8", "*.p12", "*.pfx", "*.jks"),
+                    new FileChooser.ExtensionFilter("All files", "*.*"));
+            var f = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (f != null) target.setText(f.getAbsolutePath());
+        });
+        return b;
+    }
+
+    /** Builds a {@link JdbcTlsSpec} from the TLS fields, sorting PEM files from key stores by extension. */
+    private JdbcTlsSpec tlsSpec() {
+        SslMode mode = sslModeCombo.getValue() == null ? SslMode.DEFAULT : sslModeCombo.getValue();
+        String ca = blankToNull(Env.resolve(caField.getText().trim()));
+        String caPw = blankToNull(caPwField.getText());
+        String clientCert = blankToNull(Env.resolve(clientCertField.getText().trim()));
+        String clientKey = blankToNull(Env.resolve(clientKeyField.getText().trim()));
+        String clientPw = blankToNull(clientPwField.getText());
+
+        // CA field: a key store (.p12/.jks/.pfx) → trust store; otherwise a PEM CA cert.
+        String caCert = null, trustStore = null, trustStorePw = null;
+        if (ca != null) {
+            if (isKeyStore(ca)) { trustStore = ca; trustStorePw = caPw; }
+            else caCert = ca;
+        }
+        // Client field: a key store → client key store; otherwise a PEM cert (+ separate PEM key).
+        String clientCertPem = null, clientKeyPem = null, keyStore = null, keyStorePw = null;
+        if (clientCert != null) {
+            if (isKeyStore(clientCert)) { keyStore = clientCert; keyStorePw = clientPw; }
+            else { clientCertPem = clientCert; clientKeyPem = clientKey; }
+        }
+        return new JdbcTlsSpec(mode, trustAllCheck.isSelected(),
+                caCert, clientCertPem, clientKeyPem,
+                trustStore, trustStorePw, null,
+                keyStore, keyStorePw, null);
+    }
+
+    private static boolean isKeyStore(String path) {
+        String p = path.toLowerCase();
+        return p.endsWith(".p12") || p.endsWith(".pfx") || p.endsWith(".jks");
+    }
+
+    private static String blankToNull(String s) { return s == null || s.isBlank() ? null : s; }
 
     private ListCell<DriverInfo> driverCell() {
         return new ListCell<>() {
@@ -408,10 +528,14 @@ public final class SqlClientView extends BorderPane {
         String url = Env.resolve(urlField.getText().trim());
         String user = Env.resolve(userField.getText());
         String pass = Env.resolve(passField.getText());
+        DriverInfo driver = dbCombo.getValue();
+        String driverId = driver == null ? null : driver.id();
+        java.util.Map<String, String> tlsProps = JdbcTlsParams.forDriver(driverId, tlsSpec());
+        if (!tlsProps.isEmpty()) logger.accept("JDBC TLS params: " + tlsProps.keySet());
         logger.accept("JDBC connect → " + url);
         Task<String> task = new Task<>() {
             @Override protected String call() throws Exception {
-                service.connect(url, user, pass);
+                service.connect(url, user, pass, tlsProps);
                 return service.databaseInfo();
             }
         };
