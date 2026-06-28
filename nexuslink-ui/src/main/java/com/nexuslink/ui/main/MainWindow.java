@@ -19,6 +19,7 @@ import com.nexuslink.ui.grpc.GrpcView;
 import com.nexuslink.ui.ldap.LdapView;
 import com.nexuslink.ui.snmp.SnmpView;
 import com.nexuslink.ui.help.HelpDialog;
+import com.nexuslink.ui.settings.PreferencesDialog;
 import com.nexuslink.ui.icons.Icons;
 import com.nexuslink.ui.kafka.KafkaView;
 import com.nexuslink.ui.llm.LlmTesterView;
@@ -176,7 +177,11 @@ public final class MainWindow {
         environments.setOnAction(e -> openEnvironmentsTab());
         MenuItem metrics = new MenuItem("Metrics Dashboard…");
         metrics.setOnAction(e -> openMetricsTab());
-        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(), certManager, environments, metrics);
+        MenuItem preferences = new MenuItem("Preferences…");
+        preferences.setAccelerator(KeyCombination.keyCombination("Shortcut+,"));
+        preferences.setOnAction(e -> PreferencesDialog.open(owner()));
+        tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(),
+                certManager, environments, metrics, new SeparatorMenuItem(), preferences);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));

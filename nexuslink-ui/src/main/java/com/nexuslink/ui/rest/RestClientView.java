@@ -102,9 +102,21 @@ public final class RestClientView extends BorderPane {
 
     public RestClientView() {
         getStyleClass().add("rest-client-view");
+        seedTimeoutDefaults();
         setTop(buildMethodBar());
         setCenter(buildSplit());
         seedExample();
+    }
+
+    /** Seed this tab's default timeouts from the user's saved preferences. */
+    private void seedTimeoutDefaults() {
+        try {
+            var settings = com.nexuslink.ui.settings.Settings.service();
+            request.setConnectTimeoutMs(settings.getConnectTimeoutMs());
+            request.setReadTimeoutMs(settings.getReadTimeoutMs());
+        } catch (Exception ignored) {
+            // Preferences are best-effort; fall back to the request's built-in defaults.
+        }
     }
 
     public void setLogger(Consumer<String> logger) {
