@@ -1,8 +1,15 @@
 package com.nexuslink.ui.rabbitmq;
 
+import com.nexuslink.protocol.rabbitmq.BindingInfo;
+import com.nexuslink.protocol.rabbitmq.ExchangeInfo;
+import com.nexuslink.protocol.rabbitmq.OverviewInfo;
+import com.nexuslink.protocol.rabbitmq.QueueInfo;
+import com.nexuslink.protocol.rabbitmq.RabbitMqManagementClient;
 import com.nexuslink.protocol.rabbitmq.RabbitMqService;
 import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,7 +18,9 @@ import javafx.scene.layout.*;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * RabbitMQ client tab — connect to a broker (AMQP 0.9.1), declare exchanges/queues/bindings,
@@ -48,12 +57,31 @@ public final class RabbitMqView extends BorderPane {
 
     private final TextArea messageLog = new TextArea();
 
+    // Management dashboard (HTTP management API on port 15672).
+    private final TextField mgmtHost = new TextField("localhost");
+    private final TextField mgmtPort = new TextField(String.valueOf(RabbitMqManagementClient.DEFAULT_PORT));
+    private final Button refreshBtn = new Button("Refresh");
+    private final Button purgeBtn = new Button("Purge selected queue");
+    private final Label mgmtStatus = new Label("Not loaded");
+    private final TextArea overviewArea = new TextArea();
+    private final TableView<QueueInfo> queuesTable = new TableView<>();
+    private final TableView<ExchangeInfo> exchangesTable = new TableView<>();
+    private final TableView<BindingInfo> bindingsTable = new TableView<>();
+
     private Consumer<String> logger = s -> {};
 
     public RabbitMqView() {
         getStyleClass().add("rabbitmq-view");
         setTop(buildBar());
-        setCenter(buildBody());
+        setCenter(buildTabs());
+    }
+
+    private TabPane buildTabs() {
+        Tab messaging = new Tab("Messaging", buildBody());
+        messaging.setClosable(false);
+        Tab management = new Tab("Management", buildManagement());
+        management.setClosable(false);
+        return new TabPane(messaging, management);
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -172,6 +200,219 @@ public final class RabbitMqView extends BorderPane {
         box.setPadding(new Insets(10));
         VBox.setVgrow(messageLog, Priority.ALWAYS);
         return box;
+    }
+
+    // ------------------------------------------------------------------
+    // Management dashboard — RabbitMQ HTTP management API (port 15672).
+    // ------------------------------------------------------------------
+
+    /** Snapshot of a single management refresh, gathered off the FX thread. */
+    private record ManagementSnapshot(OverviewInfo overview,
+                                      List<QueueInfo> queues,
+                                      List<ExchangeInfo> exchanges,
+                                      List<BindingInfo> bindings) {}
+
+    private VBox buildManagement() {
+        mgmtHost.getStyleClass().add("nl-field");
+        mgmtHost.setPromptText("management host");
+        HBox.setHgrow(mgmtHost, Priority.ALWAYS);
+        mgmtPort.getStyleClass().add("nl-field");
+        mgmtPort.setPromptText("port");
+        mgmtPort.setPrefWidth(90);
+        refreshBtn.getStyleClass().add("btn-primary");
+        refreshBtn.setOnAction(e -> refreshManagement());
+        HBox connRow = new HBox(8, label("Manager:"), mgmtHost, label("Port:"), mgmtPort, refreshBtn);
+        connRow.setAlignment(Pos.CENTER_LEFT);
+
+        mgmtStatus.getStyleClass().add("meta-label");
+        Label credHint = label("Uses the Auth user/password from the bar above.");
+        HBox infoRow = new HBox(12, mgmtStatus, credHint);
+        infoRow.setAlignment(Pos.CENTER_LEFT);
+
+        overviewArea.getStyleClass().add("code-area");
+        overviewArea.setEditable(false);
+        overviewArea.setPrefRowCount(5);
+        overviewArea.setPromptText("Cluster overview appears here after Refresh…");
+
+        buildQueuesColumns();
+        buildExchangesColumns();
+        buildBindingsColumns();
+
+        purgeBtn.getStyleClass().add("btn-secondary");
+        purgeBtn.setOnAction(e -> purgeSelectedQueue());
+        HBox queueHeader = new HBox(8, label("Queues:"), purgeBtn);
+        queueHeader.setAlignment(Pos.CENTER_LEFT);
+
+        VBox.setVgrow(queuesTable, Priority.ALWAYS);
+        VBox.setVgrow(exchangesTable, Priority.ALWAYS);
+        VBox.setVgrow(bindingsTable, Priority.ALWAYS);
+
+        VBox box = new VBox(8, connRow, infoRow, label("Overview:"), overviewArea, new Separator(),
+                queueHeader, queuesTable, new Separator(),
+                label("Exchanges:"), exchangesTable, new Separator(),
+                label("Bindings:"), bindingsTable);
+        box.setPadding(new Insets(10));
+        return box;
+    }
+
+    private void buildQueuesColumns() {
+        queuesTable.getColumns().setAll(
+                col("Name", QueueInfo::name),
+                col("Vhost", QueueInfo::vhost),
+                col("Ready", q -> String.valueOf(q.messagesReady())),
+                col("Unacked", q -> String.valueOf(q.messagesUnacknowledged())),
+                col("Total", q -> String.valueOf(q.messages())),
+                col("Consumers", q -> String.valueOf(q.consumers())),
+                col("State", QueueInfo::state));
+        queuesTable.setPlaceholder(new Label("No queues loaded"));
+        queuesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    }
+
+    private void buildExchangesColumns() {
+        exchangesTable.getColumns().setAll(
+                col("Name", ex -> ex.name() == null || ex.name().isEmpty() ? "(default)" : ex.name()),
+                col("Vhost", ExchangeInfo::vhost),
+                col("Type", ExchangeInfo::type),
+                col("Durable", ex -> ex.durable() ? "yes" : "no"));
+        exchangesTable.setPlaceholder(new Label("No exchanges loaded"));
+        exchangesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    }
+
+    private void buildBindingsColumns() {
+        bindingsTable.getColumns().setAll(
+                col("Source", b -> b.source() == null || b.source().isEmpty() ? "(default)" : b.source()),
+                col("Destination", BindingInfo::destination),
+                col("Type", BindingInfo::destinationType),
+                col("Routing key", BindingInfo::routingKey));
+        bindingsTable.setPlaceholder(new Label("No bindings loaded"));
+        bindingsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+    }
+
+    private static <T> TableColumn<T, String> col(String title, Function<T, String> value) {
+        TableColumn<T, String> c = new TableColumn<>(title);
+        c.setCellValueFactory(cd -> new ReadOnlyStringWrapper(value.apply(cd.getValue())));
+        return c;
+    }
+
+    /** Builds a management client from the dashboard host/port and the shared Auth credentials. */
+    private RabbitMqManagementClient newManagementClient() {
+        String host = Env.resolve(mgmtHost.getText().trim());
+        if (host.isEmpty()) {
+            throw new IllegalArgumentException("Enter a management host");
+        }
+        int port = RabbitMqManagementClient.DEFAULT_PORT;
+        String portText = mgmtPort.getText().trim();
+        if (!portText.isEmpty()) {
+            try {
+                port = Integer.parseInt(portText);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid port: " + portText);
+            }
+        }
+        String user = Env.resolve(userField.getText().trim());
+        String pass = Env.resolve(passField.getText());
+        return new RabbitMqManagementClient(host, port, user, pass);
+    }
+
+    private void refreshManagement() {
+        final RabbitMqManagementClient client;
+        try {
+            client = newManagementClient();
+        } catch (RuntimeException ex) {
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-err");
+            mgmtStatus.setText(ex.getMessage());
+            return;
+        }
+        refreshBtn.setDisable(true);
+        mgmtStatus.getStyleClass().setAll("meta-label");
+        mgmtStatus.setText("Loading…");
+        logger.accept("RabbitMQ management refresh → " + Env.resolve(mgmtHost.getText().trim()));
+
+        Task<ManagementSnapshot> task = new Task<>() {
+            @Override protected ManagementSnapshot call() {
+                return new ManagementSnapshot(client.overview(), client.listQueues(),
+                        client.listExchanges(), client.listBindings());
+            }
+        };
+        task.setOnSucceeded(e -> {
+            ManagementSnapshot snap = task.getValue();
+            overviewArea.setText(describeOverview(snap.overview()));
+            queuesTable.setItems(FXCollections.observableArrayList(snap.queues()));
+            exchangesTable.setItems(FXCollections.observableArrayList(snap.exchanges()));
+            bindingsTable.setItems(FXCollections.observableArrayList(snap.bindings()));
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-2xx");
+            mgmtStatus.setText("Loaded — " + snap.queues().size() + " queue(s), "
+                    + snap.exchanges().size() + " exchange(s), " + snap.bindings().size() + " binding(s)");
+            refreshBtn.setDisable(false);
+            logger.accept("RabbitMQ management loaded");
+        });
+        task.setOnFailed(e -> {
+            Throwable err = task.getException();
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-err");
+            mgmtStatus.setText("Refresh failed: " + err.getMessage());
+            logger.accept("RabbitMQ management refresh FAILED: " + err.getMessage());
+            append("⚠ management refresh failed: " + err.getMessage());
+            refreshBtn.setDisable(false);
+        });
+        runBg(task, "rabbitmq-mgmt-refresh");
+    }
+
+    private String describeOverview(OverviewInfo o) {
+        if (o == null) {
+            return "";
+        }
+        return "Cluster:   " + describe(o.clusterName()) + "\n"
+                + "RabbitMQ:  " + describe(o.rabbitmqVersion()) + "    Erlang: " + describe(o.erlangVersion()) + "\n"
+                + "Objects:   " + o.queues() + " queues · " + o.exchanges() + " exchanges · "
+                + o.connections() + " connections · " + o.channels() + " channels · " + o.consumers() + " consumers\n"
+                + "Messages:  " + o.messages() + " total (" + o.messagesReady() + " ready, "
+                + o.messagesUnacknowledged() + " unacked)";
+    }
+
+    private void purgeSelectedQueue() {
+        QueueInfo selected = queuesTable.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-err");
+            mgmtStatus.setText("Select a queue to purge");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Purge all messages from queue \"" + selected.name() + "\" (vhost " + selected.vhost() + ")?\n"
+                        + "This permanently discards " + selected.messages() + " message(s).",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Purge queue");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        final RabbitMqManagementClient client;
+        try {
+            client = newManagementClient();
+        } catch (RuntimeException ex) {
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-err");
+            mgmtStatus.setText(ex.getMessage());
+            return;
+        }
+        purgeBtn.setDisable(true);
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() {
+                client.purgeQueue(selected.vhost(), selected.name());
+                return null;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            append("⊖ purged queue " + selected.name());
+            logger.accept("RabbitMQ purged queue " + selected.name());
+            purgeBtn.setDisable(false);
+            refreshManagement();
+        });
+        task.setOnFailed(e -> {
+            Throwable err = task.getException();
+            mgmtStatus.getStyleClass().setAll("meta-label", "status-err");
+            mgmtStatus.setText("Purge failed: " + err.getMessage());
+            append("⚠ purge failed: " + err.getMessage());
+            purgeBtn.setDisable(false);
+        });
+        runBg(task, "rabbitmq-mgmt-purge");
     }
 
     private Label label(String text) {
