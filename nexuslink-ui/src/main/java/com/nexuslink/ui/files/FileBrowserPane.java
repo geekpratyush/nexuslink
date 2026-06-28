@@ -7,7 +7,11 @@ import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.DataFormat;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -23,6 +27,12 @@ import java.util.function.Consumer;
  */
 public final class FileBrowserPane extends VBox {
 
+    // A drag between panes happens inside one JVM, so the payload is stashed statically and the
+    // dragboard only carries a marker. The source reference lets a target reject same-pane drops.
+    private static final DataFormat FILE_DRAG = new DataFormat("application/x-nexuslink-files");
+    private static List<FileItem> draggedItems;
+    private static FileBrowserPane dragSource;
+
     private final FileSystem fs;
     private final TextField addressField = new TextField();
     private final TableView<FileItem> table = new TableView<>();
@@ -32,6 +42,7 @@ public final class FileBrowserPane extends VBox {
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
     private Runnable onChanged = () -> {};
+    private Consumer<List<FileItem>> onDropFromOther = items -> {};
 
     public FileBrowserPane(FileSystem fs, String title) {
         this.fs = fs;
@@ -52,6 +63,11 @@ public final class FileBrowserPane extends VBox {
 
     /** Notified after a successful navigation/refresh (so the container can refresh the other pane). */
     public void setOnChanged(Runnable handler) { this.onChanged = handler == null ? () -> {} : handler; }
+
+    /** Notified when files dragged from the <em>other</em> pane are dropped onto this one (transfer). */
+    public void setOnDropFromOther(Consumer<List<FileItem>> handler) {
+        this.onDropFromOther = handler == null ? items -> {} : handler;
+    }
 
     public String currentPath() { return currentPath; }
 
@@ -115,8 +131,27 @@ public final class FileBrowserPane extends VBox {
             row.setOnMouseClicked(e -> {
                 if (e.getClickCount() == 2 && !row.isEmpty()) activate(row.getItem());
             });
+            // Begin a drag from the current multi-selection (Ctrl/Shift selection is preserved).
+            row.setOnDragDetected(e -> {
+                if (row.isEmpty()) return;
+                if (!table.getSelectionModel().getSelectedItems().contains(row.getItem())) {
+                    table.getSelectionModel().clearAndSelect(row.getIndex());
+                }
+                List<FileItem> sel = selected().stream()
+                        .filter(f -> !f.parent() && !f.directory()).toList();
+                if (sel.isEmpty()) return;
+                Dragboard db = row.startDragAndDrop(TransferMode.COPY);
+                ClipboardContent content = new ClipboardContent();
+                content.put(FILE_DRAG, sel.size());
+                content.putString(sel.size() + " file(s)");
+                db.setContent(content);
+                draggedItems = sel;
+                dragSource = FileBrowserPane.this;
+                e.consume();
+            });
             return row;
         });
+        wireDropTarget();
         table.setOnKeyPressed(e -> {
             FileItem sel = table.getSelectionModel().getSelectedItem();
             if (e.getCode() == KeyCode.ENTER && sel != null) activate(sel);
@@ -145,6 +180,34 @@ public final class FileBrowserPane extends VBox {
             menu.getItems().add(chmod);
         }
         return menu;
+    }
+
+    /** Accepts drops of files dragged from the other pane; highlights while hovering. */
+    private void wireDropTarget() {
+        table.setOnDragOver(e -> {
+            if (dragSource != null && dragSource != this && e.getDragboard().hasContent(FILE_DRAG)) {
+                e.acceptTransferModes(TransferMode.COPY);
+            }
+            e.consume();
+        });
+        table.setOnDragEntered(e -> {
+            if (dragSource != null && dragSource != this && e.getDragboard().hasContent(FILE_DRAG)) {
+                if (!table.getStyleClass().contains("drop-target")) table.getStyleClass().add("drop-target");
+            }
+            e.consume();
+        });
+        table.setOnDragExited(e -> { table.getStyleClass().remove("drop-target"); e.consume(); });
+        table.setOnDragDropped(e -> {
+            boolean ok = false;
+            if (dragSource != null && dragSource != this && draggedItems != null) {
+                onDropFromOther.accept(List.copyOf(draggedItems));
+                ok = true;
+            }
+            table.getStyleClass().remove("drop-target");
+            e.setDropCompleted(ok);
+            e.consume();
+        });
+        table.setOnDragDone(e -> { draggedItems = null; dragSource = null; e.consume(); });
     }
 
     private void activate(FileItem item) {

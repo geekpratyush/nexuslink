@@ -42,6 +42,10 @@ public final class DualPaneBrowser extends BorderPane {
         localPane.setOnActivateFile(f -> upload(List.of(f)));
         remotePane.setOnActivateFile(f -> download(List.of(f)));
 
+        // Drag-and-drop: drop local files onto the remote pane to upload, and vice versa.
+        remotePane.setOnDropFromOther(this::upload);
+        localPane.setOnDropFromOther(this::download);
+
         SplitPane split = new SplitPane(localPane, buildTransferColumn(), remotePane);
         split.setDividerPositions(0.43, 0.57);
         setCenter(split);

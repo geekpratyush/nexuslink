@@ -304,3 +304,11 @@
     -fx-padding: 3 12 3 12;
 }
 .status-bar .label { -fx-text-fill: -nl-text-muted; -fx-font-size: 11px; }
+
+/* Two-pane file commander (SFTP/FTP) */
+.file-pane .section-title { -fx-font-weight: bold; -fx-text-fill: -nl-text; -fx-padding: 2 0 2 0; }
+.dual-pane-browser .table-view.drop-target {
+    -fx-border-color: -nl-accent;
+    -fx-border-width: 2;
+    -fx-background-color: -nl-accent-soft;
+}
