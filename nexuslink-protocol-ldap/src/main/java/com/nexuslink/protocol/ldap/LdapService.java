@@ -1,9 +1,12 @@
 package com.nexuslink.protocol.ldap;
 
+import com.unboundid.ldap.sdk.AddRequest;
 import com.unboundid.ldap.sdk.Attribute;
 import com.unboundid.ldap.sdk.LDAPConnection;
 import com.unboundid.ldap.sdk.LDAPConnectionOptions;
 import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.Modification;
+import com.unboundid.ldap.sdk.ModificationType;
 import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
@@ -30,6 +33,36 @@ public final class LdapService implements AutoCloseable {
 
     /** A directory entry: its DN plus attributes decoded to string lists (binary values summarised). */
     public record Entry(String dn, Map<String, List<String>> attributes) {}
+
+    /** Which way a {@link Mod} changes an attribute on an existing entry. */
+    public enum ModType {
+        /** Replace all of the attribute's values with the supplied ones (empty list removes it). */
+        REPLACE,
+        /** Add the supplied values to the attribute, keeping existing ones. */
+        ADD,
+        /** Delete the supplied values (or, when none are given, the whole attribute). */
+        DELETE
+    }
+
+    /** A single attribute change applied by {@link #modifyEntry}. */
+    public record Mod(ModType type, String attribute, List<String> values) {
+        public Mod {
+            type = type == null ? ModType.REPLACE : type;
+            values = values == null ? List.of() : List.copyOf(values);
+        }
+
+        public static Mod replace(String attribute, List<String> values) {
+            return new Mod(ModType.REPLACE, attribute, values);
+        }
+
+        public static Mod add(String attribute, List<String> values) {
+            return new Mod(ModType.ADD, attribute, values);
+        }
+
+        public static Mod delete(String attribute) {
+            return new Mod(ModType.DELETE, attribute, List.of());
+        }
+    }
 
     private volatile LDAPConnection connection;
 
@@ -93,6 +126,55 @@ public final class LdapService implements AutoCloseable {
             entries.add(new Entry(e.getDN(), decode(e)));
         }
         return entries;
+    }
+
+    /**
+     * Adds a new entry at {@code dn} with the given attributes (name &rarr; values). Values for each
+     * attribute are written in iteration order; an {@code objectClass} attribute is normally required
+     * by the server. Fails with {@link LDAPException} if the DN already exists or the data is invalid.
+     */
+    public void addEntry(String dn, Map<String, List<String>> attributes) throws LDAPException {
+        List<Attribute> attrs = new ArrayList<>();
+        if (attributes != null) {
+            for (Map.Entry<String, List<String>> e : attributes.entrySet()) {
+                List<String> values = e.getValue();
+                if (values == null || values.isEmpty()) continue;
+                attrs.add(new Attribute(e.getKey(), values));
+            }
+        }
+        require().add(new AddRequest(dn, attrs));
+    }
+
+    /**
+     * Applies attribute {@code modifications} (replace / add / delete) to the entry at {@code dn} in a
+     * single modify operation. Fails with {@link LDAPException} if the entry is missing or a change is
+     * rejected (e.g. deleting a non-existent value).
+     */
+    public void modifyEntry(String dn, List<Mod> modifications) throws LDAPException {
+        List<Modification> mods = new ArrayList<>();
+        if (modifications != null) {
+            for (Mod m : modifications) {
+                mods.add(toModification(m));
+            }
+        }
+        require().modify(dn, mods);
+    }
+
+    /** Deletes the leaf entry at {@code dn}. Fails with {@link LDAPException} if it is missing or has children. */
+    public void deleteEntry(String dn) throws LDAPException {
+        require().delete(dn);
+    }
+
+    private static Modification toModification(Mod m) {
+        ModificationType type = switch (m.type()) {
+            case ADD -> ModificationType.ADD;
+            case DELETE -> ModificationType.DELETE;
+            case REPLACE -> ModificationType.REPLACE;
+        };
+        String[] values = m.values().toArray(new String[0]);
+        return values.length == 0
+                ? new Modification(type, m.attribute())
+                : new Modification(type, m.attribute(), values);
     }
 
     /** Maps a textual scope to the SDK enum; defaults to subtree for unknown/blank input. */

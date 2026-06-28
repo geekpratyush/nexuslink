@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -123,6 +124,10 @@ public final class LdapView extends BorderPane {
         searchBtn.getStyleClass().add("btn-primary");
         searchBtn.setOnAction(e -> search());
 
+        Button buildFilterBtn = new Button("Build…");
+        buildFilterBtn.getStyleClass().add("btn-secondary");
+        buildFilterBtn.setOnAction(e -> openFilterBuilder());
+
         Button importBtn = new Button("Import LDIF…");
         importBtn.getStyleClass().add("btn-secondary");
         importBtn.setOnAction(e -> importLdif());
@@ -130,11 +135,23 @@ public final class LdapView extends BorderPane {
         exportBtn.getStyleClass().add("btn-secondary");
         exportBtn.setOnAction(e -> exportLdif());
 
+        Button addBtn = new Button("Add child…");
+        addBtn.getStyleClass().add("btn-secondary");
+        addBtn.setOnAction(e -> addChildEntry(selectedEntry()));
+        Button modifyBtn = new Button("Modify…");
+        modifyBtn.getStyleClass().add("btn-secondary");
+        modifyBtn.setOnAction(e -> modifyEntry(selectedEntry()));
+        Button deleteBtn = new Button("Delete…");
+        deleteBtn.getStyleClass().add("btn-secondary");
+        deleteBtn.setOnAction(e -> deleteEntry(selectedEntry()));
+
         HBox searchRow = new HBox(8, label("Base:"), baseDnField);
         searchRow.setAlignment(Pos.CENTER_LEFT);
-        HBox filterRow = new HBox(8, label("Filter:"), filterField, label("Scope:"), scopeCombo,
+        HBox filterRow = new HBox(8, label("Filter:"), filterField, buildFilterBtn, label("Scope:"), scopeCombo,
                 label("Limit:"), sizeLimitField, searchBtn, importBtn, exportBtn);
         filterRow.setAlignment(Pos.CENTER_LEFT);
+        HBox entryRow = new HBox(8, label("Entry:"), addBtn, modifyBtn, deleteBtn);
+        entryRow.setAlignment(Pos.CENTER_LEFT);
 
         results.setCellFactory(lv -> new ListCell<>() {
             @Override protected void updateItem(LdapService.Entry item, boolean empty) {
@@ -164,7 +181,9 @@ public final class LdapView extends BorderPane {
         split.setDividerPositions(0.4);
         VBox.setVgrow(split, Priority.ALWAYS);
 
-        VBox box = new VBox(8, searchRow, filterRow, new Separator(), split);
+        attachContextMenus();
+
+        VBox box = new VBox(8, searchRow, filterRow, entryRow, new Separator(), split);
         box.setPadding(new Insets(10));
         return box;
     }
@@ -268,6 +287,141 @@ public final class LdapView extends BorderPane {
             }
         }
         detail.setText(sb.toString());
+    }
+
+    // --- filter builder + entry add/modify/delete ---------------------------------------------
+
+    /** Open the offline filter-builder dialog; on OK drop the composed filter into the search field. */
+    private void openFilterBuilder() {
+        LdapFilterDialog.open(window()).ifPresent(filter -> {
+            if (filter != null && !filter.isBlank()) filterField.setText(filter);
+        });
+    }
+
+    /** Right-click context menus mirroring the Add/Modify/Delete buttons, on both the list and the tree. */
+    private void attachContextMenus() {
+        results.setContextMenu(entryMenu());
+        ditTree.setContextMenu(entryMenu());
+    }
+
+    private ContextMenu entryMenu() {
+        MenuItem add = new MenuItem("Add child entry…");
+        add.setOnAction(e -> addChildEntry(selectedEntry()));
+        MenuItem modify = new MenuItem("Modify entry…");
+        modify.setOnAction(e -> modifyEntry(selectedEntry()));
+        MenuItem delete = new MenuItem("Delete entry…");
+        delete.setOnAction(e -> deleteEntry(selectedEntry()));
+        return new ContextMenu(add, new SeparatorMenuItem(), modify, delete);
+    }
+
+    /** The entry currently selected in whichever pane has a selection (list takes precedence). */
+    private LdapService.Entry selectedEntry() {
+        LdapService.Entry fromList = results.getSelectionModel().getSelectedItem();
+        if (fromList != null) return fromList;
+        TreeItem<DitNode> node = ditTree.getSelectionModel().getSelectedItem();
+        return node == null || node.getValue() == null ? null : node.getValue().entry;
+    }
+
+    /** Add a child under the selected entry (or any DN if none selected) via the entry dialog. */
+    private void addChildEntry(LdapService.Entry parent) {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        String parentDn = parent != null ? parent.dn()
+                : Env.resolve(baseDnField.getText().trim());
+        LdapEntryDialog.openAdd(window(), parentDn).ifPresent(result -> {
+            if (result.dn().isBlank()) { statusLabel.setText("Entry needs a DN"); return; }
+            if (result.attributes().isEmpty()) { statusLabel.setText("Entry needs at least one attribute"); return; }
+            runWrite("add " + result.dn(), () -> service.addEntry(result.dn(), result.attributes()),
+                    "Added " + result.dn());
+        });
+    }
+
+    /** Edit the selected entry's attributes; diffs old vs new into replace/delete modifications. */
+    private void modifyEntry(LdapService.Entry entry) {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        if (entry == null) { statusLabel.setText("Select an entry to modify"); return; }
+        LdapEntryDialog.openModify(window(), entry.dn(), entry.attributes()).ifPresent(result -> {
+            List<LdapService.Mod> mods = diff(entry.attributes(), result.attributes());
+            if (mods.isEmpty()) { statusLabel.setText("No changes to apply"); return; }
+            runWrite("modify " + entry.dn(),
+                    () -> service.modifyEntry(entry.dn(), mods), "Modified " + entry.dn());
+        });
+    }
+
+    /** Delete the selected entry after a confirmation prompt. */
+    private void deleteEntry(LdapService.Entry entry) {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        if (entry == null) { statusLabel.setText("Select an entry to delete"); return; }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete this entry permanently?\n\n" + entry.dn(), ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Delete entry");
+        if (window() != null) confirm.initOwner(window());
+        Optional<ButtonType> choice = confirm.showAndWait();
+        if (choice.isEmpty() || choice.get() != ButtonType.OK) return;
+        runWrite("delete " + entry.dn(),
+                () -> service.deleteEntry(entry.dn()), "Deleted " + entry.dn());
+    }
+
+    /** A write that may throw an LDAPException; used to keep the three handlers terse. */
+    @FunctionalInterface
+    private interface LdapWrite {
+        void run() throws Exception;
+    }
+
+    /** Run a write off the FX thread, then re-run the current search to refresh list + tree. */
+    private void runWrite(String logLabel, LdapWrite write, String successMsg) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Working…");
+        logger.accept("LDAP " + logLabel);
+
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() throws Exception {
+                write.run();
+                return null;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText(successMsg);
+            logger.accept("LDAP " + logLabel + " → OK");
+            search();   // refresh result list + DIT from the server
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Failed: " + task.getException().getMessage());
+            logger.accept("LDAP " + logLabel + " FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "ldap-write");
+    }
+
+    /**
+     * Compute the modifications turning {@code oldAttrs} into {@code newAttrs}: each attribute present
+     * in the new set is REPLACEd with its new values; attributes dropped entirely are DELETEd.
+     * Comparison of attribute names is case-insensitive.
+     */
+    private static List<LdapService.Mod> diff(Map<String, List<String>> oldAttrs,
+                                              Map<String, List<String>> newAttrs) {
+        List<LdapService.Mod> mods = new ArrayList<>();
+        for (Map.Entry<String, List<String>> e : newAttrs.entrySet()) {
+            List<String> previous = caseInsensitiveGet(oldAttrs, e.getKey());
+            if (!e.getValue().equals(previous)) {
+                mods.add(LdapService.Mod.replace(e.getKey(), e.getValue()));
+            }
+        }
+        for (String oldName : oldAttrs.keySet()) {
+            if (caseInsensitiveGet(newAttrs, oldName) == null) {
+                mods.add(LdapService.Mod.delete(oldName));
+            }
+        }
+        return mods;
+    }
+
+    private static List<String> caseInsensitiveGet(Map<String, List<String>> map, String key) {
+        List<String> direct = map.get(key);
+        if (direct != null) return direct;
+        for (Map.Entry<String, List<String>> e : map.entrySet()) {
+            if (e.getKey().equalsIgnoreCase(key)) return e.getValue();
+        }
+        return null;
     }
 
     // --- DIT tree + LDIF (offline) ------------------------------------------------------------
