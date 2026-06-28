@@ -224,7 +224,9 @@
 - [-] Response panel:
   - [x] Status badge (color-coded: 2xx green, 3xx blue, 4xx amber, 5xx red, err red)
   - [x] Timing: total, TTFB, download shown _(DNS/TCP/TLS split needs OkHttp listener)_
-  - [-] `BodyViewer` — raw + auto JSON pretty-print done; XML tree/HTML/image/hex TODO
+  - [-] `BodyViewer` — `BodyFormatter` (protocol-http, 9 tests) + **View:** mode selector on the Body tab:
+        **Pretty** (auto JSON or XML indent, content-type + sniff, XXE-hardened), **Raw**, **Hex** (offset/
+        hex/ASCII dump). Switching re-renders the last response. _HTML render / image preview TODO_
   - [x] `HeadersViewer` — text view _(sortable table TODO)_
   - [x] `CookiesViewer` — `RestExecutionService` owns a per-session `CookieJar`: captures `Set-Cookie` (incl. on the Digest 401 challenge), auto-injects the matching `Cookie` header unless the user set one, toggle via `setCookieJarEnabled`; **Cookies** response tab renders the jar. 3 in-process-server wiring tests (73 total in http module)
   - [x] `TimelineViewer` — `TimelineView` Canvas waterfall (DNS/Connect/TLS/Waiting/Download bars laid end-to-end, proportional widths + per-phase ms + total); **Timeline** response tab, redraws on resize. Cumulative model already supports the finer DNS/TCP/TLS split when the OkHttp breakdown lands _(JDK client currently fills Waiting+Download)_

@@ -9,6 +9,7 @@ import com.nexuslink.core.env.EnvironmentService;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.protocol.http.rest.AssertionSpec;
+import com.nexuslink.protocol.http.rest.BodyFormatter;
 import com.nexuslink.protocol.http.rest.ResponseAssertions;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
@@ -56,6 +57,8 @@ public final class RestClientView extends BorderPane {
     private Label timingLabel;
     private Label sizeLabel;
     private TextArea responseBody;
+    private ComboBox<BodyFormatter.Mode> bodyViewMode;
+    private RestResponse lastResponse;
     private TextArea responseHeaders;
     private TextArea responseCookies;
     private TextArea responseTests;
@@ -628,6 +631,17 @@ public final class RestClientView extends BorderPane {
         responseBody.setEditable(false);
         responseBody.getStyleClass().add("code-area");
 
+        bodyViewMode = new ComboBox<>(FXCollections.observableArrayList(BodyFormatter.Mode.values()));
+        bodyViewMode.setValue(BodyFormatter.Mode.PRETTY);
+        bodyViewMode.valueProperty().addListener((o, ov, nv) -> renderBody());
+        Label viewLabel = new Label("View:");
+        viewLabel.getStyleClass().add("meta-label");
+        HBox bodyBar = new HBox(8, viewLabel, bodyViewMode);
+        bodyBar.setAlignment(Pos.CENTER_LEFT);
+        bodyBar.setPadding(new Insets(6, 6, 0, 6));
+        VBox bodyBox = new VBox(4, bodyBar, responseBody);
+        VBox.setVgrow(responseBody, Priority.ALWAYS);
+
         responseHeaders = new TextArea();
         responseHeaders.setEditable(false);
         responseHeaders.getStyleClass().add("code-area");
@@ -647,7 +661,7 @@ public final class RestClientView extends BorderPane {
         respTabs.getStyleClass().add("editor-tabs");
         respTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         respTabs.getTabs().addAll(
-                new Tab("Body", responseBody),
+                new Tab("Body", bodyBox),
                 new Tab("Headers", responseHeaders),
                 new Tab("Cookies", responseCookies),
                 new Tab("Timeline", responseTimeline),
@@ -747,6 +761,7 @@ public final class RestClientView extends BorderPane {
     }
 
     private void renderResponse(RestResponse resp) {
+        lastResponse = resp;
         responseCookies.setText(formatCookies());
         renderTestResults(resp);
         responseTimeline.setTiming(resp.timing());
@@ -770,7 +785,7 @@ public final class RestClientView extends BorderPane {
                 + resp.timing().ttfbMs() + " · dl " + resp.timing().downloadMs() + ")");
         sizeLabel.setText(resp.prettyBytes() + "  ·  " + resp.httpVersion());
 
-        responseBody.setText(prettyIfJson(resp.body(), resp.headers()));
+        renderBody();
         responseHeaders.setText(formatHeaders(resp.headers()));
         logger.accept(resp.statusCode() + " " + resp.statusText()
                 + "  " + resp.timing().totalMs() + "ms  " + resp.prettyBytes());
@@ -906,18 +921,19 @@ public final class RestClientView extends BorderPane {
         rows.add(new RestRequest.KeyValue()); // trailing empty row
     }
 
-    private String prettyIfJson(String body, Map<String, List<String>> headers) {
-        boolean looksJson = headers.entrySet().stream()
-                .filter(e -> e.getKey().equalsIgnoreCase("content-type"))
+    /** Renders the last successful response body in the selected view mode. */
+    private void renderBody() {
+        if (lastResponse == null || lastResponse.failed()) return;
+        responseBody.setText(BodyFormatter.render(
+                lastResponse.body(), contentTypeOf(lastResponse.headers()), bodyViewMode.getValue()));
+    }
+
+    private static String contentTypeOf(Map<String, List<String>> headers) {
+        if (headers == null) return null;
+        return headers.entrySet().stream()
+                .filter(e -> e.getKey() != null && e.getKey().equalsIgnoreCase("content-type"))
                 .flatMap(e -> e.getValue().stream())
-                .anyMatch(v -> v.toLowerCase().contains("json"));
-        if (!looksJson) return body;
-        try {
-            Object tree = json.readValue(body, Object.class);
-            return json.writerWithDefaultPrettyPrinter().writeValueAsString(tree);
-        } catch (Exception ignored) {
-            return body;
-        }
+                .findFirst().orElse(null);
     }
 
     private String formatHeaders(Map<String, List<String>> headers) {
