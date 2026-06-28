@@ -18,6 +18,31 @@ import java.util.Base64;
  */
 public final class RestExecutionService {
 
+    /**
+     * Per-session cookie store. One executor is owned by a single REST client tab,
+     * so the jar gives that tab browser-like cookie continuity across requests:
+     * {@code Set-Cookie} headers are captured and the matching {@code Cookie}
+     * header is replayed automatically on later calls to the same site.
+     */
+    private final CookieJar cookieJar = new CookieJar();
+
+    /** When false, cookies are neither captured nor sent (the jar is left untouched). */
+    private boolean cookieJarEnabled = true;
+
+    /** The session cookie jar (for a Cookies viewer / inspection). */
+    public CookieJar cookieJar() {
+        return cookieJar;
+    }
+
+    /** Enables or disables automatic cookie capture/injection for this session. */
+    public void setCookieJarEnabled(boolean enabled) {
+        this.cookieJarEnabled = enabled;
+    }
+
+    public boolean isCookieJarEnabled() {
+        return cookieJarEnabled;
+    }
+
     /** Executes the request and returns a populated {@link RestResponse}. */
     public RestResponse execute(RestRequest req) {
         long start = System.nanoTime();
@@ -35,6 +60,7 @@ public final class RestExecutionService {
             long sendStart = System.nanoTime();
             HttpResponse<String> resp = client.send(buildRequest(req, null),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            captureCookies(req, resp);
 
             // Digest is challenge-response: on a 401 with a Digest challenge, compute the
             // Authorization from the server's nonce and retry once.
@@ -47,6 +73,7 @@ public final class RestExecutionService {
                             req.getMethod().toUpperCase(), URI.create(req.requestUri()).getRawPath());
                     resp = client.send(buildRequest(req, authHeader),
                             HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    captureCookies(req, resp);
                 }
             }
             long now = System.nanoTime();
@@ -103,10 +130,18 @@ public final class RestExecutionService {
         if (ct != null && !userSetCt) builder.header("Content-Type", ct);
 
         // User headers
+        boolean userSetCookie = false;
         for (RestRequest.KeyValue kv : req.getHeaders()) {
             if (kv.isEnabled() && !kv.getKey().isBlank()) {
+                if (kv.getKey().equalsIgnoreCase("Cookie")) userSetCookie = true;
                 safeHeader(builder, kv.getKey(), kv.getValue());
             }
+        }
+
+        // Session cookies — replay the jar's matching Cookie header unless the user set one.
+        if (cookieJarEnabled && !userSetCookie) {
+            String cookieHeader = cookieJar.cookieHeaderFor(URI.create(req.requestUri()));
+            if (cookieHeader != null) safeHeader(builder, "Cookie", cookieHeader);
         }
 
         // Auth
@@ -148,6 +183,15 @@ public final class RestExecutionService {
             case NONE -> { /* no auth header */ }
         }
         return builder.build();
+    }
+
+    /** Stores any {@code Set-Cookie} headers from {@code resp} into the session jar. */
+    private void captureCookies(RestRequest req, HttpResponse<String> resp) {
+        if (!cookieJarEnabled) return;
+        var setCookies = resp.headers().allValues("Set-Cookie");
+        if (!setCookies.isEmpty()) {
+            cookieJar.storeFrom(URI.create(req.requestUri()), setCookies);
+        }
     }
 
     private void safeHeader(HttpRequest.Builder b, String name, String value) {

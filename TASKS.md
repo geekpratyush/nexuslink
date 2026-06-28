@@ -226,7 +226,7 @@
   - [x] Timing: total, TTFB, download shown _(DNS/TCP/TLS split needs OkHttp listener)_
   - [-] `BodyViewer` — raw + auto JSON pretty-print done; XML tree/HTML/image/hex TODO
   - [x] `HeadersViewer` — text view _(sortable table TODO)_
-  - [-] `CookiesViewer` — `CookieJar` backend done (RFC 6265 parse/match/expiry, 21 tests); UI viewer + `RestExecutionService` capture/inject TODO
+  - [x] `CookiesViewer` — `RestExecutionService` owns a per-session `CookieJar`: captures `Set-Cookie` (incl. on the Digest 401 challenge), auto-injects the matching `Cookie` header unless the user set one, toggle via `setCookieJarEnabled`; **Cookies** response tab renders the jar. 3 in-process-server wiring tests (73 total in http module)
   - [ ] `TimelineViewer` — waterfall chart (DNS/TCP/TLS/Send/Wait/Receive)
   - [-] `TestResultsPanel` — `ResponseAssertions` backend done (status/header/body/JSON-path, 18 tests); UI tab TODO
 - [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_

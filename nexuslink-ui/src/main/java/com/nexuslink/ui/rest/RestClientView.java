@@ -52,6 +52,7 @@ public final class RestClientView extends BorderPane {
     private Label sizeLabel;
     private TextArea responseBody;
     private TextArea responseHeaders;
+    private TextArea responseCookies;
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
@@ -559,12 +560,17 @@ public final class RestClientView extends BorderPane {
         responseHeaders.setEditable(false);
         responseHeaders.getStyleClass().add("code-area");
 
+        responseCookies = new TextArea();
+        responseCookies.setEditable(false);
+        responseCookies.getStyleClass().add("code-area");
+
         TabPane respTabs = new TabPane();
         respTabs.getStyleClass().add("editor-tabs");
         respTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         respTabs.getTabs().addAll(
                 new Tab("Body", responseBody),
-                new Tab("Headers", responseHeaders));
+                new Tab("Headers", responseHeaders),
+                new Tab("Cookies", responseCookies));
 
         BorderPane pane = new BorderPane(respTabs);
         pane.setTop(meta);
@@ -658,6 +664,7 @@ public final class RestClientView extends BorderPane {
     }
 
     private void renderResponse(RestResponse resp) {
+        responseCookies.setText(formatCookies());
         if (resp.failed()) {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("✖ " + resp.errorMessage());
@@ -803,6 +810,26 @@ public final class RestClientView extends BorderPane {
     private String formatHeaders(Map<String, List<String>> headers) {
         StringBuilder sb = new StringBuilder();
         headers.forEach((k, vals) -> vals.forEach(v -> sb.append(k).append(": ").append(v).append('\n')));
+        return sb.toString();
+    }
+
+    /** Renders the session cookie jar (after capturing this response's Set-Cookie headers). */
+    private String formatCookies() {
+        var cookies = executor.cookieJar().all();
+        if (cookies.isEmpty()) {
+            return "No cookies stored for this session.";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (var c : cookies) {
+            sb.append(c.getName()).append(" = ").append(c.getValue()).append('\n');
+            sb.append("    domain=").append(c.getDomain())
+              .append("  path=").append(c.getPath());
+            if (c.isSecure()) sb.append("  secure");
+            if (c.isHostOnly()) sb.append("  host-only");
+            sb.append("  expires=")
+              .append(c.getExpiry() == null ? "session" : c.getExpiry());
+            sb.append("\n\n");
+        }
         return sb.toString();
     }
 
