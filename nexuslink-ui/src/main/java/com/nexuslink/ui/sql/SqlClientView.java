@@ -11,11 +11,15 @@ import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.JdbcTlsParams;
 import com.nexuslink.protocol.db.JdbcTlsSpec;
 import com.nexuslink.protocol.db.QueryResult;
+import com.nexuslink.protocol.db.ResultGridExporter;
 import com.nexuslink.protocol.db.SslMode;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,8 +27,13 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -57,6 +66,12 @@ public final class SqlClientView extends BorderPane {
     private final TextArea sqlEditor = new TextArea();
     private final TableView<List<String>> resultGrid = new TableView<>();
     private final Label resultStatus = new Label();
+
+    // Result row model: master → filter (live text search) → sort (column headers).
+    private final ObservableList<List<String>> masterRows = FXCollections.observableArrayList();
+    private final FilteredList<List<String>> filteredRows = new FilteredList<>(masterRows, r -> true);
+    private final SortedList<List<String>> sortedRows = new SortedList<>(filteredRows);
+    private final TextField filterField = new TextField();
 
     private Consumer<String> logger = s -> {};
     private Consumer<ConnectionProfile> onSave = p -> {};
@@ -378,7 +393,26 @@ public final class SqlClientView extends BorderPane {
         resultGrid.setPlaceholder(new Label("Run a query to see results"));
         VBox.setVgrow(resultGrid, Priority.ALWAYS);
 
-        VBox right = new VBox(6, sqlEditor, runRow, resultGrid);
+        // Keep sorting and filtering composed: sorted(filtered(master)). The grid's own
+        // sort order drives the comparator; the filter field narrows visible rows live.
+        sortedRows.comparatorProperty().bind(resultGrid.comparatorProperty());
+        resultGrid.setItems(sortedRows);
+        filterField.getStyleClass().add("nl-field");
+        filterField.setPromptText("Filter rows… (matches any cell, case-insensitive)");
+        HBox.setHgrow(filterField, Priority.ALWAYS);
+        filterField.textProperty().addListener((o, ov, text) -> applyRowFilter(text));
+
+        Button exportJson = new Button("Export JSON…");
+        exportJson.getStyleClass().add("btn-secondary");
+        exportJson.setOnAction(e -> exportResults(true));
+        Button exportCsv = new Button("Export CSV…");
+        exportCsv.getStyleClass().add("btn-secondary");
+        exportCsv.setOnAction(e -> exportResults(false));
+
+        HBox gridTools = new HBox(8, filterField, exportJson, exportCsv);
+        gridTools.setAlignment(Pos.CENTER_LEFT);
+
+        VBox right = new VBox(6, sqlEditor, runRow, gridTools, resultGrid);
         right.setPadding(new Insets(8));
 
         SplitPane sp = new SplitPane(explorer, right);
@@ -587,7 +621,7 @@ public final class SqlClientView extends BorderPane {
         logger.accept("SQL ok — " + r.summary());
 
         resultGrid.getColumns().clear();
-        resultGrid.getItems().clear();
+        masterRows.clear();
         if (!r.isResultSet()) return;
 
         for (int i = 0; i < r.columns().size(); i++) {
@@ -597,7 +631,52 @@ public final class SqlClientView extends BorderPane {
                     col < cd.getValue().size() ? cd.getValue().get(col) : ""));
             resultGrid.getColumns().add(tc);
         }
-        resultGrid.setItems(FXCollections.observableArrayList(r.rows()));
+        masterRows.setAll(r.rows());
+        applyRowFilter(filterField.getText());
+    }
+
+    /** Live row filter: keeps rows where any cell contains {@code text} (case-insensitive). */
+    private void applyRowFilter(String text) {
+        if (text == null || text.isBlank()) {
+            filteredRows.setPredicate(r -> true);
+            return;
+        }
+        String needle = text.toLowerCase(Locale.ROOT);
+        filteredRows.setPredicate(row -> {
+            for (String cell : row) {
+                if (cell != null && cell.toLowerCase(Locale.ROOT).contains(needle)) return true;
+            }
+            return false;
+        });
+    }
+
+    /** Exports the currently displayed rows (after sort + filter) as JSON or CSV. */
+    private void exportResults(boolean asJson) {
+        if (resultGrid.getColumns().isEmpty()) { resultStatus.setText("No results to export"); return; }
+        List<String> columns = new ArrayList<>();
+        for (TableColumn<List<String>, ?> c : resultGrid.getColumns()) columns.add(c.getText());
+        List<List<String>> rows = new ArrayList<>(sortedRows);
+
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Export query results");
+        String ext = asJson ? "json" : "csv";
+        fc.setInitialFileName("query-results." + ext);
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(ext.toUpperCase(Locale.ROOT) + " files", "*." + ext));
+        File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+
+        String content = asJson ? ResultGridExporter.toJson(columns, rows)
+                : ResultGridExporter.toCsv(columns, rows);
+        try {
+            Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+            resultStatus.getStyleClass().setAll("status-2xx");
+            resultStatus.setText("Exported " + rows.size() + " row(s) → " + file.getName());
+            logger.accept("SQL export: wrote " + rows.size() + " row(s) to " + file.getName());
+        } catch (Exception ex) {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Export failed: " + ex.getMessage());
+            logger.accept("SQL export FAILED: " + ex.getMessage());
+        }
     }
 
     private String truncate(String s) {
