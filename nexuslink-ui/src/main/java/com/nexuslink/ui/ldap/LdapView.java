@@ -1,13 +1,24 @@
 package com.nexuslink.ui.ldap;
 
+import com.nexuslink.protocol.ldap.Dn;
+import com.nexuslink.protocol.ldap.LdapEntry;
 import com.nexuslink.protocol.ldap.LdapService;
+import com.nexuslink.protocol.ldap.LdifReader;
+import com.nexuslink.protocol.ldap.LdifWriter;
 import com.nexuslink.ui.env.Env;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
+import javafx.stage.Window;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -37,6 +48,7 @@ public final class LdapView extends BorderPane {
     private final Button searchBtn = new Button("Search");
 
     private final ListView<LdapService.Entry> results = new ListView<>();
+    private final TreeView<DitNode> ditTree = new TreeView<>();
     private final TextArea detail = new TextArea();
 
     private Consumer<String> logger = s -> {};
@@ -111,13 +123,19 @@ public final class LdapView extends BorderPane {
         searchBtn.getStyleClass().add("btn-primary");
         searchBtn.setOnAction(e -> search());
 
+        Button importBtn = new Button("Import LDIF…");
+        importBtn.getStyleClass().add("btn-secondary");
+        importBtn.setOnAction(e -> importLdif());
+        Button exportBtn = new Button("Export LDIF…");
+        exportBtn.getStyleClass().add("btn-secondary");
+        exportBtn.setOnAction(e -> exportLdif());
+
         HBox searchRow = new HBox(8, label("Base:"), baseDnField);
         searchRow.setAlignment(Pos.CENTER_LEFT);
         HBox filterRow = new HBox(8, label("Filter:"), filterField, label("Scope:"), scopeCombo,
-                label("Limit:"), sizeLimitField, searchBtn);
+                label("Limit:"), sizeLimitField, searchBtn, importBtn, exportBtn);
         filterRow.setAlignment(Pos.CENTER_LEFT);
 
-        results.setPrefWidth(360);
         results.setCellFactory(lv -> new ListCell<>() {
             @Override protected void updateItem(LdapService.Entry item, boolean empty) {
                 super.updateItem(item, empty);
@@ -126,11 +144,23 @@ public final class LdapView extends BorderPane {
         });
         results.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) -> showEntry(nv));
 
+        ditTree.setShowRoot(false);
+        ditTree.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) ->
+                showEntry(nv == null || nv.getValue() == null ? null : nv.getValue().entry));
+
+        Tab listTab = new Tab("List", results);
+        listTab.setClosable(false);
+        Tab treeTab = new Tab("Tree (DIT)", ditTree);
+        treeTab.setClosable(false);
+        TabPane leftTabs = new TabPane(listTab, treeTab);
+        leftTabs.setPrefWidth(360);
+        leftTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+
         detail.getStyleClass().add("code-area");
         detail.setEditable(false);
         detail.setPromptText("Select an entry to see its attributes…");
 
-        SplitPane split = new SplitPane(results, detail);
+        SplitPane split = new SplitPane(leftTabs, detail);
         split.setDividerPositions(0.4);
         VBox.setVgrow(split, Priority.ALWAYS);
 
@@ -214,8 +244,7 @@ public final class LdapView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             List<LdapService.Entry> entries = task.getValue();
-            results.getItems().setAll(entries);
-            detail.clear();
+            setEntries(entries);
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText(entries.size() + " entr" + (entries.size() == 1 ? "y" : "ies") + " found");
             logger.accept("LDAP search → " + entries.size() + " entries");
@@ -241,9 +270,179 @@ public final class LdapView extends BorderPane {
         detail.setText(sb.toString());
     }
 
+    // --- DIT tree + LDIF (offline) ------------------------------------------------------------
+
+    /** Replace the result set shown in both the list and the DIT tree, clearing the detail pane. */
+    private void setEntries(List<LdapService.Entry> entries) {
+        results.getItems().setAll(entries);
+        rebuildTree(entries);
+        detail.clear();
+    }
+
+    /**
+     * Build a hierarchical TreeView from the entries already returned, deriving parent/child links
+     * from each DN via {@link Dn#parent()}. Nodes whose parent is also present are nested and labelled
+     * by their RDN; entries with no parent in the set become top-level nodes labelled by their full DN.
+     */
+    private void rebuildTree(List<LdapService.Entry> entries) {
+        TreeItem<DitNode> root = new TreeItem<>(null);
+        Map<Dn, TreeItem<DitNode>> byDn = new LinkedHashMap<>();
+        List<TreeItem<DitNode>> ordered = new ArrayList<>();
+
+        for (LdapService.Entry e : entries) {
+            Dn dn = Dn.parse(e.dn());
+            if (byDn.containsKey(dn)) continue;             // ignore duplicate DNs
+            String rdnLabel = dn.rdn() == null ? e.dn() : dn.rdn().toString();
+            TreeItem<DitNode> item = new TreeItem<>(new DitNode(dn, e, rdnLabel));
+            byDn.put(dn, item);
+            ordered.add(item);
+        }
+        for (TreeItem<DitNode> item : ordered) {
+            DitNode node = item.getValue();
+            TreeItem<DitNode> parent = node.dn.isEmpty() ? null : byDn.get(node.dn.parent());
+            if (parent != null && parent != item) {
+                parent.getChildren().add(item);
+                parent.setExpanded(true);
+            } else {                                        // top-level: show the full DN
+                item.setValue(new DitNode(node.dn, node.entry, node.dn.toString()));
+                root.getChildren().add(item);
+            }
+        }
+        root.setExpanded(true);
+        ditTree.setRoot(root);
+    }
+
+    /** Read a .ldif file via {@link LdifReader} and display the parsed entries — works fully offline. */
+    private void importLdif() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import LDIF");
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("LDIF files", "*.ldif"),
+                new FileChooser.ExtensionFilter("All files", "*.*"));
+        File file = chooser.showOpenDialog(window());
+        if (file == null) return;
+
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Importing LDIF…");
+        logger.accept("LDIF import ← " + file.getAbsolutePath());
+
+        Task<List<LdapService.Entry>> task = new Task<>() {
+            @Override protected List<LdapService.Entry> call() throws Exception {
+                String text = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+                List<LdapEntry> parsed = new LdifReader().read(text);
+                List<LdapService.Entry> out = new ArrayList<>(parsed.size());
+                for (LdapEntry le : parsed) out.add(fromModel(le));
+                return out;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            List<LdapService.Entry> entries = task.getValue();
+            setEntries(entries);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Imported " + entries.size() + " entr" + (entries.size() == 1 ? "y" : "ies"));
+            logger.accept("LDIF import → " + entries.size() + " entries from " + file.getName());
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Import failed: " + task.getException().getMessage());
+            logger.accept("LDIF import FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "ldap-ldif-import");
+    }
+
+    /**
+     * Write the current entries to a .ldif file via {@link LdifWriter} — works fully offline. When a
+     * DIT tree node is selected, only that node's subtree is exported; otherwise all results are.
+     */
+    private void exportLdif() {
+        List<LdapService.Entry> toExport = exportSelection();
+        if (toExport.isEmpty()) {
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("No entries to export");
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export LDIF");
+        chooser.setInitialFileName("export.ldif");
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("LDIF files", "*.ldif"),
+                new FileChooser.ExtensionFilter("All files", "*.*"));
+        File file = chooser.showSaveDialog(window());
+        if (file == null) return;
+
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Exporting LDIF…");
+
+        Task<Integer> task = new Task<>() {
+            @Override protected Integer call() throws Exception {
+                List<LdapEntry> model = new ArrayList<>(toExport.size());
+                for (LdapService.Entry e : toExport) model.add(toModel(e));
+                Files.writeString(file.toPath(), new LdifWriter().write(model), StandardCharsets.UTF_8);
+                return model.size();
+            }
+        };
+        task.setOnSucceeded(e -> {
+            int count = task.getValue();
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Exported " + count + " entr" + (count == 1 ? "y" : "ies"));
+            logger.accept("LDIF export → " + count + " entries to " + file.getName());
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Export failed: " + task.getException().getMessage());
+            logger.accept("LDIF export FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "ldap-ldif-export");
+    }
+
+    /** Entries to export: the selected DIT subtree if a node is selected, else all current results. */
+    private List<LdapService.Entry> exportSelection() {
+        TreeItem<DitNode> selected = ditTree.getSelectionModel().getSelectedItem();
+        if (selected != null && selected.getValue() != null) {
+            Dn base = selected.getValue().dn;
+            List<LdapService.Entry> subtree = new ArrayList<>();
+            for (LdapService.Entry e : results.getItems()) {
+                if (Dn.parse(e.dn()).isDescendantOf(base)) subtree.add(e);
+            }
+            if (!subtree.isEmpty()) return subtree;
+        }
+        return new ArrayList<>(results.getItems());
+    }
+
+    private static LdapEntry toModel(LdapService.Entry entry) {
+        LdapEntry le = new LdapEntry(Dn.parse(entry.dn()));
+        entry.attributes().forEach((name, values) -> values.forEach(v -> le.add(name, v)));
+        return le;
+    }
+
+    private static LdapService.Entry fromModel(LdapEntry entry) {
+        return new LdapService.Entry(entry.dn().toString(), entry.attributes());
+    }
+
+    private Window window() {
+        return getScene() == null ? null : getScene().getWindow();
+    }
+
     private void runBg(Task<?> task, String name) {
         Thread t = new Thread(task, name);
         t.setDaemon(true);
         t.start();
+    }
+
+    /** A node in the directory information tree: its DN, the backing entry (if any), and a display label. */
+    private static final class DitNode {
+        final Dn dn;
+        final LdapService.Entry entry;
+        final String label;
+
+        DitNode(Dn dn, LdapService.Entry entry, String label) {
+            this.dn = dn;
+            this.entry = entry;
+            this.label = label;
+        }
+
+        @Override public String toString() {
+            return label;     // the default TreeCell renders this
+        }
     }
 }
