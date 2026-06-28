@@ -8,12 +8,15 @@ import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.env.EnvironmentService;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.ui.env.Env;
+import com.nexuslink.protocol.http.rest.AssertionSpec;
+import com.nexuslink.protocol.http.rest.ResponseAssertions;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
 import com.nexuslink.protocol.http.rest.RestResponse;
 import com.nexuslink.ui.help.HelpDialog;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -22,6 +25,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.*;
 
@@ -41,6 +45,7 @@ public final class RestClientView extends BorderPane {
 
     private final ObservableList<RestRequest.KeyValue> paramRows = FXCollections.observableArrayList();
     private final ObservableList<RestRequest.KeyValue> headerRows = FXCollections.observableArrayList();
+    private final ObservableList<AssertionSpec> assertionRows = FXCollections.observableArrayList();
 
     private ComboBox<String> methodCombo;
     private TextField urlField;
@@ -53,6 +58,8 @@ public final class RestClientView extends BorderPane {
     private TextArea responseBody;
     private TextArea responseHeaders;
     private TextArea responseCookies;
+    private TextArea responseTests;
+    private Tab responseTestsTab;
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
@@ -255,8 +262,72 @@ public final class RestClientView extends BorderPane {
                 new Tab("Headers", buildKeyValueTable(headerRows)),
                 new Tab("Body", buildBodyTab()),
                 new Tab("Auth", buildAuthTab()),
+                new Tab("Tests", buildAssertionsTable()),
                 new Tab("Settings", buildSettingsTab()));
         return tabs;
+    }
+
+    /** Editable table of response assertions; evaluated after each call into the Test Results tab. */
+    private BorderPane buildAssertionsTable() {
+        TableView<AssertionSpec> table = new TableView<>(assertionRows);
+        table.setEditable(true);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+
+        TableColumn<AssertionSpec, Boolean> onCol = new TableColumn<>("");
+        onCol.setCellValueFactory(c -> {
+            var p = new SimpleBooleanProperty(c.getValue().isEnabled());
+            p.addListener((o, ov, nv) -> c.getValue().setEnabled(nv));
+            return p;
+        });
+        onCol.setCellFactory(CheckBoxTableCell.forTableColumn(onCol));
+        onCol.setEditable(true);
+        onCol.setMaxWidth(34);
+        onCol.setMinWidth(34);
+
+        TableColumn<AssertionSpec, ResponseAssertions.Type> typeCol = new TableColumn<>("Check");
+        typeCol.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().getType()));
+        typeCol.setCellFactory(ComboBoxTableCell.forTableColumn(ResponseAssertions.Type.values()));
+        typeCol.setOnEditCommit(e -> {
+            e.getRowValue().setType(e.getNewValue());
+            ensureTrailingAssertion();
+        });
+        typeCol.setPrefWidth(150);
+
+        TableColumn<AssertionSpec, String> nameCol = new TableColumn<>("Header / JSON path");
+        nameCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getName()));
+        nameCol.setCellFactory(TextFieldTableCell.forTableColumn());
+        nameCol.setOnEditCommit(e -> { e.getRowValue().setName(e.getNewValue()); ensureTrailingAssertion(); });
+
+        TableColumn<AssertionSpec, String> targetCol = new TableColumn<>("Expected / min");
+        targetCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTarget()));
+        targetCol.setCellFactory(TextFieldTableCell.forTableColumn());
+        targetCol.setOnEditCommit(e -> { e.getRowValue().setTarget(e.getNewValue()); ensureTrailingAssertion(); });
+
+        TableColumn<AssertionSpec, String> maxCol = new TableColumn<>("Max");
+        maxCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getMax()));
+        maxCol.setCellFactory(TextFieldTableCell.forTableColumn());
+        maxCol.setOnEditCommit(e -> { e.getRowValue().setMax(e.getNewValue()); ensureTrailingAssertion(); });
+        maxCol.setMaxWidth(90);
+
+        table.getColumns().addAll(List.of(onCol, typeCol, nameCol, targetCol, maxCol));
+        if (assertionRows.isEmpty()) assertionRows.add(new AssertionSpec());
+
+        Label hint = new Label("Assertions run automatically after each response. "
+                + "Header/JSON-path → use the path column; status range → Expected=min, Max=max.");
+        hint.getStyleClass().add("meta-label");
+        hint.setPadding(new Insets(6, 0, 0, 4));
+        hint.setWrapText(true);
+
+        BorderPane pane = new BorderPane(table);
+        pane.setBottom(hint);
+        BorderPane.setMargin(table, new Insets(6));
+        return pane;
+    }
+
+    private void ensureTrailingAssertion() {
+        if (assertionRows.isEmpty() || assertionRows.get(assertionRows.size() - 1).isComplete()) {
+            assertionRows.add(new AssertionSpec());
+        }
     }
 
     private BorderPane buildKeyValueTable(ObservableList<RestRequest.KeyValue> rows) {
@@ -564,13 +635,19 @@ public final class RestClientView extends BorderPane {
         responseCookies.setEditable(false);
         responseCookies.getStyleClass().add("code-area");
 
+        responseTests = new TextArea();
+        responseTests.setEditable(false);
+        responseTests.getStyleClass().add("code-area");
+        responseTestsTab = new Tab("Test Results", responseTests);
+
         TabPane respTabs = new TabPane();
         respTabs.getStyleClass().add("editor-tabs");
         respTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         respTabs.getTabs().addAll(
                 new Tab("Body", responseBody),
                 new Tab("Headers", responseHeaders),
-                new Tab("Cookies", responseCookies));
+                new Tab("Cookies", responseCookies),
+                responseTestsTab);
 
         BorderPane pane = new BorderPane(respTabs);
         pane.setTop(meta);
@@ -661,10 +738,13 @@ public final class RestClientView extends BorderPane {
         request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
         request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
         request.setFollowRedirects(followRedirectsBox.isSelected());
+        request.getAssertions().clear();
+        request.getAssertions().addAll(assertionRows);
     }
 
     private void renderResponse(RestResponse resp) {
         responseCookies.setText(formatCookies());
+        renderTestResults(resp);
         if (resp.failed()) {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("✖ " + resp.errorMessage());
@@ -733,6 +813,16 @@ public final class RestClientView extends BorderPane {
         root.put("tlsTrustAll", request.isTlsTrustAll());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
+        ArrayNode tests = root.putArray("assertions");
+        for (AssertionSpec a : assertionRows) {
+            if (!a.isComplete()) continue;
+            ObjectNode n = tests.addObject();
+            n.put("enabled", a.isEnabled());
+            n.put("type", a.getType().name());
+            n.put("name", a.getName());
+            n.put("target", a.getTarget());
+            n.put("max", a.getMax());
+        }
         return root.toString();
     }
 
@@ -774,9 +864,27 @@ public final class RestClientView extends BorderPane {
             tlsTrustAll.setSelected(root.path("tlsTrustAll").asBoolean(false));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
+            loadAssertions(root.path("assertions"));
         } catch (Exception e) {
             logger.accept("Replay failed: " + e.getMessage());
         }
+    }
+
+    private void loadAssertions(com.fasterxml.jackson.databind.JsonNode arr) {
+        assertionRows.clear();
+        if (arr != null && arr.isArray()) {
+            arr.forEach(n -> {
+                AssertionSpec a = new AssertionSpec(
+                        ResponseAssertions.Type.valueOf(
+                                n.path("type").asText("STATUS_EQUALS")),
+                        n.path("name").asText(""),
+                        n.path("target").asText(""),
+                        n.path("max").asText(""));
+                a.setEnabled(n.path("enabled").asBoolean(true));
+                assertionRows.add(a);
+            });
+        }
+        assertionRows.add(new AssertionSpec()); // trailing empty row
     }
 
     private void loadKeyValues(com.fasterxml.jackson.databind.JsonNode arr,
@@ -811,6 +919,29 @@ public final class RestClientView extends BorderPane {
         StringBuilder sb = new StringBuilder();
         headers.forEach((k, vals) -> vals.forEach(v -> sb.append(k).append(": ").append(v).append('\n')));
         return sb.toString();
+    }
+
+    /** Evaluates the authored assertions against {@code resp} and renders the report. */
+    private void renderTestResults(RestResponse resp) {
+        ResponseAssertions assertions = AssertionSpec.toAssertions(request.getAssertions());
+        if (assertions.assertions().isEmpty()) {
+            responseTestsTab.setText("Test Results");
+            responseTests.setText("No assertions defined. Add checks in the request's Tests tab.");
+            return;
+        }
+        ResponseAssertions.Report report = assertions.evaluate(resp);
+        responseTestsTab.setText("Test Results (" + report.summary() + ")");
+
+        StringBuilder sb = new StringBuilder(report.summary()).append("\n\n");
+        for (ResponseAssertions.Result r : report.results()) {
+            sb.append(r.passed() ? "✔ PASS  " : "✘ FAIL  ")
+              .append(r.assertion().label()).append('\n')
+              .append("        ").append(r.message()).append("\n\n");
+        }
+        responseTests.setText(sb.toString());
+        if (report.failedCount() > 0) {
+            logger.accept("Assertions: " + report.summary());
+        }
     }
 
     /** Renders the session cookie jar (after capturing this response's Set-Cookie headers). */

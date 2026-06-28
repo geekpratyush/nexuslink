@@ -56,6 +56,9 @@ public final class RestRequest {
     private int readTimeoutMs = 30_000;
     private boolean followRedirects = true;
 
+    // Response assertions ("tests") authored in the UI and evaluated after each call
+    private final List<AssertionSpec> assertions = new ArrayList<>();
+
     public String getMethod() { return method; }
     public void setMethod(String method) { this.method = method; }
 
@@ -64,6 +67,8 @@ public final class RestRequest {
 
     public List<KeyValue> getQueryParams() { return queryParams; }
     public List<KeyValue> getHeaders() { return headers; }
+
+    public List<AssertionSpec> getAssertions() { return assertions; }
 
     public BodyType getBodyType() { return bodyType; }
     public void setBodyType(BodyType bodyType) { this.bodyType = bodyType; }
@@ -199,6 +204,12 @@ public final class RestRequest {
         r.connectTimeoutMs = connectTimeoutMs;
         r.readTimeoutMs = readTimeoutMs;
         r.followRedirects = followRedirects;
+        for (AssertionSpec a : assertions) {
+            AssertionSpec c = new AssertionSpec(a.getType(),
+                    fn.apply(a.getName()), fn.apply(a.getTarget()), a.getMax());
+            c.setEnabled(a.isEnabled());
+            r.assertions.add(c);
+        }
         return r;
     }
 

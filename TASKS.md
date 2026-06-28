@@ -228,7 +228,7 @@
   - [x] `HeadersViewer` — text view _(sortable table TODO)_
   - [x] `CookiesViewer` — `RestExecutionService` owns a per-session `CookieJar`: captures `Set-Cookie` (incl. on the Digest 401 challenge), auto-injects the matching `Cookie` header unless the user set one, toggle via `setCookieJarEnabled`; **Cookies** response tab renders the jar. 3 in-process-server wiring tests (73 total in http module)
   - [ ] `TimelineViewer` — waterfall chart (DNS/TCP/TLS/Send/Wait/Receive)
-  - [-] `TestResultsPanel` — `ResponseAssertions` backend done (status/header/body/JSON-path, 18 tests); UI tab TODO
+  - [x] `TestResultsPanel` — editable **Tests** request tab (`AssertionSpec` rows: type combo + header/JSON-path + expected/min + max) compiles to the `ResponseAssertions` backend; evaluated after every call into a **Test Results** response tab (tab title shows `n/m passed`, ✔/✘ per assertion). Assertions persist in history replay; `${VAR}` resolved in expected values. `AssertionSpec` + 3 tests (76 in http module)
 - [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
