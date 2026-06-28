@@ -226,9 +226,9 @@
   - [x] Timing: total, TTFB, download shown _(DNS/TCP/TLS split needs OkHttp listener)_
   - [-] `BodyViewer` — raw + auto JSON pretty-print done; XML tree/HTML/image/hex TODO
   - [x] `HeadersViewer` — text view _(sortable table TODO)_
-  - [ ] `CookiesViewer` — cookie jar browser
+  - [-] `CookiesViewer` — `CookieJar` backend done (RFC 6265 parse/match/expiry, 21 tests); UI viewer + `RestExecutionService` capture/inject TODO
   - [ ] `TimelineViewer` — waterfall chart (DNS/TCP/TLS/Send/Wait/Receive)
-  - [ ] `TestResultsPanel` — post-response script pass/fail assertions
+  - [-] `TestResultsPanel` — `ResponseAssertions` backend done (status/header/body/JSON-path, 18 tests); UI tab TODO
 - [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
@@ -330,7 +330,10 @@
       (`nexuslink-protocol-rabbitmq`, **7/7 tests** on the pure `factoryFor` seam); _Management REST API TODO_
 - [x] `RabbitMqView` — declare exchange/queue/binding, publish to exchange+routing-key, consume a
       queue into a live message log; `${VAR}` resolved in every field; **File ▸ New RabbitMQ Client**
-- [ ] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
+- [-] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
+  - [x] `DeadLetterArgs` — DLX queue-declare args builder (`x-dead-letter-*`, TTL, max-length, overflow); 8 tests
+  - [x] `RabbitMqManagementClient` — HTTP management API (overview/queues/exchanges/bindings/get/purge),
+        vhost encoding, Basic auth, JSON→records; 16 tests. _Management dashboard panel + confirms/ack UI TODO._
 
 ### 5.6 Cloud Messaging
 - [ ] AWS SQS: send/receive/delete, DLQ, FIFO support
@@ -363,15 +366,15 @@
 ## PHASE 7 — FILE TRANSFER
 
 ### 7.1 SFTP / SCP
-- [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list dir, read file. **Verified live vs. test.rebex.net.**
-- [-] `SftpExplorer` + `SftpView` — remote directory tree (lazy folders → files) with size/modified/permissions; _local pane + drag-and-drop transfer TODO_
-- [ ] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle
+- [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list/read + **upload/download (progress), mkdir, rename, delete (recursive), chmod**. **Verified live vs. test.rebex.net.**
+- [x] `SftpView` — **WinSCP/MobaXterm-style two-pane commander** (local↔remote) via reusable `com.nexuslink.ui.files` (`FileBrowserPane`/`DualPaneBrowser`); upload/download, **cross-pane drag-and-drop**, Ctrl/Shift multi-select, New-Folder/Rename(F2)/Delete(Del), context menus.
+- [ ] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle _(progress bar done; queue panel TODO)_
 - [ ] `SyncService` — bidirectional sync with conflict resolution (hash compare)
-- [x] Permissions display (rwx string in details); _remote chmod TODO_
+- [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
 ### 7.2 FTP / FTPS
-- [x] `FtpService` — Apache Commons Net (password/anonymous, passive mode, FTPS, list, read). `FtpExplorer` + `FtpView`. **Verified live vs. test.rebex.net.**
-- [-] Integrated into a tree browser (shared explorer); _dual-pane + transfer TODO_
+- [x] `FtpService` — Apache Commons Net (password/anonymous, passive, FTPS) + **upload/download (progress), mkdir, rename, delete (recursive), pwd**. **Verified live vs. test.rebex.net.**
+- [x] `FtpView` — **same two-pane commander** with drag-and-drop transfers (reuses `com.nexuslink.ui.files`)
 
 ### 7.x Connection-type visibility (per-user)
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
@@ -388,7 +391,11 @@
 ## PHASE 8 — DATABASE & ENTERPRISE PROTOCOLS
 
 ### 8.1 JDBC SQL Client
-- [x] `JdbcService` — DriverManager connection, SELECT/update detection _(HikariCP pool TODO)_
+- [x] `JdbcService` — DriverManager connection (now accepts extra driver props), SELECT/update detection _(HikariCP pool TODO)_
+- [x] **Driver-specific TLS/SSL** — `SslMode` + `JdbcTlsSpec` → `JdbcTlsParams` maps generic TLS material to
+      Postgres/CockroachDB (`ssl`/`sslmode`/`sslrootcert`/`sslcert`/`sslkey`), MySQL (`sslMode` + `*KeyStoreUrl`),
+      MariaDB (`serverSslCert`/`trustStore`/`keyStore`), SQL Server (`encrypt`/`trustServerCertificate`);
+      SQL view has a collapsible **TLS / SSL** pane. 11 tests, offline.
 - [x] `SqlClientView` — SQL editor (Ctrl+Enter), run button, result grid
 - [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
 - [-] Result grid: rendered _(sort/filter/JSON/CSV export TODO)_
@@ -449,8 +456,11 @@
 - [x] `LdapService` — UnboundID SDK; connect plain/LDAPS (+ optional bind), Root-DSE naming contexts,
       base/one/sub search with RFC-4515 filter, decoded entries (`nexuslink-protocol-ldap`,
       **6/6 tests** end-to-end against the bundled in-memory directory server); _StartTLS TODO_
+- [x] **LDIF + DN model** — `LdifWriter`/`LdifReader` (RFC 2849: base64 `::`, 76-char folding, multi-entry),
+      `Dn`/`Rdn` (RFC 4514 parse/escape, parent/child, normalized equality), `LdapEntry`; 29 tests, offline.
 - [-] `LdapView` — connect bar (host/port/bind/LDAPS), search (base/filter/scope/limit), DN result list +
-      attribute detail; naming contexts pre-fill the base; `${VAR}` in every field. _DIT tree + LDIF editor TODO_
+      attribute detail; naming contexts pre-fill the base; `${VAR}` in every field.
+      _DIT tree + LDIF import/export buttons (backend ready) + StartTLS TODO_
 - [ ] Search dialog (custom filter builder + predefined filters), entry add/modify/delete
 
 ### 8.5 SSH Terminal
@@ -462,9 +472,11 @@
 - [x] `SnmpService` — SNMP4J community **v1/v2c** GET + WALK (GETNEXT subtree loop w/ end-of-MIB +
       non-advancing guards), decoded varbinds (OID/type/value) (`nexuslink-protocol-snmp`,
       **4/4 tests** on the pure version/address/OID/varbind seam); _SNMPv3 USM TODO_
-- [-] `SnmpView` — open v1/v2c session, GET an OID or WALK a subtree into an OID/type/value table;
-      `${VAR}` in host/community/OID. _MIB-name resolution + DIT tree + trap receiver TODO_
-- [ ] Trap/inform receiver panel, MIB compiler / OID-name resolution
+- [x] `SnmpView` — open v1/v2c session, GET an OID or WALK a subtree into an OID/type/value table;
+      `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
+- [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
+- [x] `SnmpV3Config` — USM model (security level + auth MD5/SHA/SHA-256 + priv DES/AES-128, validation); 10 tests
+- [ ] Trap/inform receiver panel; real v3/USM auth+priv **on the wire** (model done)
 
 ---
 
@@ -496,9 +508,10 @@
 - [ ] CyberArk Conjur: machine identity
 
 ### 9.5 Code Generation (Global)
-- [ ] `CodeGenerator` SPI — each protocol implements a generator
-- [ ] Output languages: Java, Python, Go, JavaScript, cURL, PowerShell
-- [ ] `CodeGenDialog.fxml` — language tabs, copy + download buttons
+- [-] `RestCodeGenerator` — REST request → client snippet (per-language enum registry). _SPI across all protocols TODO._
+- [x] Output languages: cURL, Python (requests), JavaScript (fetch), Java (HttpClient), PowerShell,
+      **Node (axios), C# (HttpClient), Go (net/http), Rust (reqwest), PHP (curl), Ruby (net/http)** — 10 tests
+- [x] `CodeGenDialog` — language dropdown (driven by `Language.values()`), copy button
 
 ### 9.6 Native Packaging
 - [ ] `jlink` — custom JVM runtime image (minimize size)
@@ -563,6 +576,35 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-28: **Session 39 — SQL/JDBC TLS, SFTP/FTP file commander, and 5 parallel protocol-depth streams.**
+  - **SQL/JDBC TLS** (`protocol-db`): new driver-agnostic `SslMode` + `JdbcTlsSpec` → `JdbcTlsParams`
+    maps generic TLS material to each driver's own params — PostgreSQL/CockroachDB
+    (`ssl`/`sslmode`/`sslrootcert`/`sslcert`/`sslkey`, NonValidatingFactory for trust-all), MySQL
+    (`sslMode` + `*KeyStoreUrl`), MariaDB (`sslMode`/`serverSslCert`/`trustStore`/`keyStore`), SQL Server
+    (`encrypt`/`trustServerCertificate`). `JdbcService.connect` now takes extra props; SQL view has a
+    collapsible **TLS / SSL** pane (SSL-mode combo, CA/trust-store + client cert/key-store + trust-all,
+    PEM-vs-keystore auto-sorted by extension). **11 new tests**, all offline.
+  - **SFTP/FTP file commander** (WinSCP/MobaXterm/Tectia-style): `SftpService`/`FtpService` gained
+    upload/download (with progress), mkdir, rename, delete (recursive), and SFTP chmod. New reusable
+    `com.nexuslink.ui.files` package — `FileSystem`/`FileTransfer` adapters, `LocalFileSystem`,
+    `FileBrowserPane` (address bar, Up/Refresh/New-Folder, details table, context menu, F2/Del keys),
+    and `DualPaneBrowser` (local↔remote split with Upload →/← Download + progress bar). SFTP & FTP views
+    rewritten around it (connect → two-pane commander, with Disconnect). **Natural mouse UX:** cross-pane
+    **drag-and-drop** (drag local→remote uploads, remote→local downloads) with a drop-target highlight,
+    plus Ctrl/Shift multi-select.
+  - **5 parallel worktree-isolated agents** (one module each, offline-testable), merged by extracting
+    only their new files (existing module poms preserved):
+    1. **REST code-gen** — 6 new client targets (Node/axios, C#, Go, Rust, PHP, Ruby). _10 tests._
+    2. **REST cookie jar + response assertions** — RFC 6265 `CookieJar`, declarative `ResponseAssertions`
+       (status/header/body/JSON-path). _39 tests._
+    3. **LDAP** — `LdifWriter`/`LdifReader` (RFC 2849), `Dn`/`Rdn` (RFC 4514), `LdapEntry`. _29 tests._
+    4. **RabbitMQ** — `RabbitMqManagementClient` (HTTP management API: overview/queues/exchanges/bindings/
+       purge, vhost encoding, Basic auth, JSON→records) + `DeadLetterArgs` (DLX) builder. _24 tests._
+    5. **SNMP** — `OidRegistry` (OID↔MIB name, longest-prefix + instance suffix) + `SnmpV3Config` USM
+       model; SNMP view shows symbolic names + accepts them as input. _23 tests._
+  - **VERIFIED:** full `mvn test` **BUILD SUCCESS** across all 22 modules. _Lesson: worktrees fork from the
+    branch point, so agents told a module "doesn't exist" had simply forked behind main — merge by
+    cherry-picking their new files, not their from-scratch poms._
 - 2026-06-27: **Session 38 — TLS/mTLS extended to WebSocket, gRPC, and Kafka (user asked to parallelize).**
   - Attempted 3 parallel fork agents (worktree-isolated, one per protocol) — a transient **server-side
     rate limit** cut them off ~32 min in; only the gRPC backend (`GrpcService` netty SslContext + pom)
@@ -1038,38 +1080,43 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-27, after Session 38)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-28, after Session 39)
 
-**Where the project stands:** ~53% of tracked tasks done (136 `[x]` · 29 `[-]` · 90 `[ ]`).
-Working today: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
-**certificate manager**, **environment-variable system**, history, and protocol clients — REST,
-WebSocket, SSE, GraphQL, gRPC, SQL/JDBC, MongoDB, Redis, Kafka (first cut), **MQTT**, **RabbitMQ
-(first cut)**, SFTP, FTP/FTPS, S3/Azure/GCS, MCP Inspector (Bearer auth), AI/LLM tester, and the
-**AI Agent (MCP tool-calling loop)**, **LDAP / Active Directory** (browse + search), and an **SNMP
-browser** (v1/v2c GET/WALK). Full `mvn test` is **BUILD SUCCESS** across all 22 modules (Mongo IT
-Docker-gated via `-DrunMongoIT=true`).
+**Where the project stands:** ~55% of tracked tasks done. Full `mvn test` is **BUILD SUCCESS** across
+all 22 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
+Working: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
+**certificate manager** + bundle builder, **environment-variable system**, history, and protocol
+clients — REST (+ **cookie jar**, **response assertions**, **6 more code-gen languages**),
+WebSocket, SSE, GraphQL, gRPC, **SQL/JDBC (+ driver-specific TLS)**, MongoDB, Redis, Kafka (first
+cut), **MQTT**, **RabbitMQ** (first cut + **management-API client** + **DLX builder**),
+**SFTP / FTP-FTPS (WinSCP-style two-pane commander with drag-and-drop transfers)**, S3/Azure/GCS, MCP
+Inspector, AI/LLM tester, the **AI Agent (MCP tool-calling loop)**, **LDAP / AD** (browse + search +
+**LDIF/DN model**), and an **SNMP browser** (v1/v2c GET/WALK + **MIB-name resolution** + **v3/USM
+config model**). TLS/mTLS now covers REST, WebSocket, gRPC, Kafka, and SQL/JDBC.
 
 ### ✅ Tree state on resume
 
-Sessions 21–24 committed in `67bac92`; S25 (`ExpirationWatchdog`) `0be9069`; S26 (env-variable system),
-S27–28 (`${VAR}` adoption) committed; S29 (`4ed4410`) **RabbitMQ** module+view; S30 adds
-**`ProfileValidator`** + the **MCP→Agent tool-calling loop** (`McpAgentRunner` + `AgentView`).
-`git status` should be clean (branch ahead of `origin/main` — push when ready). **Phase 1 is now
-fully complete** — `ProfileValidator` was the last unchecked Phase-1 item. Remaining Phase-1 polish
-is `[-]` only (cert DER/PKCS12 export + bundle import + CSR).
+`git status` should be clean (branch ahead of `origin/main` — **don't push yet**). Session 39 added,
+all committed:
+- `fecc9a9` SQL/JDBC TLS · `1e20f36` SFTP/FTP dual-pane commander · `ff38b73` cross-pane drag-and-drop
+- `3f15526` integrated the 5 parallel streams (REST code-gen langs, cookie jar + assertions, LDAP
+  LDIF/DN, RabbitMQ management API + DLX, SNMP MIB/OID + v3 USM)
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **SQL/JDBC TLS** — driver-specific TLS params (Postgres `ssl`/`sslmode`/`sslrootcert`, MySQL
-   `trustCertificateKeyStoreUrl`, etc.) in the SQL view (WebSocket/gRPC/Kafka TLS are now done).
-2. **REST viewers** — cookie jar, waterfall timeline, response test assertions; remaining auth
-   (NTLM, HMAC, custom-script).
-3. **RabbitMQ depth** (Phase 5.5) — Management REST API, publisher confirms, manual ack/nack, DLX. _Broker for E2E._
-4. **LDAP / SNMP depth** — LDAP DIT tree + LDIF editor + StartTLS; SNMP v3/USM, MIB names, trap receiver.
-5. **Code-gen depth** — more languages/clients for the request code generator (pure string output, testable).
+1. **Wire the new offline backends into their UIs / connect end-to-end** (most are backend-only so far):
+   - RabbitMQ **management dashboard** panel (queues/exchanges/bindings table) over `RabbitMqManagementClient`;
+     publisher confirms + manual ack/nack (needs a broker for E2E).
+   - LDAP **LDIF import/export** buttons + **DIT tree** in `LdapView`; StartTLS.
+   - REST **cookie jar** capture/inject in `RestExecutionService` (currently a standalone class) +
+     **response test assertions** tab; **waterfall timeline**; remaining auth (NTLM, HMAC, custom-script).
+2. **SNMP depth** — trap receiver, real v3/USM auth/priv on the wire (model + MIB names done).
+3. **File commander polish** — transfer queue panel, overwrite/resume prompts, directory (recursive)
+   transfers, remote↔remote, bookmarks/sessions, embedded SSH terminal (MobaXterm parity).
+4. **REST waterfall timeline** + test-script runner.
 
-_(Done Session 37: Certificate Bundle Builder + TLS/mTLS material (`TlsContextFactory`, 6/6 incl. real
-mTLS handshake) wired into REST. Session 36: metrics dashboard. Session 35: cert export/import/CSR.)_
+_(Done Session 39: SQL/JDBC TLS · SFTP/FTP two-pane commander + drag-and-drop · 5 parallel streams above.
+Session 37: Certificate Bundle Builder + TLS/mTLS material wired into REST. Session 36: metrics dashboard.)_
 
 ### How to resume
 

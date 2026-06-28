@@ -137,22 +137,23 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~53% of tracked tasks complete** (136 done · 29 in-progress · 90 not started; see `TASKS.md`). **Phase 1 is complete.**
+**Overall: ~55% of tracked tasks complete** (see `TASKS.md`). **Phase 1 is complete.** Full `mvn test`
+is **BUILD SUCCESS** across all 22 modules.
 
 ---
 
 ## 6. Highest-value next steps
 
-1. **Enterprise messaging (Phase 5)** — RabbitMQ depth next (management REST API, publisher
-   confirms, manual ack/nack/requeue, DLX viewer), then JMS / cloud messaging. _(MQTT + RabbitMQ
-   first cuts are done.)_
-2. **Directory services (Phase 8)** — LDAP / Active Directory next (UnboundID SDK ships an in-memory
-   directory server, so the client is fully unit-testable offline), then SSH terminal + SNMP.
-3. **REST depth** — remaining OAuth 2.0 flows (auth-code/PKCE), Digest/NTLM/AWS-SigV4 auth,
-   richer response viewers (cookies, waterfall timeline, test assertions).
-4. **Auth flows** — implement the modeled `AuthMethod`s end-to-end per protocol (OAuth2 dance,
-   Kerberos, SASL/SCRAM, mTLS), and store secrets as vault refs.
-5. **Kafka depth** — schema registry, consumer-lag monitor, metrics (the first cut exists).
+1. **Surface the new offline backends in their UIs** — most Session-39 work is backend + tests so far:
+   RabbitMQ **management dashboard** over `RabbitMqManagementClient` + DLX/confirms/ack UI; LDAP **LDIF
+   import/export + DIT tree** (`Ldif*`/`Dn` ready); REST **cookie jar** capture/inject in
+   `RestExecutionService` + **response-assertions tab** (`CookieJar`/`ResponseAssertions` ready).
+2. **File commander parity (SFTP/FTP)** — transfer queue panel, overwrite/resume prompts, recursive
+   directory transfers, remote↔remote, bookmarks/sessions, embedded SSH terminal (MobaXterm-level).
+3. **REST depth** — waterfall timeline; remaining auth (NTLM, HMAC, custom-script).
+4. **SNMP depth** — trap receiver + real v3/USM on the wire (`OidRegistry` + `SnmpV3Config` model done).
+5. **Auth flows / Kafka depth** — end-to-end `AuthMethod`s (Kerberos, SASL/SCRAM, mTLS); Kafka schema
+   registry + consumer-lag monitor.
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
@@ -160,7 +161,8 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ **certificate manager (+ expiry watchdog)** ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
 (Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
-✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)** · ✅ **cert bundle builder + TLS/mTLS connection material**.
+✅ **REST AWS SigV4 + Digest auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)** · ✅ **cert bundle builder + TLS/mTLS connection material** ·
+✅ **SQL/JDBC driver-specific TLS** · ✅ **SFTP/FTP WinSCP-style two-pane file commander (+ cross-pane drag-and-drop, chmod)** · ✅ **REST code-gen: 6 more languages** · ✅ **REST cookie jar + response assertions (backend)** · ✅ **LDAP LDIF/DN model** · ✅ **RabbitMQ management API + DLX builder** · ✅ **SNMP MIB-name resolution + v3/USM model**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---
