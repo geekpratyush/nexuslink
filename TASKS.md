@@ -333,7 +333,11 @@
 - [-] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
   - [x] `DeadLetterArgs` — DLX queue-declare args builder (`x-dead-letter-*`, TTL, max-length, overflow); 8 tests
   - [x] `RabbitMqManagementClient` — HTTP management API (overview/queues/exchanges/bindings/get/purge),
-        vhost encoding, Basic auth, JSON→records; 16 tests. _Management dashboard panel + confirms/ack UI TODO._
+        vhost encoding, Basic auth, JSON→records; 16 tests.
+  - [x] **Management dashboard** — `RabbitMqView` split into **Messaging** / **Management** tabs; Management
+        has host+port (default 15672) reusing Auth credentials, **Refresh** loads overview + queues/
+        exchanges/bindings tables off the FX thread, and **Purge selected queue** (confirm → purge →
+        refresh); errors surfaced to status/log, never crash the UI. _(publisher confirms/ack UI still TODO)_
 
 ### 5.6 Cloud Messaging
 - [ ] AWS SQS: send/receive/delete, DLQ, FIFO support
