@@ -10,6 +10,7 @@ import com.rabbitmq.client.MessageProperties;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException;
 
 /**
  * RabbitMQ client wrapper over the official Java {@code amqp-client} (AMQP 0.9.1). Connect to a
@@ -35,6 +36,8 @@ public final class RabbitMqService implements AutoCloseable {
     private volatile Connection connection;
     private volatile Channel channel;
     private volatile MessageListener listener;
+    /** The channel that {@code confirmSelect()} has already been enabled on, so it is run once. */
+    private volatile Channel confirmsEnabledOn;
 
     /**
      * Builds and configures a {@link ConnectionFactory} from a connection string — pure, performs no
@@ -119,6 +122,37 @@ public final class RabbitMqService implements AutoCloseable {
     }
 
     /**
+     * Publishes {@code body} like {@link #publish}, then waits for a publisher confirm from the
+     * broker and reports whether it was {@link PublishConfirm#ACKED}, {@link PublishConfirm#NACKED}
+     * or {@link PublishConfirm#TIMEOUT}. {@code confirmSelect()} is enabled once per channel (lazily,
+     * on first use). A {@code timeoutMs} of {@code 0} waits indefinitely.
+     *
+     * <p>Requires a live broker for an end-to-end run (the wire round-trip and confirm); the pure
+     * boolean-to-outcome mapping it relies on is unit-tested via {@link PublishConfirm}.
+     */
+    public PublishConfirm publishConfirmed(String exchange, String routingKey, String body, long timeoutMs)
+            throws IOException, InterruptedException {
+        Channel ch = require();
+        enableConfirms(ch);
+        AMQP.BasicProperties props = MessageProperties.PERSISTENT_TEXT_PLAIN;
+        ch.basicPublish(exchange == null ? "" : exchange, routingKey == null ? "" : routingKey,
+                props, (body == null ? "" : body).getBytes(StandardCharsets.UTF_8));
+        try {
+            return PublishConfirm.fromWaitForConfirms(ch.waitForConfirms(timeoutMs));
+        } catch (TimeoutException e) {
+            return PublishConfirm.TIMEOUT;
+        }
+    }
+
+    /** Enables {@code confirmSelect()} on {@code ch} at most once (it is irreversible per channel). */
+    private void enableConfirms(Channel ch) throws IOException {
+        if (confirmsEnabledOn != ch) {
+            ch.confirmSelect();
+            confirmsEnabledOn = ch;
+        }
+    }
+
+    /**
      * Starts consuming from {@code queue}, routing each delivery to the registered listener.
      * Returns the consumer tag (pass to {@link #cancel}). With {@code autoAck} false, deliveries are
      * acknowledged automatically once handed to the listener.
@@ -142,6 +176,49 @@ public final class RabbitMqService implements AutoCloseable {
         });
     }
 
+    /**
+     * Starts consuming from {@code queue} with auto-ack OFF, handing each delivery (including its
+     * {@link Incoming#deliveryTag()}) to the registered listener without acknowledging it. The caller
+     * is then responsible for calling {@link #ack} or {@link #nack} for every delivery tag. Returns
+     * the consumer tag (pass to {@link #cancel}).
+     *
+     * <p>Requires a live broker for an end-to-end run.
+     */
+    public String consumeManual(String queue) throws IOException {
+        Channel ch = require();
+        DeliverCallback onDeliver = (consumerTag, delivery) -> {
+            MessageListener l = listener;
+            if (l != null) {
+                l.onMessage(new Incoming(
+                        delivery.getEnvelope().getExchange(),
+                        delivery.getEnvelope().getRoutingKey(),
+                        new String(delivery.getBody(), StandardCharsets.UTF_8),
+                        delivery.getEnvelope().getDeliveryTag()));
+            }
+        };
+        return ch.basicConsume(queue, false, onDeliver, consumerTag -> {
+            MessageListener l = listener;
+            if (l != null) l.onCancelled(consumerTag);
+        });
+    }
+
+    /**
+     * Acknowledges a single delivery by tag (the broker may then discard the message). Pair with
+     * {@link #consumeManual}. Requires a live broker for an end-to-end run.
+     */
+    public void ack(long deliveryTag) throws IOException {
+        require().basicAck(deliveryTag, false);
+    }
+
+    /**
+     * Negatively acknowledges a single delivery by tag. When {@code requeue} is true the broker
+     * re-queues the message for redelivery, otherwise it is dropped (or dead-lettered if configured).
+     * Pair with {@link #consumeManual}. Requires a live broker for an end-to-end run.
+     */
+    public void nack(long deliveryTag, boolean requeue) throws IOException {
+        require().basicNack(deliveryTag, false, requeue);
+    }
+
     /** Cancels an active consumer by tag (best-effort). */
     public void cancel(String consumerTag) throws IOException {
         if (consumerTag != null && !consumerTag.isBlank()) require().basicCancel(consumerTag);
@@ -159,6 +236,7 @@ public final class RabbitMqService implements AutoCloseable {
         Connection c = connection;
         channel = null;
         connection = null;
+        confirmsEnabledOn = null;
         if (ch != null) {
             try {
                 if (ch.isOpen()) ch.close();
