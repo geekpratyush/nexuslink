@@ -410,11 +410,13 @@
 - [ ] Per-pane status line: item count, selected size, free space
 
 **Transfers**
-- [ ] `TransferQueue` panel — queued/active/done list, per-item progress + **speed & ETA**, pause/resume/
-      retry/cancel, reorder, bandwidth throttle (supersedes the single progress bar; cross-ref 7.1)
+- [-] `TransferQueue` panel — **done:** observable engine driving existing `FileTransfer`, sequential
+      worker, collapsible `TransferQueuePanel` (per-row progress bars, overall bar, live counts,
+      clear-completed), enqueued from buttons/double-click/drag-drop (14 tests).
+      **TODO:** speed & ETA, pause/resume/retry/cancel, reorder, bandwidth throttle
 - [ ] **Recursive directory transfers** — upload/download whole folders, not just single files
-- [ ] Conflict resolution on transfer — prompt **skip / overwrite / overwrite-if-newer / rename**, with
-      "apply to all" for batches
+- [-] Conflict resolution on transfer — **done:** prompt **skip / overwrite** with **overwrite-all /
+      skip-all** stickiness across a batch (`OverwriteResolver`). **TODO:** overwrite-if-newer / rename
 - [ ] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors
 - [ ] Parallel/background transfers (configurable concurrency)
 - [ ] Post-transfer integrity check (size/mtime, optional hash/checksum)
@@ -544,7 +546,10 @@
       `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
 - [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
 - [x] `SnmpV3Config` — USM model (security level + auth MD5/SHA/SHA-256 + priv DES/AES-128, validation); 10 tests
-- [ ] Trap/inform receiver panel; real v3/USM auth+priv **on the wire** (model done)
+- [x] **Trap receiver** — `SnmpTrapReceiver` listens on UDP 162 (configurable/ephemeral) for v1/v2c
+      traps, decodes trap OID (RFC 3584 for v1) + varbinds with `OidRegistry` name resolution; `SnmpView`
+      **Traps** tab with start/stop, community filter, live table (7 tests incl. loopback round-trip)
+- [ ] Inform receiver/ack; real v3/USM auth+priv **on the wire** (model done)
 
 ---
 
@@ -1148,49 +1153,60 @@
 
 ---
 
-## NEXT ACTION  — RESUME POINT (saved 2026-06-28, after Session 39)
+## NEXT ACTION  — RESUME POINT (saved 2026-06-29, after Session 40)
 
-**Where the project stands:** ~55% of tracked tasks done. Full `mvn test` is **BUILD SUCCESS** across
-all 22 modules (Mongo IT Docker-gated via `-DrunMongoIT=true`).
-Working: shell + dark/light theming, help system, **credential vault** (UI + auto-lock),
-**certificate manager** + bundle builder, **environment-variable system**, history, and protocol
-clients — REST (+ **cookie jar**, **response assertions**, **6 more code-gen languages**),
-WebSocket, SSE, GraphQL, gRPC, **SQL/JDBC (+ driver-specific TLS)**, MongoDB, Redis, Kafka (first
-cut), **MQTT**, **RabbitMQ** (first cut + **management-API client** + **DLX builder**),
-**SFTP / FTP-FTPS (WinSCP-style two-pane commander with drag-and-drop transfers)**, S3/Azure/GCS, MCP
-Inspector, AI/LLM tester, the **AI Agent (MCP tool-calling loop)**, **LDAP / AD** (browse + search +
-**LDIF/DN model**), and an **SNMP browser** (v1/v2c GET/WALK + **MIB-name resolution** + **v3/USM
-config model**). TLS/mTLS now covers REST, WebSocket, gRPC, Kafka, and SQL/JDBC.
+> ⚠️ **This section goes stale — trust `git log`, not this prose.** Sessions 40a–40c (REST timeline +
+> assertions + cookie jar, RabbitMQ dashboard, LDAP DIT/LDIF) landed on `main` **without** this block
+> being updated, which caused a parallel run to re-implement already-done work. Before planning, run
+> `git log --oneline -30` and grep the tree for the files a task references.
+>
+> ⚠️ **Parallel/worktree agents:** isolated worktrees have spawned from an **old base commit**, not
+> current `main`. Each agent must fast-forward its branch to `main` first (or work directly in the main
+> checkout) and then verify `git log main..HEAD` is just its own commit before you integrate.
+
+**Where the project stands:** Full `mvn test` is **BUILD SUCCESS** across all 22 modules (Mongo IT
+Docker-gated via `-DrunMongoIT=true`). Working: shell + dark/light theming, help system,
+**credential vault** (UI + auto-lock), **certificate manager** + bundle builder,
+**environment-variable system**, history/settings/vault-backup, and protocol clients — REST
+(+ **cookie jar**, **response assertions tab**, **waterfall timeline**, 6 code-gen languages),
+WebSocket, SSE, GraphQL, gRPC, **SQL/JDBC (+ driver-specific TLS)**, MongoDB, Redis,
+**Kafka** (consume table + payload formatter + JSON/CSV export), **MQTT**,
+**RabbitMQ** (+ management **dashboard** with numeric-sort tables + overview strip + DLX builder),
+**SFTP / FTP-FTPS** (WinSCP-style two-pane commander, drag-and-drop, **transfer queue + overwrite/skip
+prompts**), S3/Azure/GCS, MCP Inspector, AI/LLM tester, the **AI Agent (MCP tool-calling loop)**,
+**LDAP / AD** (browse/search + filter builder + entry CRUD + **live LDIF import** + **lazy DIT tree**),
+and an **SNMP browser** (v1/v2c GET/WALK + MIB-name resolution + v3/USM config model + **trap receiver**).
+TLS/mTLS covers REST, WebSocket, gRPC, Kafka, and SQL/JDBC.
 
 ### ✅ Tree state on resume
 
-`git status` should be clean (branch ahead of `origin/main` — **don't push yet**). Session 39 added,
-all committed:
-- `fecc9a9` SQL/JDBC TLS · `1e20f36` SFTP/FTP dual-pane commander · `ff38b73` cross-pane drag-and-drop
-- `3f15526` integrated the 5 parallel streams (REST code-gen langs, cookie jar + assertions, LDAP
-  LDIF/DN, RabbitMQ management API + DLX, SNMP MIB/OID + v3 USM)
+`git status` clean (branch ahead of `origin/main` — **don't push yet**). Session 40 (parallel run)
+added, all committed on `main`:
+- `f0e7a39` RabbitMQ dashboard polish (overview strip + numeric-sort tables + refresh-all API)
+- `60b97fd` LDAP live LDIF import (apply to server) + lazy DIT tree browser
+- `a705eef` SNMP v1/v2c trap receiver + live trap table
+- `302429c` File commander transfer queue panel + overwrite/skip prompts
 
 ### ⏭ Highest-value next steps (pick per priority, **offline-testable first** per user)
 
-1. **Wire the new offline backends into their UIs / connect end-to-end** (most are backend-only so far):
-   - RabbitMQ **management dashboard** panel (queues/exchanges/bindings table) over `RabbitMqManagementClient`;
-     publisher confirms + manual ack/nack (needs a broker for E2E).
-   - LDAP **LDIF import/export** buttons + **DIT tree** in `LdapView`; StartTLS.
-   - REST **cookie jar** capture/inject in `RestExecutionService` (currently a standalone class) +
-     **response test assertions** tab; **waterfall timeline**; remaining auth (NTLM, HMAC, custom-script).
-2. **SNMP depth** — trap receiver, real v3/USM auth/priv on the wire (model + MIB names done).
-3. **File commander polish** — transfer queue panel, overwrite/resume prompts, directory (recursive)
-   transfers, remote↔remote, bookmarks/sessions, embedded SSH terminal (MobaXterm parity).
-4. **REST waterfall timeline** + test-script runner.
+1. **File commander depth** — transfer **speed & ETA**, pause/resume/retry/cancel, reorder, throttle;
+   **recursive directory** transfers; overwrite-if-newer / rename conflict modes; bookmarks/sessions;
+   always-visible local pane before connect; path/breadcrumb bar; column sort; sync browsing.
+2. **SNMP depth** — inform receiver/ack; real v3/USM auth+priv **on the wire** (model + traps done).
+3. **Kafka deep-dive** (Phase 4, still largely open) — consumer-group lag monitor, schema registry
+   client, message-browser filters (offset/timestamp/key/value/header), Kafka metrics.
+4. **REST** — remaining auth (NTLM, HMAC, custom-script); pre-request script runner.
 
-_(Done Session 39: SQL/JDBC TLS · SFTP/FTP two-pane commander + drag-and-drop · 5 parallel streams above.
-Session 37: Certificate Bundle Builder + TLS/mTLS material wired into REST. Session 36: metrics dashboard.)_
+_(Done Session 40: parallel run — RabbitMQ dashboard polish · LDAP live LDIF + lazy DIT · SNMP trap
+receiver · file-commander transfer queue. Earlier Sessions 40a–c had already added REST timeline +
+assertions + cookie jar, the base RabbitMQ dashboard, and base LDAP DIT/LDIF.)_
 
 ### How to resume
 
 ```bash
 cd /home/pratyush/software/nexuslink
-git status                       # review the uncommitted Sessions 21–24, then commit
+git log --oneline -30            # TRUST THIS over the prose above; check what's actually landed
+git status                       # should be clean
 mvn -DskipTests install          # build all modules
 mvn test                         # full suite (Mongo IT skipped without -DrunMongoIT=true)
 cd nexuslink-app && mvn javafx:run   # launch the desktop app (needs a graphical display)
