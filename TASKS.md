@@ -218,7 +218,12 @@
   - [-] **AWS Signature v4** (`AwsSigV4Signer`, verified vs the `aws-sig-v4-test-suite` get-vanilla
     known-answer + temp-credential session token; applied in `RestExecutionService`, Auth-tab fields)
     + **Digest** (`DigestAuthenticator`, RFC 2617/7616 qop=auth/MD5, verified vs the RFC 2617 §3.5
-    known-answer; 401-challenge single-retry in `RestExecutionService`); _NTLM / HMAC / Custom Script TODO_
+    known-answer; 401-challenge single-retry in `RestExecutionService`)
+    + **HMAC** (`HmacAuthenticator`: generic shared-secret signer over a templated canonical
+    string — `{method}/{path}/{query}/{url}/{host}/{date}/{body}/{body-sha256-hex|base64}/{keyId}`
+    placeholders + `\n` escape; HmacSHA256/SHA1/SHA512, hex/base64; emits `Date` when signed;
+    applied in `RestExecutionService`, full Auth-tab UI; **5/5 tests** incl. the RFC 4231 §4.3 KAT);
+    _NTLM / Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
   - [ ] Form-Data table with file picker per row
@@ -649,6 +654,19 @@
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-06-29: **Session 41 — REST HMAC auth (REST depth, offline-testable signer).**
+  - `HmacAuthenticator` (`nexuslink-protocol-http`): generic shared-secret request signer for the many
+    bespoke "HMAC a canonical string" schemes APIs roll themselves. Builds a *string-to-sign* from a
+    template over `{method} {path} {query} {url} {host} {date} {body} {body-sha256-hex|base64} {keyId}`
+    (with `\n` escape for line-oriented forms), HMACs it (HmacSHA256/SHA1/SHA512), encodes hex or base64,
+    and renders the header from a second template (`{signature} {keyId} …`). Emits a `Date` header when the
+    signed string uses `{date}` so the value is verifiable server-side. Pure/side-effect-free.
+  - Verified offline against the **RFC 4231 §4.3 HMAC-SHA256 known-answer vector** (key `Jefe`) plus
+    template/encoding/Date-emission behaviour — **5/5 tests** (90 in the http module).
+  - Wired through: `RestRequest` (new `HMAC` AuthType + fields + `${VAR}` interpolation), `RestExecutionService`
+    (signs and adds headers before send), `RestClientView` (full Auth-tab fieldset: algorithm/key-id/secret/
+    encoding/string-to-sign/header-name/header-value + placeholder hint, visibility-gated, tab-state persisted
+    minus the secret), and `RestCodeGenerator` (best-effort header note). Full `mvn test` green across all 22 modules.
 - 2026-06-28: **Session 39 — SQL/JDBC TLS, SFTP/FTP file commander, and 5 parallel protocol-depth streams.**
   - **SQL/JDBC TLS** (`protocol-db`): new driver-agnostic `SslMode` + `JdbcTlsSpec` → `JdbcTlsParams`
     maps generic TLS material to each driver's own params — PostgreSQL/CockroachDB

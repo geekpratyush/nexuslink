@@ -180,6 +180,13 @@ public final class RestExecutionService {
                 // First attempt sends no auth (to obtain the challenge); the retry passes the header.
                 if (digestAuthHeader != null) builder.header("Authorization", digestAuthHeader);
             }
+            case HMAC -> {
+                var headers = HmacAuthenticator.sign(req.getHmacAlgorithm(), req.getHmacSecret(),
+                        req.getHmacEncoding(), req.getHmacStringToSign(), req.getHmacHeaderName(),
+                        req.getHmacHeaderValue(), req.getHmacKeyId(),
+                        req.getMethod(), req.requestUri(), bodyBytes, java.time.Instant.now());
+                headers.forEach((k, v) -> safeHeader(builder, k, v));
+            }
             case NONE -> { /* no auth header */ }
         }
         return builder.build();

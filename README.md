@@ -27,7 +27,7 @@ workbench you use for REST and Kafka.
 
 NexusLink is under active development and **not yet feature-complete** against the full
 specification (`NexusLink_Specification.md`). As of the latest session, roughly **53% of the
-tracked tasks are done** (136 done · 29 in-progress · 90 not started), and **Phase 1 is
+tracked tasks are done** (159 done · 34 in-progress · 107 not started), and **Phase 1 is
 complete**. `TASKS.md` is the live, phase-by-phase tracker and the source of truth; the table
 below summarizes it.
 
@@ -45,32 +45,32 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Per-user protocol visibility (View ▸ Protocols…) | ✅ Working |
 | Connection profiles / saved connections | 🟡 Persisted + samples (folders/tags/import-export TODO) |
 | Certificate manager (generate, parse, PEM/DER/PKCS12 export, bundle import, CSR, **bundle builder**, expiry watchdog) | ✅ Working |
-| TLS / mTLS for connections (CA trust store + client key store) | ✅ Working in REST, WebSocket, gRPC, Kafka (SQL/JDBC pending) |
+| TLS / mTLS for connections (CA trust store + client key store) | ✅ Working in REST, WebSocket, gRPC, Kafka, **SQL/JDBC** (driver-specific SSL params) |
 | Environment-variable system (`${VAR}` envs, `.env`, secret masking) | ✅ Working (per-view send-path adoption TODO) |
 
 **Protocols**
 
 | Protocol | Status |
 |----------|--------|
-| **REST** (HTTP/2, auth: Basic/Bearer/API-key/OAuth2 client-creds + auth-code-PKCE/AWS-SigV4/Digest, timing, viewers, code-gen) | ✅ Working (NTLM/HMAC + more viewers TODO) |
+| **REST** (HTTP/2, auth: Basic/Bearer/API-key/OAuth2 client-creds + auth-code-PKCE/AWS-SigV4/Digest/**HMAC**, **cookie jar**, **response assertions**, **waterfall timeline**, viewers, code-gen in 11 languages) | ✅ Working (NTLM + pre-request scripts TODO) |
 | **WebSocket** | ✅ Working (text; binary/reconnect TODO) |
 | **SSE** | ✅ Working (verified live) |
 | **GraphQL** (query/variables/introspection) | ✅ Working (subscriptions TODO) |
 | **gRPC** (reflection-based, unary) | ✅ Working (verified live; streaming TODO) |
-| **JDBC SQL** (SQLite/H2/Postgres/MySQL/MariaDB bundled + on-demand driver mgr, ER diagram) | ✅ Working |
+| **JDBC SQL** (SQLite/H2/Postgres/MySQL/MariaDB bundled + on-demand driver mgr, ER diagram, TLS, sortable/filterable result grid + JSON/CSV export) | ✅ Working |
 | **MongoDB** (find/SQL/aggregate/explain/CRUD, schema diagram, Compass views, export) | ✅ Working |
 | **Redis** (Lettuce; key browser, typed values, command console) | 🟡 Built (needs live server for E2E) |
-| **Kafka** (admin/produce/consume, topic explorer) | 🟡 First cut (needs a broker for E2E) |
-| **SFTP / FTP / FTPS** (remote tree browse + read) | ✅ Working (verified live; local pane + transfer queue TODO) |
+| **Kafka** (admin/produce/consume, topic explorer, consume table + payload formatter String/JSON/Hex/Base64 + JSON/CSV export) | 🟡 First cut (lag/schema-registry pending; needs a broker for E2E) |
+| **SFTP / FTP / FTPS** (WinSCP-style dual-pane commander, drag-and-drop, transfer queue + overwrite/skip prompts, mkdir/rename/delete/chmod) | ✅ Working (verified live; recursive dir transfers + speed/ETA TODO) |
 | **S3 / Azure Blob / GCS** object storage (bucket→object browser) | 🟡 S3 verified live; Azure/GCS need creds for E2E |
 | **MCP Inspector** (tools/resources/prompts, Bearer-token auth) | ✅ Working (tested; OAuth/PKCE + vaulting TODO) |
 | **AI / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
 | **AI Agent** (MCP tool-calling loop — Claude calls an MCP server's tools) | ✅ Working (needs `ANTHROPIC_API_KEY` + an MCP server) |
 | **MQTT** (Eclipse Paho; connect/subscribe/publish) | 🟡 First cut (verified live vs. HiveMQ public broker) |
-| **RabbitMQ** (AMQP 0.9.1; declare/publish/consume) | 🟡 First cut (needs a broker for E2E) |
+| **RabbitMQ** (AMQP 0.9.1; declare/publish/consume + management dashboard: queues/exchanges/bindings + overview, DLX builder) | 🟡 First cut (publisher confirms/ack pending; needs a broker for E2E) |
 | JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
-| **LDAP / Active Directory** (browse + RFC-4515 search) | 🟡 First cut (needs a directory server for E2E) |
-| **SNMP** (v1/v2c GET + WALK) | 🟡 First cut (needs an agent for E2E) |
+| **LDAP / Active Directory** (browse + RFC-4515 search + filter builder, entry add/modify/delete, LDIF import/export, lazy DIT tree) | 🟡 First cut (StartTLS pending; needs a directory server for E2E) |
+| **SNMP** (v1/v2c GET + WALK + MIB-name resolution, v3/USM config model, trap receiver) | 🟡 First cut (v3-on-the-wire + inform pending; needs an agent for E2E) |
 | SSH terminal | ⏳ Not started |
 
 **Cross-cutting / polish**
@@ -84,12 +84,12 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Native packaging (`jlink` / `jpackage`, auto-update) | ⏳ Not started |
 
 > **Short answer to "is it done?": no.** The Phase-1 foundation (vault, certificate manager,
-> environment variables, history), the help infrastructure, and the most-used protocols
-> (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/object-storage/MCP/LLM, plus a first-cut Kafka and
-> MQTT) are built and many are verified live. Remaining enterprise messaging
-> (RabbitMQ/JMS/MQ/Solace/cloud), directory services (LDAP/SSH/SNMP), monitoring/metrics,
-> external vault integrations, and native installers are still ahead. See `TASKS.md` for the
-> exact remaining items per phase.
+> environment variables, history), the help infrastructure, and most protocols
+> (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/object-storage/MCP/LLM, plus first-cut Kafka, MQTT,
+> RabbitMQ with management dashboard, LDAP with LDIF/DIT, and an SNMP browser with trap receiver)
+> are built and many are verified live. Remaining: JMS/IBM-MQ/Solace/cloud messaging, SSH terminal,
+> Kafka depth (lag/schema-registry), distributed tracing, external vault integrations, and native
+> installers. See `TASKS.md` for the exact remaining items per phase.
 
 ## Requirements
 
@@ -112,8 +112,9 @@ See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
 ## Features at a Glance
 
 - **REST** — all HTTP methods, params/headers/body editors, Basic/Bearer/API-key/OAuth2
-  (client-credentials) auth, response viewers (JSON pretty-print, headers), per-request timing
-  (total/TTFB/download), HTTP/2, and code generation (cURL/Python/JS/Java/PowerShell).
+  (client-creds + auth-code/PKCE)/AWS-SigV4/Digest/HMAC auth, a session **cookie jar**, **response
+  assertions** (Tests tab), response viewers (JSON/XML pretty-print, hex, headers), a **waterfall
+  timeline** of request phases, HTTP/2, and code generation in 11 languages.
 - **WebSocket / SSE / GraphQL / gRPC** — live WS message log; SSE event stream with filtering;
   GraphQL query/variables/introspection; reflection-based gRPC unary calls (no `.proto` upload).
 - **SQL (JDBC)** — connect to any JDBC database, run queries, browse results, inspect schema,
@@ -121,12 +122,16 @@ See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
 - **MongoDB** — find / SQL-like queries / aggregation pipeline builder / explain / CRUD,
   inferred **schema diagram**, Compass-style JSON/Table/Schema views, and JSON/CSV export.
 - **Redis** — key browser with typed value rendering + a command console.
-- **Kafka** — topic/partition explorer, produce, and consume (first cut; needs a broker).
+- **Kafka** — topic/partition explorer, produce, and consume into a table with a payload formatter
+  (String/JSON/Hex/Base64) and JSON/CSV export (first cut; needs a broker).
 - **MQTT** — connect to a broker, subscribe to topic filters, and publish (Eclipse Paho; first
   cut, verified live against the HiveMQ public broker).
-- **RabbitMQ** — declare exchanges/queues/bindings, publish to an exchange + routing key, and
-  consume a queue into a live log (AMQP 0.9.1; first cut, needs a broker for E2E).
-- **File transfer** — SFTP / FTP / FTPS remote directory browsing and file read.
+- **RabbitMQ** — declare exchanges/queues/bindings, publish to an exchange + routing key, consume a
+  queue into a live log, a dead-letter-exchange builder, and a **management dashboard** (queues/
+  exchanges/bindings tables + cluster overview over the management REST API) — AMQP 0.9.1; first cut.
+- **File transfer** — SFTP / FTP / FTPS in a **WinSCP-style dual-pane commander**: local↔remote
+  browsing, cross-pane drag-and-drop, a **transfer queue** with overwrite/skip prompts, and
+  mkdir/rename/delete/chmod.
 - **Object storage** — S3 / Azure Blob / GCS bucket→object browsers behind one shared view.
 - **MCP Inspector** — connect to a Model Context Protocol server (HTTP or stdio), with optional
   **Bearer-token auth**; list and call its **tools**, read **resources**, render **prompts**.

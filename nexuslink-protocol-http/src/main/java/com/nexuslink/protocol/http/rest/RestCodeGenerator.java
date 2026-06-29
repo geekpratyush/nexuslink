@@ -71,6 +71,8 @@ public final class RestCodeGenerator {
             }
             case OAUTH2 -> h.put("Authorization",
                     "Bearer <access_token from " + r.getOauthTokenUrl() + ">");
+            case HMAC -> h.put(r.getHmacHeaderName().isBlank() ? "Authorization" : r.getHmacHeaderName(),
+                    "<" + r.getHmacAlgorithm() + " of \"" + r.getHmacStringToSign() + "\">");
             case NONE -> { /* none */ }
         }
         return h;

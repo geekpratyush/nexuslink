@@ -22,7 +22,7 @@ public final class RestRequest {
     private String body = "";
 
     // Auth
-    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST }
+    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST, HMAC }
     /** Where an API key is sent. */
     public enum ApiKeyLocation { HEADER, QUERY }
     private AuthType authType = AuthType.NONE;
@@ -43,6 +43,14 @@ public final class RestRequest {
     private String awsAccessKey = "";
     private String awsSecretKey = "";
     private String awsSessionToken = "";
+    // Generic HMAC auth (sign a templated canonical string with a shared secret)
+    private HmacAuthenticator.Algorithm hmacAlgorithm = HmacAuthenticator.Algorithm.HMAC_SHA256;
+    private HmacAuthenticator.Encoding hmacEncoding = HmacAuthenticator.Encoding.BASE64;
+    private String hmacKeyId = "";
+    private String hmacSecret = "";
+    private String hmacStringToSign = "{method}\\n{path}\\n{date}";
+    private String hmacHeaderName = "Authorization";
+    private String hmacHeaderValue = "HMAC {signature}";
 
     // TLS / mTLS (trust store verifies the server; key store presents a client cert for mutual TLS)
     private String tlsTrustStorePath = "";
@@ -124,6 +132,27 @@ public final class RestRequest {
     public String getAwsSessionToken() { return awsSessionToken; }
     public void setAwsSessionToken(String v) { this.awsSessionToken = v; }
 
+    public HmacAuthenticator.Algorithm getHmacAlgorithm() { return hmacAlgorithm; }
+    public void setHmacAlgorithm(HmacAuthenticator.Algorithm v) { this.hmacAlgorithm = v; }
+
+    public HmacAuthenticator.Encoding getHmacEncoding() { return hmacEncoding; }
+    public void setHmacEncoding(HmacAuthenticator.Encoding v) { this.hmacEncoding = v; }
+
+    public String getHmacKeyId() { return hmacKeyId; }
+    public void setHmacKeyId(String v) { this.hmacKeyId = v; }
+
+    public String getHmacSecret() { return hmacSecret; }
+    public void setHmacSecret(String v) { this.hmacSecret = v; }
+
+    public String getHmacStringToSign() { return hmacStringToSign; }
+    public void setHmacStringToSign(String v) { this.hmacStringToSign = v; }
+
+    public String getHmacHeaderName() { return hmacHeaderName; }
+    public void setHmacHeaderName(String v) { this.hmacHeaderName = v; }
+
+    public String getHmacHeaderValue() { return hmacHeaderValue; }
+    public void setHmacHeaderValue(String v) { this.hmacHeaderValue = v; }
+
     public String getTlsTrustStorePath() { return tlsTrustStorePath; }
     public void setTlsTrustStorePath(String v) { this.tlsTrustStorePath = v; }
 
@@ -196,6 +225,13 @@ public final class RestRequest {
         r.awsAccessKey = fn.apply(awsAccessKey);
         r.awsSecretKey = fn.apply(awsSecretKey);
         r.awsSessionToken = fn.apply(awsSessionToken);
+        r.hmacAlgorithm = hmacAlgorithm;
+        r.hmacEncoding = hmacEncoding;
+        r.hmacKeyId = fn.apply(hmacKeyId);
+        r.hmacSecret = fn.apply(hmacSecret);
+        r.hmacStringToSign = fn.apply(hmacStringToSign);
+        r.hmacHeaderName = fn.apply(hmacHeaderName);
+        r.hmacHeaderValue = fn.apply(hmacHeaderValue);
         r.tlsTrustStorePath = fn.apply(tlsTrustStorePath);
         r.tlsTrustStorePassword = fn.apply(tlsTrustStorePassword);
         r.tlsKeyStorePath = fn.apply(tlsKeyStorePath);

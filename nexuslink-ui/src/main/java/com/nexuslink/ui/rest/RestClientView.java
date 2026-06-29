@@ -84,6 +84,13 @@ public final class RestClientView extends BorderPane {
     private final TextField awsAccessKey = new TextField();
     private final PasswordField awsSecretKey = new PasswordField();
     private final TextField awsSessionToken = new TextField();
+    private ComboBox<com.nexuslink.protocol.http.rest.HmacAuthenticator.Algorithm> hmacAlgorithm;
+    private ComboBox<com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding> hmacEncoding;
+    private final TextField hmacKeyId = new TextField();
+    private final PasswordField hmacSecret = new PasswordField();
+    private final TextField hmacStringToSign = new TextField("{method}\\n{path}\\n{date}");
+    private final TextField hmacHeaderName = new TextField("Authorization");
+    private final TextField hmacHeaderValue = new TextField("HMAC {signature}");
     private final TextField tlsTrustStore = new TextField();
     private final PasswordField tlsTrustStorePw = new PasswordField();
     private final TextField tlsKeyStore = new TextField();
@@ -518,6 +525,40 @@ public final class RestClientView extends BorderPane {
         grid.add(secretKeyLbl, 0, 15);    grid.add(awsSecretKey, 1, 15);
         grid.add(sessionTokenLbl, 0, 16); grid.add(awsSessionToken, 1, 16);
 
+        hmacAlgorithm = new ComboBox<>(FXCollections.observableArrayList(
+                com.nexuslink.protocol.http.rest.HmacAuthenticator.Algorithm.values()));
+        hmacAlgorithm.setValue(com.nexuslink.protocol.http.rest.HmacAuthenticator.Algorithm.HMAC_SHA256);
+        hmacEncoding = new ComboBox<>(FXCollections.observableArrayList(
+                com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding.values()));
+        hmacEncoding.setValue(com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding.BASE64);
+        Label hmacAlgoLbl = new Label("Algorithm:");
+        Label hmacKeyIdLbl = new Label("Key ID:");
+        Label hmacSecretLbl = new Label("Secret:");
+        Label hmacEncLbl = new Label("Encoding:");
+        Label hmacStsLbl = new Label("String to sign:");
+        Label hmacHdrNameLbl = new Label("Header name:");
+        Label hmacHdrValLbl = new Label("Header value:");
+        for (Label l : new Label[]{hmacAlgoLbl, hmacKeyIdLbl, hmacSecretLbl, hmacEncLbl,
+                hmacStsLbl, hmacHdrNameLbl, hmacHdrValLbl}) l.getStyleClass().add("meta-label");
+        for (TextField f : new TextField[]{hmacKeyId, hmacSecret, hmacStringToSign, hmacHeaderName, hmacHeaderValue}) {
+            f.getStyleClass().add("nl-field");
+            f.setPrefWidth(280);
+        }
+        hmacKeyId.setPromptText("optional, e.g. access key id");
+        Label hmacHint = new Label("Placeholders: {method} {path} {query} {url} {host} {date} "
+                + "{body} {body-sha256-hex} {body-sha256-base64} {keyId} {signature}; use \\n for a newline.");
+        hmacHint.getStyleClass().add("meta-label");
+        hmacHint.setWrapText(true);
+        hmacHint.setMaxWidth(380);
+        grid.add(hmacAlgoLbl, 0, 17);     grid.add(hmacAlgorithm, 1, 17);
+        grid.add(hmacKeyIdLbl, 0, 18);    grid.add(hmacKeyId, 1, 18);
+        grid.add(hmacSecretLbl, 0, 19);   grid.add(hmacSecret, 1, 19);
+        grid.add(hmacEncLbl, 0, 20);      grid.add(hmacEncoding, 1, 20);
+        grid.add(hmacStsLbl, 0, 21);      grid.add(hmacStringToSign, 1, 21);
+        grid.add(hmacHdrNameLbl, 0, 22);  grid.add(hmacHeaderName, 1, 22);
+        grid.add(hmacHdrValLbl, 0, 23);   grid.add(hmacHeaderValue, 1, 23);
+        grid.add(hmacHint, 1, 24);
+
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
@@ -526,6 +567,7 @@ public final class RestClientView extends BorderPane {
             boolean apiKey = t == RestRequest.AuthType.API_KEY;
             boolean oauth = t == RestRequest.AuthType.OAUTH2;
             boolean sigv4 = t == RestRequest.AuthType.AWS_SIGV4;
+            boolean hmac = t == RestRequest.AuthType.HMAC;
             // Basic + Digest both use the username/password fields.
             setRowVisible(basic || digest, userLbl, authUser, passLbl, authPass);
             setRowVisible(bearer, tokenLbl, authToken);
@@ -534,6 +576,9 @@ public final class RestClientView extends BorderPane {
                     clientSecretLbl, oauthClientSecret, scopeLbl, oauthScope, grantLbl, grantBox);
             setRowVisible(sigv4, regionLbl, awsRegion, serviceLbl, awsService, accessKeyLbl, awsAccessKey,
                     secretKeyLbl, awsSecretKey, sessionTokenLbl, awsSessionToken);
+            setRowVisible(hmac, hmacAlgoLbl, hmacAlgorithm, hmacKeyIdLbl, hmacKeyId, hmacSecretLbl, hmacSecret,
+                    hmacEncLbl, hmacEncoding, hmacStsLbl, hmacStringToSign, hmacHdrNameLbl, hmacHeaderName,
+                    hmacHdrValLbl, hmacHeaderValue, hmacHint);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
@@ -760,6 +805,13 @@ public final class RestClientView extends BorderPane {
         request.setAwsAccessKey(awsAccessKey.getText());
         request.setAwsSecretKey(awsSecretKey.getText());
         request.setAwsSessionToken(awsSessionToken.getText());
+        request.setHmacAlgorithm(hmacAlgorithm.getValue());
+        request.setHmacEncoding(hmacEncoding.getValue());
+        request.setHmacKeyId(hmacKeyId.getText());
+        request.setHmacSecret(hmacSecret.getText());
+        request.setHmacStringToSign(hmacStringToSign.getText());
+        request.setHmacHeaderName(hmacHeaderName.getText());
+        request.setHmacHeaderValue(hmacHeaderValue.getText());
         request.setTlsTrustStorePath(tlsTrustStore.getText());
         request.setTlsTrustStorePassword(tlsTrustStorePw.getText());
         request.setTlsKeyStorePath(tlsKeyStore.getText());
@@ -839,6 +891,13 @@ public final class RestClientView extends BorderPane {
         root.put("awsRegion", request.getAwsRegion());
         root.put("awsService", request.getAwsService());
         root.put("awsAccessKey", request.getAwsAccessKey());
+        // HMAC: persist everything but the secret (re-entered, like other secrets)
+        root.put("hmacAlgorithm", request.getHmacAlgorithm().name());
+        root.put("hmacEncoding", request.getHmacEncoding().name());
+        root.put("hmacKeyId", request.getHmacKeyId());
+        root.put("hmacStringToSign", request.getHmacStringToSign());
+        root.put("hmacHeaderName", request.getHmacHeaderName());
+        root.put("hmacHeaderValue", request.getHmacHeaderValue());
         // TLS: persist store paths + trust-all (passwords are re-entered, like other secrets)
         root.put("tlsTrustStorePath", request.getTlsTrustStorePath());
         root.put("tlsKeyStorePath", request.getTlsKeyStorePath());
@@ -891,6 +950,14 @@ public final class RestClientView extends BorderPane {
             awsRegion.setText(root.path("awsRegion").asText("us-east-1"));
             awsService.setText(root.path("awsService").asText("execute-api"));
             awsAccessKey.setText(root.path("awsAccessKey").asText(""));
+            hmacAlgorithm.setValue(com.nexuslink.protocol.http.rest.HmacAuthenticator.Algorithm.valueOf(
+                    root.path("hmacAlgorithm").asText("HMAC_SHA256")));
+            hmacEncoding.setValue(com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding.valueOf(
+                    root.path("hmacEncoding").asText("BASE64")));
+            hmacKeyId.setText(root.path("hmacKeyId").asText(""));
+            hmacStringToSign.setText(root.path("hmacStringToSign").asText("{method}\\n{path}\\n{date}"));
+            hmacHeaderName.setText(root.path("hmacHeaderName").asText("Authorization"));
+            hmacHeaderValue.setText(root.path("hmacHeaderValue").asText("HMAC {signature}"));
             tlsTrustStore.setText(root.path("tlsTrustStorePath").asText(""));
             tlsKeyStore.setText(root.path("tlsKeyStorePath").asText(""));
             tlsTrustAll.setSelected(root.path("tlsTrustAll").asBoolean(false));
