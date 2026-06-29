@@ -171,6 +171,65 @@ class LdapServiceTest {
     }
 
     @Test
+    void oneLevelScopeReturnsOnlyDirectChildren() throws Exception {
+        try (LdapService ldap = new LdapService()) {
+            ldap.connect("localhost", port, "cn=Directory Manager", "secret", false);
+
+            // direct child of the suffix is the single organizational unit
+            List<LdapService.Entry> top = ldap.search("dc=example,dc=com", "(objectClass=*)", "one", 0);
+            assertEquals(1, top.size());
+            assertEquals("ou=people,dc=example,dc=com", top.get(0).dn());
+
+            // direct children of ou=people are the two people, not the suffix above them
+            List<String> kids = ldap.search("ou=people,dc=example,dc=com", "(objectClass=*)", "one", 0)
+                    .stream().map(LdapService.Entry::dn).sorted().toList();
+            assertEquals(List.of(
+                    "uid=alice,ou=people,dc=example,dc=com",
+                    "uid=bob,ou=people,dc=example,dc=com"), kids);
+        }
+    }
+
+    @Test
+    void applyEntryAddsWhenAbsentThenModifiesWhenPresent() throws Exception {
+        try (LdapService ldap = new LdapService()) {
+            ldap.connect("localhost", port, "cn=Directory Manager", "secret", false);
+
+            Map<String, List<String>> attrs = new LinkedHashMap<>();
+            attrs.put("objectClass", List.of("top", "person", "organizationalPerson", "inetOrgPerson"));
+            attrs.put("uid", List.of("dave"));
+            attrs.put("cn", List.of("Dave Davis"));
+            attrs.put("sn", List.of("Davis"));
+            attrs.put("mail", List.of("dave@example.com"));
+            String dn = "uid=dave,ou=people,dc=example,dc=com";
+
+            assertEquals(LdapService.ApplyResult.ADDED, ldap.applyEntry(dn, attrs));
+            assertEquals(List.of("dave@example.com"),
+                    ldap.search("dc=example,dc=com", "(uid=dave)", "sub", 0).get(0).attributes().get("mail"));
+
+            // re-applying the same DN with a changed attribute updates it in place
+            attrs.put("mail", List.of("dave.davis@example.com"));
+            assertEquals(LdapService.ApplyResult.MODIFIED, ldap.applyEntry(dn, attrs));
+            assertEquals(List.of("dave.davis@example.com"),
+                    ldap.search("dc=example,dc=com", "(uid=dave)", "sub", 0).get(0).attributes().get("mail"));
+        }
+    }
+
+    @Test
+    void applyEntryPropagatesNonExistenceErrors() throws Exception {
+        try (LdapService ldap = new LdapService()) {
+            ldap.connect("localhost", port, "cn=Directory Manager", "secret", false);
+            // parent ou=ghost does not exist → not an "already exists" error, so it must surface
+            Map<String, List<String>> attrs = new LinkedHashMap<>();
+            attrs.put("objectClass", List.of("inetOrgPerson"));
+            attrs.put("uid", List.of("nobody"));
+            attrs.put("cn", List.of("No Body"));
+            attrs.put("sn", List.of("Body"));
+            assertThrows(LDAPException.class,
+                    () -> ldap.applyEntry("uid=nobody,ou=ghost,dc=example,dc=com", attrs));
+        }
+    }
+
+    @Test
     void scopeOfMapsTextToEnum() {
         assertEquals(SearchScope.BASE, LdapService.scopeOf("base"));
         assertEquals(SearchScope.ONE, LdapService.scopeOf("one"));

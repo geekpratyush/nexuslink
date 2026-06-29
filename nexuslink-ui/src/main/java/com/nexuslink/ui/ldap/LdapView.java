@@ -134,6 +134,9 @@ public final class LdapView extends BorderPane {
         Button exportBtn = new Button("Export LDIF…");
         exportBtn.getStyleClass().add("btn-secondary");
         exportBtn.setOnAction(e -> exportLdif());
+        Button browseBtn = new Button("Browse DIT");
+        browseBtn.getStyleClass().add("btn-secondary");
+        browseBtn.setOnAction(e -> browseDit());
 
         Button addBtn = new Button("Add child…");
         addBtn.getStyleClass().add("btn-secondary");
@@ -150,7 +153,8 @@ public final class LdapView extends BorderPane {
         HBox filterRow = new HBox(8, label("Filter:"), filterField, buildFilterBtn, label("Scope:"), scopeCombo,
                 label("Limit:"), sizeLimitField, searchBtn, importBtn, exportBtn);
         filterRow.setAlignment(Pos.CENTER_LEFT);
-        HBox entryRow = new HBox(8, label("Entry:"), addBtn, modifyBtn, deleteBtn);
+        HBox entryRow = new HBox(8, label("Entry:"), addBtn, modifyBtn, deleteBtn,
+                new Separator(javafx.geometry.Orientation.VERTICAL), browseBtn);
         entryRow.setAlignment(Pos.CENTER_LEFT);
 
         results.setCellFactory(lv -> new ListCell<>() {
@@ -466,7 +470,11 @@ public final class LdapView extends BorderPane {
         ditTree.setRoot(root);
     }
 
-    /** Read a .ldif file via {@link LdifReader} and display the parsed entries — works fully offline. */
+    /**
+     * Import a .ldif file. When connected the parsed entries are applied to the directory via
+     * {@link LdapService#applyEntry} (new DNs added, existing DNs updated), reporting how many were
+     * added / modified / failed. When not connected the file is parsed and shown for offline preview.
+     */
     private void importLdif() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Import LDIF");
@@ -475,10 +483,57 @@ public final class LdapView extends BorderPane {
                 new FileChooser.ExtensionFilter("All files", "*.*"));
         File file = chooser.showOpenDialog(window());
         if (file == null) return;
+        if (service.isConnected()) {
+            applyLdifToServer(file);
+        } else {
+            previewLdifOffline(file);
+        }
+    }
 
+    /** Parse the LDIF file and apply each entry to the live directory, summarising the outcome. */
+    private void applyLdifToServer(File file) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Applying LDIF…");
+        logger.accept("LDIF import ← " + file.getAbsolutePath() + " (apply to server)");
+
+        Task<ImportSummary> task = new Task<>() {
+            @Override protected ImportSummary call() throws Exception {
+                String text = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+                List<LdapEntry> parsed = new LdifReader().read(text);
+                int added = 0;
+                int modified = 0;
+                List<String> failures = new ArrayList<>();
+                for (LdapEntry le : parsed) {
+                    try {
+                        LdapService.ApplyResult r = service.applyEntry(le.dn().toString(), le.attributes());
+                        if (r == LdapService.ApplyResult.ADDED) added++; else modified++;
+                    } catch (Exception ex) {
+                        failures.add(le.dn() + " — " + ex.getMessage());
+                    }
+                }
+                return new ImportSummary(parsed.size(), added, modified, failures);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            ImportSummary s = task.getValue();
+            statusLabel.getStyleClass().setAll(s.failures().isEmpty() ? "status-2xx" : "status-err");
+            statusLabel.setText(s.status());
+            logger.accept("LDIF import → " + s.status() + " from " + file.getName());
+            if (!s.failures().isEmpty()) showImportFailures(s.failures());
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Import failed: " + task.getException().getMessage());
+            logger.accept("LDIF import FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "ldap-ldif-import");
+    }
+
+    /** Read a .ldif file via {@link LdifReader} and display the parsed entries — works fully offline. */
+    private void previewLdifOffline(File file) {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Importing LDIF…");
-        logger.accept("LDIF import ← " + file.getAbsolutePath());
+        logger.accept("LDIF import ← " + file.getAbsolutePath() + " (offline preview)");
 
         Task<List<LdapService.Entry>> task = new Task<>() {
             @Override protected List<LdapService.Entry> call() throws Exception {
@@ -493,7 +548,8 @@ public final class LdapView extends BorderPane {
             List<LdapService.Entry> entries = task.getValue();
             setEntries(entries);
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Imported " + entries.size() + " entr" + (entries.size() == 1 ? "y" : "ies"));
+            statusLabel.setText("Imported " + entries.size() + " entr" + (entries.size() == 1 ? "y" : "ies")
+                    + " (offline preview — connect to apply)");
             logger.accept("LDIF import → " + entries.size() + " entries from " + file.getName());
         });
         task.setOnFailed(e -> {
@@ -502,6 +558,26 @@ public final class LdapView extends BorderPane {
             logger.accept("LDIF import FAILED: " + task.getException().getMessage());
         });
         runBg(task, "ldap-ldif-import");
+    }
+
+    /** Show the DNs that could not be applied during a live LDIF import. */
+    private void showImportFailures(List<String> failures) {
+        String body = String.join("\n", failures);
+        Alert alert = new Alert(Alert.AlertType.WARNING, body, ButtonType.OK);
+        alert.setHeaderText(failures.size() + " entr" + (failures.size() == 1 ? "y" : "ies") + " failed to import");
+        alert.getDialogPane().setPrefWidth(560);
+        if (window() != null) alert.initOwner(window());
+        alert.showAndWait();
+    }
+
+    /** Outcome of a live LDIF import: counts of added/modified entries plus per-entry failure messages. */
+    private record ImportSummary(int total, int added, int modified, List<String> failures) {
+        String status() {
+            String base = added + " added, " + modified + " modified";
+            return failures.isEmpty()
+                    ? "Imported " + total + " entr" + (total == 1 ? "y" : "ies") + " (" + base + ")"
+                    : base + ", " + failures.size() + " failed of " + total;
+        }
     }
 
     /**
@@ -549,18 +625,65 @@ public final class LdapView extends BorderPane {
         runBg(task, "ldap-ldif-export");
     }
 
-    /** Entries to export: the selected DIT subtree if a node is selected, else all current results. */
+    /**
+     * Entries to export: the selected DIT subtree (the node and all of its loaded descendants) if a
+     * tree node is selected, else all current results. Walking the tree covers both the result-derived
+     * hierarchy and the lazily-loaded live browser (only the portions already expanded are exported).
+     */
     private List<LdapService.Entry> exportSelection() {
         TreeItem<DitNode> selected = ditTree.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getValue() != null) {
-            Dn base = selected.getValue().dn;
             List<LdapService.Entry> subtree = new ArrayList<>();
-            for (LdapService.Entry e : results.getItems()) {
-                if (Dn.parse(e.dn()).isDescendantOf(base)) subtree.add(e);
-            }
+            collectEntries(selected, subtree);
             if (!subtree.isEmpty()) return subtree;
         }
         return new ArrayList<>(results.getItems());
+    }
+
+    /** Depth-first collect the backing entry of {@code node} and every descendant that has one. */
+    private static void collectEntries(TreeItem<DitNode> node, List<LdapService.Entry> out) {
+        DitNode value = node.getValue();
+        if (value != null && value.entry != null) out.add(value.entry);
+        for (TreeItem<DitNode> child : node.getChildren()) collectEntries(child, out);
+    }
+
+    /**
+     * Root the DIT tree at the search base DN and browse the directory live: each node lazily queries
+     * its direct children (one-level scope) the first time it is expanded, so large directories load on
+     * demand. Selecting a node shows its attributes in the detail pane.
+     */
+    private void browseDit() {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        String base = Env.resolve(baseDnField.getText().trim());
+        if (base.isEmpty()) { statusLabel.setText("Enter a base DN to browse"); return; }
+        Dn baseDn = Dn.parse(base);
+
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Loading DIT…");
+        logger.accept("LDAP browse DIT @ " + base);
+
+        Task<LdapService.Entry> task = new Task<>() {
+            @Override protected LdapService.Entry call() throws Exception {
+                List<LdapService.Entry> self = service.search(base, "(objectClass=*)", "base", 1);
+                return self.isEmpty() ? new LdapService.Entry(base, Map.of()) : self.get(0);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            TreeItem<DitNode> hidden = new TreeItem<>(null);
+            LazyDitItem rootItem = new LazyDitItem(baseDn, task.getValue(), base);
+            hidden.getChildren().add(rootItem);
+            ditTree.setRoot(hidden);
+            rootItem.setExpanded(true);   // triggers the first one-level load
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Browsing DIT — root " + base);
+            logger.accept("LDAP DIT rooted at " + base);
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Browse failed: " + task.getException().getMessage());
+            logger.accept("LDAP browse DIT FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "ldap-dit-browse");
     }
 
     private static LdapEntry toModel(LdapService.Entry entry) {
@@ -597,6 +720,53 @@ public final class LdapView extends BorderPane {
 
         @Override public String toString() {
             return label;     // the default TreeCell renders this
+        }
+    }
+
+    /**
+     * A DIT tree node that loads its children on demand: the first time it is expanded it runs a
+     * one-level search under its own DN via {@link LdapService}, turning each returned entry into a
+     * further {@code LazyDitItem}. A node is treated as a branch until it has been loaded and proven
+     * to have no children, so the disclosure arrow is shown until the directory is queried.
+     */
+    private final class LazyDitItem extends TreeItem<DitNode> {
+        private boolean loaded;
+
+        LazyDitItem(Dn dn, LdapService.Entry entry, String label) {
+            super(new DitNode(dn, entry, label));
+            expandedProperty().addListener((o, was, isNow) -> {
+                if (isNow && !loaded) loadChildren();
+            });
+        }
+
+        @Override public boolean isLeaf() {
+            return loaded && getChildren().isEmpty();
+        }
+
+        private void loadChildren() {
+            loaded = true;
+            String base = getValue().dn.toString();
+            Task<List<LdapService.Entry>> task = new Task<>() {
+                @Override protected List<LdapService.Entry> call() throws Exception {
+                    return service.search(base, "(objectClass=*)", "one", 0);
+                }
+            };
+            task.setOnSucceeded(e -> {
+                List<TreeItem<DitNode>> kids = new ArrayList<>();
+                for (LdapService.Entry child : task.getValue()) {
+                    Dn childDn = Dn.parse(child.dn());
+                    String label = childDn.rdn() == null ? child.dn() : childDn.rdn().toString();
+                    kids.add(new LazyDitItem(childDn, child, label));
+                }
+                getChildren().setAll(kids);
+            });
+            task.setOnFailed(e -> {
+                loaded = false;     // allow a retry on the next expand
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("Expand failed: " + task.getException().getMessage());
+                logger.accept("LDAP DIT expand FAILED @ " + base + ": " + task.getException().getMessage());
+            });
+            runBg(task, "ldap-dit-expand");
         }
     }
 }

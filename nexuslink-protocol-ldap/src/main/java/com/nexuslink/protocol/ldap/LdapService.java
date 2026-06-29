@@ -7,6 +7,7 @@ import com.unboundid.ldap.sdk.LDAPConnectionOptions;
 import com.unboundid.ldap.sdk.LDAPException;
 import com.unboundid.ldap.sdk.Modification;
 import com.unboundid.ldap.sdk.ModificationType;
+import com.unboundid.ldap.sdk.ResultCode;
 import com.unboundid.ldap.sdk.SearchRequest;
 import com.unboundid.ldap.sdk.SearchResult;
 import com.unboundid.ldap.sdk.SearchResultEntry;
@@ -163,6 +164,42 @@ public final class LdapService implements AutoCloseable {
     /** Deletes the leaf entry at {@code dn}. Fails with {@link LDAPException} if it is missing or has children. */
     public void deleteEntry(String dn) throws LDAPException {
         require().delete(dn);
+    }
+
+    /** Whether {@link #applyEntry} created a new entry or updated an existing one. */
+    public enum ApplyResult {
+        /** The entry did not exist and was added. */
+        ADDED,
+        /** The entry already existed; its supplied attributes were replaced. */
+        MODIFIED
+    }
+
+    /**
+     * Applies one LDIF-style entry to the directory: adds it at {@code dn}, or — when an entry already
+     * exists there — REPLACEs each supplied attribute's values on the existing entry (a re-import of
+     * the same DN updates it in place rather than failing). The DN itself is never renamed. Used by the
+     * LDIF import flow so a file mixing new and existing entries lands cleanly. Returns whether the
+     * entry was {@link ApplyResult#ADDED added} or {@link ApplyResult#MODIFIED modified}.
+     */
+    public ApplyResult applyEntry(String dn, Map<String, List<String>> attributes) throws LDAPException {
+        try {
+            addEntry(dn, attributes);
+            return ApplyResult.ADDED;
+        } catch (LDAPException e) {
+            if (e.getResultCode() != ResultCode.ENTRY_ALREADY_EXISTS) {
+                throw e;
+            }
+            List<Mod> mods = new ArrayList<>();
+            if (attributes != null) {
+                for (Map.Entry<String, List<String>> a : attributes.entrySet()) {
+                    List<String> values = a.getValue();
+                    if (values == null || values.isEmpty()) continue;
+                    mods.add(Mod.replace(a.getKey(), values));
+                }
+            }
+            modifyEntry(dn, mods);
+            return ApplyResult.MODIFIED;
+        }
     }
 
     private static Modification toModification(Mod m) {
