@@ -572,7 +572,11 @@
 - [x] **Trap receiver** — `SnmpTrapReceiver` listens on UDP 162 (configurable/ephemeral) for v1/v2c
       traps, decodes trap OID (RFC 3584 for v1) + varbinds with `OidRegistry` name resolution; `SnmpView`
       **Traps** tab with start/stop, community filter, live table (7 tests incl. loopback round-trip)
-- [ ] Inform receiver/ack; real v3/USM auth+priv **on the wire** (model done)
+- [-] **Inform receiver/ack** — **done:** `SnmpTrapReceiver` now acknowledges `PDU.INFORM`
+      notifications by returning a `RESPONSE` PDU (echoes request-id, cleared error-status, dispatched on
+      the arriving message-processing/security model+level+name) via `returnResponsePdu`; `Trap` gains an
+      `inform` flag; loopback round-trip test asserts both delivery + a non-null RESPONSE to the sender
+      (9 tests). **TODO:** real v3/USM auth+priv **on the wire** (model done)
 
 ---
 
