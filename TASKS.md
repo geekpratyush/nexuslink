@@ -346,6 +346,11 @@
 - [x] `RabbitMqView` — declare exchange/queue/binding, publish to exchange+routing-key, consume a
       queue into a live message log; `${VAR}` resolved in every field; **File ▸ New RabbitMQ Client**
 - [-] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
+  - [x] **Publisher confirms + manual ack/nack** (backend) — `RabbitMqService.publishConfirmed(...)` enables
+        `confirmSelect()` once per channel, publishes, and `waitForConfirms(timeout)` → a pure
+        `PublishConfirm` enum (ACKED/NACKED/TIMEOUT, `fromWaitForConfirms` seam, 3 tests); no-auto-ack
+        `consumeManual(queue)` passes the delivery tag through, plus `ack(tag)`/`nack(tag, requeue)`.
+        _(wiring into `RabbitMqView` UI still TODO; live paths need a broker for E2E)_
   - [x] `DeadLetterArgs` — DLX queue-declare args builder (`x-dead-letter-*`, TTL, max-length, overflow); 8 tests
   - [x] `RabbitMqManagementClient` — HTTP management API (overview/queues/exchanges/bindings/get/purge),
         vhost encoding, Basic auth, JSON→records; 16 tests.
