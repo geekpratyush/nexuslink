@@ -37,7 +37,7 @@
 ### 0.1 Maven Project Structure
 - [x] Create root `pom.xml` with all dependency versions in `<dependencyManagement>`
 - [x] Create module POMs: `core`, `ui`, `security`, `protocol-http`, `protocol-messaging`, `protocol-file`, `protocol-db`, `protocol-enterprise`, `plugin-api`
-- [ ] Configure `jlink` + `jpackage` in root POM
+- [x] Configure packaging — `fatjar` (uber JAR) + `jpackage` (native app-image) profiles in `nexuslink-app` (see §9.6 + PACKAGING.md)
 - [ ] Add `.gitignore`, `README.md` skeleton
 
 ### 0.2 Core Module (`nexuslink.core`)
@@ -614,8 +614,16 @@
 - [x] `CodeGenDialog` — language dropdown (driven by `Language.values()`), copy button
 
 ### 9.6 Native Packaging
-- [ ] `jlink` — custom JVM runtime image (minimize size)
-- [ ] `jpackage` — MSI (Windows), DMG/PKG (macOS), DEB/RPM (Linux)
+- [x] **Double-clickable uber JAR** — `nexuslink-app` `fatjar` profile: a non-`Application` `Main`
+      launcher (so `java -jar` skips the "JavaFX runtime components are missing" error) + maven-shade
+      (Main-Class `com.nexuslink.app.Main`, `ServicesResourceTransformer` keeps the SPIs) + JavaFX
+      native classifiers for win/mac/mac-aarch64 alongside the host's. One `target/nexuslink.jar` runs
+      on Windows/macOS/Linux (needs Java 21+). `mvn -Pfatjar -pl nexuslink-app -am clean package`. See PACKAGING.md.
+- [x] **`jpackage` self-contained app-image** — `jpackage` profile (panteleyev plugin) stages the fat
+      jar and bundles a Java runtime into a native app needing NO Java installed (`target/dist/NexusLink/`,
+      run `bin/NexusLink`). `mvn -Pfatjar,jpackage -pl nexuslink-app -am clean verify`. Built per-OS;
+      switch `<type>` to EXE/MSI · DMG/PKG · DEB/RPM for installers (may need extra OS tooling).
+- [ ] `jlink` — further minimize the bundled runtime (jpackage currently bundles the full JDK runtime)
 - [ ] Auto-updater service
 
 ---

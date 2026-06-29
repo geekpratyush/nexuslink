@@ -41,4 +41,141 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+          fatjar: builds a single double-clickable uber JAR (target/nexuslink.jar) that runs on
+          Windows / macOS (Intel + Apple Silicon) / Linux from one file. It bundles every dependency
+          plus the JavaFX classes AND each platform's native libraries (the win/mac/mac-aarch64
+          classifiers below; the host's own classifier — e.g. linux — comes in transitively). The
+          Main-Class is the non-Application com.nexuslink.app.Main so `java -jar` starts without the
+          "JavaFX runtime components are missing" error. Requires Java 21+ on the target machine.
+            Build:  mvn -Pfatjar -pl nexuslink-app -am clean package
+            Run:    java -jar nexuslink-app/target/nexuslink.jar   (or double-click)
+        -->
+        <profile>
+            <id>fatjar</id>
+            <dependencies>
+                <!-- JavaFX native libraries for the other desktop platforms (host classifier is transitive). -->
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-base</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-fxml</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-media</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-web</artifactId><version>${javafx.version}</version><classifier>win</classifier></dependency>
+
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-base</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-fxml</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-media</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-web</artifactId><version>${javafx.version}</version><classifier>mac</classifier></dependency>
+
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-base</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-graphics</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-fxml</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-media</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+                <dependency><groupId>org.openjfx</groupId><artifactId>javafx-web</artifactId><version>${javafx.version}</version><classifier>mac-aarch64</classifier></dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-shade-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals><goal>shade</goal></goals>
+                                <configuration>
+                                    <finalName>nexuslink</finalName>
+                                    <createDependencyReducedPom>false</createDependencyReducedPom>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <mainClass>com.nexuslink.app.Main</mainClass>
+                                        </transformer>
+                                        <!-- Merge META-INF/services so the ProtocolConnector / JDBC-driver SPIs survive shading. -->
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                    </transformers>
+                                    <filters>
+                                        <filter>
+                                            <artifact>*:*</artifact>
+                                            <excludes>
+                                                <exclude>META-INF/*.SF</exclude>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                                <exclude>module-info.class</exclude>
+                                            </excludes>
+                                        </filter>
+                                    </filters>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
+          jpackage: wraps the fat JAR in a native, self-contained application image that bundles its
+          own Java runtime — end users need NO Java installed; they just run the produced app. jpackage
+          is OS-specific, so this must be built ON each target OS (Windows produces the .exe app dir,
+          macOS the .app, Linux the app folder). Use it together with the fatjar profile:
+            Build:  mvn -Pfatjar,jpackage -pl nexuslink-app -am clean verify
+            Output: nexuslink-app/target/dist/NexusLink/   (run the NexusLink launcher inside)
+          For an installer instead of an app-image, change <type> to EXE/MSI (Windows), DMG/PKG (macOS),
+          or DEB/RPM (Linux) — those may need extra OS tooling (WiX, etc.).
+        -->
+        <profile>
+            <id>jpackage</id>
+            <build>
+                <plugins>
+                    <!-- Stage only the fat JAR into a clean input dir (jpackage copies the whole input dir). -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>stage-fatjar</id>
+                                <phase>package</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <delete dir="${project.build.directory}/jpackage-input"/>
+                                        <mkdir dir="${project.build.directory}/jpackage-input"/>
+                                        <copy file="${project.build.directory}/nexuslink.jar"
+                                              todir="${project.build.directory}/jpackage-input"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>1.6.5</version>
+                        <executions>
+                            <execution>
+                                <id>app-image</id>
+                                <phase>verify</phase>
+                                <goals><goal>jpackage</goal></goals>
+                                <configuration>
+                                    <type>APP_IMAGE</type>
+                                    <name>NexusLink</name>
+                                    <appVersion>1.0.0</appVersion>
+                                    <vendor>Pratyush Ranjan Mishra</vendor>
+                                    <input>${project.build.directory}/jpackage-input</input>
+                                    <mainJar>nexuslink.jar</mainJar>
+                                    <mainClass>com.nexuslink.app.Main</mainClass>
+                                    <destination>${project.build.directory}/dist</destination>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
