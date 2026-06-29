@@ -419,7 +419,11 @@
       worker, collapsible `TransferQueuePanel` (per-row progress bars, overall bar, live counts,
       clear-completed), enqueued from buttons/double-click/drag-drop (14 tests).
       **TODO:** speed & ETA, pause/resume/retry/cancel, reorder, bandwidth throttle
-- [ ] **Recursive directory transfers** — upload/download whole folders, not just single files
+- [x] **Recursive directory transfers** — `TransferQueue.enqueueRecursive` walks a selected folder
+      (via the source `FileSystem`), recreates the tree on the destination side (`mkdir`), and enqueues
+      every contained file into the normal sequential worker; `DualPaneBrowser` no longer filters out
+      directories — folder selections scan off the FX thread, then flow with the shared overwrite
+      resolver. 3 added tests (12 in `TransferQueueTest`)
 - [-] Conflict resolution on transfer — **done:** prompt **skip / overwrite** with **overwrite-all /
       skip-all** stickiness across a batch (`OverwriteResolver`). **TODO:** overwrite-if-newer / rename
 - [ ] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors

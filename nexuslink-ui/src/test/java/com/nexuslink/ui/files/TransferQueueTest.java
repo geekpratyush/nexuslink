@@ -191,6 +191,61 @@ class TransferQueueTest {
     }
 
     @Test
+    void recursiveUploadWalksTreeAndRecreatesDirectories(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // local/proj/{readme.txt, src/main.txt}
+        Path proj = Files.createDirectory(local.resolve("proj"));
+        Files.writeString(proj.resolve("readme.txt"), "top");
+        Path srcDir = Files.createDirectory(proj.resolve("src"));
+        Files.writeString(srcDir.resolve("main.txt"), "nested");
+        TransferQueue q = queue(local, remote);
+
+        FileItem dir = dirItemFor(local, "proj");
+        List<TransferItem> created = q.enqueueRecursive(TransferItem.Direction.UPLOAD,
+                List.of(dir), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        assertEquals(2, created.size(), "both files in the tree are enqueued");
+        q.runPending();
+
+        assertEquals("top", Files.readString(remote.resolve("proj/readme.txt")));
+        assertEquals("nested", Files.readString(remote.resolve("proj/src/main.txt")));
+        assertTrue(Files.isDirectory(remote.resolve("proj/src")), "nested dir recreated on the dest side");
+        assertEquals(2, q.count(TransferStatus.DONE));
+    }
+
+    @Test
+    void recursiveDownloadMixesFilesAndFolders(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Files.writeString(remote.resolve("loose.txt"), "L");
+        Path d = Files.createDirectory(remote.resolve("data"));
+        Files.writeString(d.resolve("a.bin"), "A");
+        TransferQueue q = queue(local, remote);
+
+        List<TransferItem> created = q.enqueueRecursive(TransferItem.Direction.DOWNLOAD,
+                List.of(fileItemFor(remote.resolve("loose.txt")), dirItemFor(remote, "data")),
+                local.toString(), OverwriteResolver.alwaysOverwrite());
+        assertEquals(2, created.size());
+        q.runPending();
+
+        assertEquals("L", Files.readString(local.resolve("loose.txt")));
+        assertEquals("A", Files.readString(local.resolve("data/a.bin")));
+    }
+
+    @Test
+    void recursiveEnqueueSkipsTheParentRow(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Files.writeString(local.resolve("a.txt"), "x");
+        TransferQueue q = queue(local, remote);
+
+        List<TransferItem> created = q.enqueueRecursive(TransferItem.Direction.UPLOAD,
+                List.of(FileItem.up(local.toString()), fileItemFor(local.resolve("a.txt"))),
+                remote.toString(), OverwriteResolver.alwaysOverwrite());
+        assertEquals(1, created.size(), "the .. row is ignored");
+    }
+
+    private static FileItem dirItemFor(Path parent, String name) throws Exception {
+        return new LocalFileSystem().list(parent.toString()).stream()
+                .filter(f -> f.directory() && f.name().equals(name))
+                .findFirst().orElseThrow();
+    }
+
+    @Test
     void listenerReceivesQueueChanges(@TempDir Path local, @TempDir Path remote) throws Exception {
         Path src = Files.writeString(local.resolve("a.txt"), "hi");
         TransferQueue q = queue(local, remote);

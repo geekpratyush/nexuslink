@@ -77,6 +77,52 @@ public final class TransferQueue {
         return created;
     }
 
+    /**
+     * Expands any directories in {@code sources} recursively and enqueues every file they contain,
+     * recreating the folder structure under {@code destRootDir} on the destination side; plain files
+     * are enqueued straight into {@code destRootDir}. The source tree is read via the appropriate
+     * {@link FileSystem} ({@code local} for an upload, {@code remote} for a download) and the matching
+     * destination directories are created with {@link FileSystem#mkdir} as needed.
+     *
+     * <p>Performs blocking I/O (listing the source tree + creating destination directories), so
+     * callers must invoke it off the UI thread. Directories are created up-front; the enqueued files
+     * then flow through the normal sequential worker with the shared {@code resolver}.</p>
+     */
+    public List<TransferItem> enqueueRecursive(TransferItem.Direction direction, List<FileItem> sources,
+                                               String destRootDir, OverwriteResolver resolver) throws Exception {
+        FileSystem sourceFs = direction == TransferItem.Direction.UPLOAD ? local : remote;
+        FileSystem destFs = direction == TransferItem.Direction.UPLOAD ? remote : local;
+        List<TransferItem> planned = new ArrayList<>();
+        for (FileItem f : sources) {
+            if (f.parent()) continue;
+            expand(direction, f, destRootDir, resolver, sourceFs, destFs, planned);
+        }
+        if (!planned.isEmpty()) {
+            synchronized (lock) {
+                items.addAll(planned);
+                lock.notifyAll();
+            }
+            fireChanged();
+        }
+        return planned;
+    }
+
+    /** Recursively walks {@code src}, creating destination sub-directories and collecting file items. */
+    private void expand(TransferItem.Direction direction, FileItem src, String destDir,
+                        OverwriteResolver resolver, FileSystem sourceFs, FileSystem destFs,
+                        List<TransferItem> out) throws Exception {
+        if (!src.directory()) {
+            out.add(new TransferItem(direction, src, destDir, resolver));
+            return;
+        }
+        String childDest = destFs.join(destDir, src.name());
+        if (!destFs.exists(destDir, src.name())) destFs.mkdir(childDest);
+        for (FileItem child : sourceFs.list(src.path())) {
+            if (child.parent()) continue;
+            expand(direction, child, childDest, resolver, sourceFs, destFs, out);
+        }
+    }
+
     /** Removes all terminal (DONE/SKIPPED/FAILED) items. */
     public void clearCompleted() {
         boolean removed;

@@ -110,23 +110,46 @@ public final class DualPaneBrowser extends BorderPane {
         enqueue(items, TransferItem.Direction.DOWNLOAD);
     }
 
-    /** Filters out directories/".." and enqueues the rest toward the opposite pane's directory. */
+    /** Enqueues the selection (files and whole folders) toward the opposite pane's directory. */
     private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction) {
-        List<FileItem> items = itemsRaw.stream().filter(f -> !f.parent() && !f.directory()).toList();
+        List<FileItem> items = itemsRaw.stream().filter(f -> !f.parent()).toList();
         if (items.isEmpty()) {
-            messageLabel.setText("Select one or more files to transfer");
+            messageLabel.setText("Select one or more files or folders to transfer");
             return;
         }
         String destDir = direction == TransferItem.Direction.UPLOAD
                 ? remotePane.currentPath() : localPane.currentPath();
         // Each batch gets its own resolver so "Overwrite all / Skip all" applies only to this batch.
         OverwriteResolver resolver = new OverwriteResolver(this::promptOverwrite);
-        List<TransferItem> created = queue.enqueue(direction, items, destDir, resolver);
-        messageLabel.setText("Queued " + created.size() + " "
-                + (direction == TransferItem.Direction.UPLOAD ? "upload" : "download") + "(s)");
-        logger.accept("Queued " + created.size() + " "
-                + (direction == TransferItem.Direction.UPLOAD ? "upload" : "download") + "(s)");
         queuePanel.setExpanded(true);
+
+        boolean hasFolder = items.stream().anyMatch(FileItem::directory);
+        if (!hasFolder) {
+            reportQueued(queue.enqueue(direction, items, destDir, resolver).size(), direction);
+            return;
+        }
+        // Whole-folder transfer: walk the tree + create destination directories off the FX thread.
+        messageLabel.setText("Scanning folder(s)…");
+        Thread t = new Thread(() -> {
+            try {
+                int n = queue.enqueueRecursive(direction, items, destDir, resolver).size();
+                Platform.runLater(() -> reportQueued(n, direction));
+            } catch (Exception ex) {
+                String msg = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                Platform.runLater(() -> {
+                    messageLabel.setText("Folder scan failed: " + msg);
+                    logger.accept("Folder scan failed: " + msg);
+                });
+            }
+        }, "transfer-expand");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void reportQueued(int count, TransferItem.Direction direction) {
+        String verb = direction == TransferItem.Direction.UPLOAD ? "upload" : "download";
+        messageLabel.setText("Queued " + count + " " + verb + "(s)");
+        logger.accept("Queued " + count + " " + verb + "(s)");
     }
 
     /**
