@@ -1180,8 +1180,9 @@ TLS/mTLS covers REST, WebSocket, gRPC, Kafka, and SQL/JDBC.
 
 ### ✅ Tree state on resume
 
-`git status` clean (branch ahead of `origin/main` — **don't push yet**). Session 40 (parallel run)
-added, all committed on `main`:
+`git status` clean. **Push policy changed 2026-06-29:** `origin/main` is now kept in sync (was
+previously held back) — push after each landed batch. Session 40 (parallel run) added, all committed
+and **pushed** on `main`:
 - `f0e7a39` RabbitMQ dashboard polish (overview strip + numeric-sort tables + refresh-all API)
 - `60b97fd` LDAP live LDIF import (apply to server) + lazy DIT tree browser
 - `a705eef` SNMP v1/v2c trap receiver + live trap table
