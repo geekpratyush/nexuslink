@@ -2,7 +2,9 @@ package com.nexuslink.ui.snmp;
 
 import com.nexuslink.protocol.snmp.OidRegistry;
 import com.nexuslink.protocol.snmp.SnmpService;
+import com.nexuslink.protocol.snmp.SnmpTrapReceiver;
 import com.nexuslink.ui.env.Env;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -11,13 +13,20 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 
+import java.io.IOException;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
- * SNMP browser tab — open a community-based v1/v2c session to an agent, then GET a specific OID or
- * WALK a subtree (GETNEXT). Results show in an OID / type / value table. Built on SNMP4J;
- * {@code ${VAR}} is resolved in the host/community/OID fields. (SNMPv3 / USM is on the roadmap.)
+ * SNMP view with two tabs. <b>Browser</b> opens a community-based v1/v2c session to an agent, then
+ * GETs a specific OID or WALKs a subtree (GETNEXT), showing results in an OID / type / value table.
+ * <b>Traps</b> listens on a UDP port (default 162) for incoming v1/v2c traps and notifications and
+ * appends each, live, to a table (time, source, trap OID, varbinds) with OIDs resolved to MIB names.
+ * Built on SNMP4J; {@code ${VAR}} is resolved in the host/community/OID fields. (SNMPv3 / USM is on
+ * the roadmap.)
  */
 public final class SnmpView extends BorderPane {
 
@@ -39,6 +48,39 @@ public final class SnmpView extends BorderPane {
         public String getValue() { return value.get(); }
     }
 
+    /** Row model for the traps table (one received trap per row). */
+    public static final class TrapRow {
+        private final SimpleStringProperty time;
+        private final SimpleStringProperty source;
+        private final SimpleStringProperty version;
+        private final SimpleStringProperty trapOid;
+        private final SimpleStringProperty varbinds;
+        TrapRow(SnmpTrapReceiver.Trap t) {
+            this.time = new SimpleStringProperty(TIME_FMT.format(t.timestamp()));
+            this.source = new SimpleStringProperty(t.source());
+            this.version = new SimpleStringProperty(t.version());
+            String oid = t.trapOid() == null || t.trapOid().isBlank()
+                    ? "(none)" : OidRegistry.nameFor(t.trapOid());
+            this.trapOid = new SimpleStringProperty(oid);
+            this.varbinds = new SimpleStringProperty(summarize(t));
+        }
+        public String getTime() { return time.get(); }
+        public String getSource() { return source.get(); }
+        public String getVersion() { return version.get(); }
+        public String getTrapOid() { return trapOid.get(); }
+        public String getVarbinds() { return varbinds.get(); }
+
+        /** Renders the variable bindings as {@code name=value} pairs with OIDs resolved to MIB names. */
+        private static String summarize(SnmpTrapReceiver.Trap t) {
+            return t.varBinds().stream()
+                    .map(vb -> OidRegistry.nameFor(vb.oid()) + "=" + vb.value())
+                    .collect(Collectors.joining(", "));
+        }
+    }
+
+    private static final DateTimeFormatter TIME_FMT =
+            DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+
     private final SnmpService service = new SnmpService();
 
     private final TextField hostField = new TextField();
@@ -54,12 +96,29 @@ public final class SnmpView extends BorderPane {
 
     private final TableView<Row> table = new TableView<>();
 
+    // ---- Traps tab ----
+    private final SnmpTrapReceiver trapReceiver = new SnmpTrapReceiver(this::onTrap);
+    private final TextField trapPortField = new TextField(String.valueOf(SnmpTrapReceiver.DEFAULT_PORT));
+    private final TextField trapFilterField = new TextField();
+    private final Button trapToggleBtn = new Button("Start");
+    private final Label trapStatusLabel = new Label("Stopped");
+    private final TableView<TrapRow> trapTable = new TableView<>();
+
     private Consumer<String> logger = s -> {};
 
     public SnmpView() {
         getStyleClass().add("snmp-view");
-        setTop(buildBar());
-        setCenter(buildBody());
+        TabPane tabs = new TabPane();
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabs.getTabs().addAll(new Tab("Browser", buildBrowserPane()), new Tab("Traps", buildTrapsPane()));
+        setCenter(tabs);
+    }
+
+    private BorderPane buildBrowserPane() {
+        BorderPane pane = new BorderPane();
+        pane.setTop(buildBar());
+        pane.setCenter(buildBody());
+        return pane;
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -240,6 +299,92 @@ public final class SnmpView extends BorderPane {
             walkBtn.setDisable(false);
         });
         runBg(task, "snmp-query");
+    }
+
+    // ---- Traps tab ----
+
+    private VBox buildTrapsPane() {
+        trapPortField.getStyleClass().add("nl-field");
+        trapPortField.setPrefWidth(70);
+        trapFilterField.getStyleClass().add("nl-field");
+        trapFilterField.setPrefWidth(130);
+        trapFilterField.setPromptText("community (all)");
+
+        trapToggleBtn.getStyleClass().add("btn-primary");
+        trapToggleBtn.setOnAction(e -> toggleTraps());
+
+        Button clearBtn = new Button("Clear");
+        clearBtn.getStyleClass().add("btn-secondary");
+        clearBtn.setOnAction(e -> trapTable.getItems().clear());
+
+        trapStatusLabel.getStyleClass().add("meta-label");
+
+        HBox ctlRow = new HBox(8, label("Port:"), trapPortField, label("Community filter:"),
+                trapFilterField, trapToggleBtn, clearBtn);
+        ctlRow.setAlignment(Pos.CENTER_LEFT);
+
+        TableColumn<TrapRow, String> timeCol = new TableColumn<>("Time");
+        timeCol.setCellValueFactory(new PropertyValueFactory<>("time"));
+        timeCol.setPrefWidth(90);
+        TableColumn<TrapRow, String> srcCol = new TableColumn<>("Source");
+        srcCol.setCellValueFactory(new PropertyValueFactory<>("source"));
+        srcCol.setPrefWidth(170);
+        TableColumn<TrapRow, String> verCol = new TableColumn<>("Ver");
+        verCol.setCellValueFactory(new PropertyValueFactory<>("version"));
+        verCol.setPrefWidth(50);
+        TableColumn<TrapRow, String> oidCol = new TableColumn<>("Trap OID");
+        oidCol.setCellValueFactory(new PropertyValueFactory<>("trapOid"));
+        oidCol.setPrefWidth(180);
+        TableColumn<TrapRow, String> vbCol = new TableColumn<>("Varbinds");
+        vbCol.setCellValueFactory(new PropertyValueFactory<>("varbinds"));
+        vbCol.setPrefWidth(360);
+        trapTable.getColumns().addAll(List.of(timeCol, srcCol, verCol, oidCol, vbCol));
+        trapTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        trapTable.setPlaceholder(new Label("Start the listener to receive SNMP v1/v2c traps."));
+        VBox.setVgrow(trapTable, Priority.ALWAYS);
+
+        VBox box = new VBox(8, ctlRow, new HBox(trapStatusLabel), new Separator(), trapTable);
+        box.setPadding(new Insets(10));
+        return box;
+    }
+
+    private void toggleTraps() {
+        if (trapReceiver.isListening()) {
+            trapReceiver.stop();
+            trapStatusLabel.getStyleClass().setAll("meta-label");
+            trapStatusLabel.setText("Stopped");
+            trapToggleBtn.setText("Start");
+            logger.accept("SNMP trap listener stopped");
+            return;
+        }
+        int port;
+        try { port = Integer.parseInt(trapPortField.getText().trim()); }
+        catch (NumberFormatException ex) {
+            trapStatusLabel.getStyleClass().setAll("status-err");
+            trapStatusLabel.setText("Port must be a number");
+            return;
+        }
+        try {
+            trapReceiver.start(port);
+            trapStatusLabel.getStyleClass().setAll("status-2xx");
+            trapStatusLabel.setText("Listening on udp/" + trapReceiver.boundPort());
+            trapToggleBtn.setText("Stop");
+            logger.accept("SNMP trap listener started on udp/" + trapReceiver.boundPort());
+        } catch (IOException ex) {
+            trapStatusLabel.getStyleClass().setAll("status-err");
+            trapStatusLabel.setText("Start failed: " + ex.getMessage());
+            logger.accept("SNMP trap listener FAILED: " + ex.getMessage());
+        }
+    }
+
+    /** Receiver callback (SNMP4J thread) — applies the community filter, then appends on the FX thread. */
+    private void onTrap(SnmpTrapReceiver.Trap trap) {
+        String filter = trapFilterField.getText().trim();
+        if (!filter.isEmpty() && !filter.equals(trap.community())) return;
+        Platform.runLater(() -> {
+            trapTable.getItems().add(0, new TrapRow(trap));   // newest first
+            logger.accept("SNMP trap from " + trap.source() + " — " + OidRegistry.nameFor(trap.trapOid()));
+        });
     }
 
     private void runBg(Task<?> task, String name) {
