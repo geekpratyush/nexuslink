@@ -291,8 +291,12 @@
       RFC 8259 JSON + RFC 4180 CSV, no new deps) — 6 tests
 
 ### 4.6 Consumer Group Monitor
-- [ ] `ConsumerLagService` — polls AdminClient on 5s interval (Caffeine cache)
-- [ ] Lag table: group, topic, partition, committed offset, end offset, lag
+- [-] `ConsumerLagService` — **done (core):** `ConsumerLagCalculator` (pure, Kafka-type-free via a
+      nested `TopicPartitionKey`) combines committed + end offsets → sorted `LagRow`s with `max(0,end−committed)`
+      clamp + `totalLag` (9 tests); `KafkaService.listConsumerGroups()`/`consumerGroupLag(group)` fetch
+      committed (`listConsumerGroupOffsets`) + end (`listOffsets` latest) via the existing AdminClient.
+      **TODO:** 5s polling + Caffeine cache. _(live methods need a broker for E2E.)_
+- [x] Lag table data: group, topic, partition, committed offset, end offset, lag — produced by `ConsumerLagCalculator` _(UI table wiring TODO)_
 - [ ] Lag chart: real-time line chart per partition over time
 - [ ] Offset reset dialog: earliest/latest/specific timestamp/specific offset
 
