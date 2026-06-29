@@ -53,6 +53,10 @@ public final class LocalFileSystem implements FileSystem {
         return out;
     }
 
+    @Override public boolean exists(String dir, String name) {
+        return Files.exists(Path.of(dir).resolve(name));
+    }
+
     @Override public void mkdir(String path) throws IOException {
         Files.createDirectories(Path.of(path));
     }

@@ -1,0 +1,208 @@
+package com.nexuslink.ui.files;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongConsumer;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Headless tests for the transfer-queue model: state transitions, progress accounting and
+ * overwrite-policy handling. No JavaFX toolkit is required — a {@link LocalFileSystem} backs both
+ * sides and {@link TransferQueue#runPending()} runs synchronously on the test thread.
+ */
+class TransferQueueTest {
+
+    /** Minimal {@link FileTransfer} that copies between two local directories. */
+    private static final class CopyTransfer implements FileTransfer {
+        @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+            copy(localFile, Path.of(remoteDir).resolve(localFile.getFileName()), progress);
+        }
+        @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
+            Path src = Path.of(remoteFile.path());
+            copy(src, localDir.resolve(src.getFileName()), progress);
+        }
+        private void copy(Path src, Path dst, LongConsumer progress) throws Exception {
+            long size = Files.size(src);
+            progress.accept(0);
+            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+            progress.accept(size);
+        }
+    }
+
+    private static TransferQueue queue(Path localDir, Path remoteDir) {
+        return new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CopyTransfer());
+    }
+
+    private static FileItem fileItemFor(Path file) throws Exception {
+        return new LocalFileSystem().list(file.getParent().toString()).stream()
+                .filter(f -> f.name().equals(file.getFileName().toString()))
+                .findFirst().orElseThrow();
+    }
+
+    @Test
+    void uploadMovesThroughQueuedActiveDone(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = queue(local, remote);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        assertEquals(1, created.size());
+        TransferItem item = created.get(0);
+
+        assertEquals(TransferStatus.QUEUED, item.status());
+        assertEquals(0.0, q.overallProgress());
+        assertTrue(q.hasPending());
+
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(item.totalBytes(), item.transferredBytes());
+        assertEquals(1.0, item.progress());
+        assertEquals(1.0, q.overallProgress(), 1e-9);
+        assertFalse(q.hasPending());
+        assertEquals("hello world", Files.readString(remote.resolve("a.txt")));
+        assertEquals(1, q.count(TransferStatus.DONE));
+    }
+
+    @Test
+    void downloadCopiesRemoteToLocal(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(remote.resolve("data.bin"), "payload");
+        TransferQueue q = queue(local, remote);
+
+        q.enqueue(TransferItem.Direction.DOWNLOAD,
+                List.of(fileItemFor(src)), local.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals("payload", Files.readString(local.resolve("data.bin")));
+        assertEquals(1, q.count(TransferStatus.DONE));
+    }
+
+    @Test
+    void existingTargetIsSkippedWhenPolicySkips(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "new");
+        Files.writeString(remote.resolve("a.txt"), "old");          // conflict
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver skip = new OverwriteResolver(name -> OverwriteResolver.Choice.SKIP);
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), skip);
+        q.runPending();
+
+        assertEquals(TransferStatus.SKIPPED, created.get(0).status());
+        assertEquals("old", Files.readString(remote.resolve("a.txt")), "skip must keep the original");
+        assertEquals(1, q.count(TransferStatus.SKIPPED));
+    }
+
+    @Test
+    void existingTargetIsReplacedWhenPolicyOverwrites(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "new");
+        Files.writeString(remote.resolve("a.txt"), "old");
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver overwrite = new OverwriteResolver(name -> OverwriteResolver.Choice.OVERWRITE);
+        q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), overwrite);
+        q.runPending();
+
+        assertEquals("new", Files.readString(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void overwriteAllAppliesToTheRestOfTheBatch(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path a = Files.writeString(local.resolve("a.txt"), "A2");
+        Path b = Files.writeString(local.resolve("b.txt"), "B2");
+        Files.writeString(remote.resolve("a.txt"), "A1");
+        Files.writeString(remote.resolve("b.txt"), "B1");
+        TransferQueue q = queue(local, remote);
+
+        AtomicInteger prompts = new AtomicInteger();
+        OverwriteResolver resolver = new OverwriteResolver(name -> {
+            prompts.incrementAndGet();
+            return OverwriteResolver.Choice.OVERWRITE_ALL;
+        });
+        q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(a), fileItemFor(b)), remote.toString(), resolver);
+        q.runPending();
+
+        assertEquals(1, prompts.get(), "Overwrite all should only prompt once");
+        assertEquals("A2", Files.readString(remote.resolve("a.txt")));
+        assertEquals("B2", Files.readString(remote.resolve("b.txt")));
+        assertEquals(2, q.count(TransferStatus.DONE));
+    }
+
+    @Test
+    void failedTransferIsRecordedNotThrown(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("gone.txt"), "x");
+        FileItem item = fileItemFor(src);
+        Files.delete(src);                                          // make the source vanish
+        TransferQueue q = queue(local, remote);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(item), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.FAILED, created.get(0).status());
+        assertNotNull(created.get(0).error());
+        assertEquals(1, q.count(TransferStatus.FAILED));
+    }
+
+    @Test
+    void overallProgressAndClearCompletedAcrossMixedBatch(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path a = Files.writeString(local.resolve("a.txt"), "aaaa");
+        Path b = Files.writeString(local.resolve("b.txt"), "bbbb");
+        Files.writeString(remote.resolve("b.txt"), "keep");        // b conflicts → skipped
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver skip = new OverwriteResolver(name -> OverwriteResolver.Choice.SKIP);
+        q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(a), fileItemFor(b)), remote.toString(), skip);
+        q.runPending();
+
+        assertEquals(1, q.count(TransferStatus.DONE));
+        assertEquals(1, q.count(TransferStatus.SKIPPED));
+        assertEquals(1.0, q.overallProgress(), 1e-9, "every item is terminal so the bar is full");
+
+        q.clearCompleted();
+        assertEquals(0, q.size());
+        assertEquals(0.0, q.overallProgress());
+    }
+
+    @Test
+    void enqueueIgnoresDirectoriesAndParentRows(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Files.createDirectory(local.resolve("sub"));
+        Path src = Files.writeString(local.resolve("a.txt"), "x");
+        TransferQueue q = queue(local, remote);
+
+        FileItem dir = new LocalFileSystem().list(local.toString()).stream()
+                .filter(FileItem::directory).findFirst().orElseThrow();
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(FileItem.up(local.toString()), dir, fileItemFor(src)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite());
+
+        assertEquals(1, created.size(), "directories and the .. row must be filtered out");
+        assertEquals("a.txt", created.get(0).name());
+    }
+
+    @Test
+    void listenerReceivesQueueChanges(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hi");
+        TransferQueue q = queue(local, remote);
+        AtomicInteger changes = new AtomicInteger();
+        q.addListener(new TransferQueue.Listener() {
+            @Override public void onQueueChanged() { changes.incrementAndGet(); }
+        });
+
+        q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertTrue(changes.get() >= 2, "expected change events for enqueue + status transitions");
+    }
+}

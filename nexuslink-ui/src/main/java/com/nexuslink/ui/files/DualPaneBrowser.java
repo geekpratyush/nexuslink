@@ -1,41 +1,44 @@
 package com.nexuslink.ui.files;
 
 import javafx.application.Platform;
-import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
-import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SplitPane;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
  * The WinSCP/MobaXterm-style two-pane file commander: the local disk on the left, a remote
- * service on the right, with Upload → / ← Download controls and a transfer progress bar in between.
- * Double-clicking a file in either pane transfers it to the other side's current directory.
+ * service on the right, with Upload → / ← Download controls in between. Transfers are funnelled
+ * through a {@link TransferQueue} and shown live in a collapsible {@link TransferQueuePanel} along
+ * the bottom; a target that already exists raises an Overwrite / Skip / …all prompt.
+ * Double-clicking a file in either pane enqueues it to the other side's current directory.
  */
 public final class DualPaneBrowser extends BorderPane {
 
     private final FileBrowserPane localPane;
     private final FileBrowserPane remotePane;
-    private final FileTransfer transfer;
+    private final TransferQueue queue;
+    private final TransferQueuePanel queuePanel;
 
-    private final ProgressBar progress = new ProgressBar(0);
-    private final Label progressLabel = new Label();
+    private final Label messageLabel = new Label();
     private Consumer<String> logger = s -> {};
 
     public DualPaneBrowser(FileSystem local, FileSystem remote, FileTransfer transfer) {
-        this.transfer = transfer;
         this.localPane = new FileBrowserPane(local, "Local — " + local.name());
         this.remotePane = new FileBrowserPane(remote, "Remote — " + remote.name());
+        this.queue = new TransferQueue(local, remote, transfer);
+        this.queuePanel = new TransferQueuePanel(queue);
         getStyleClass().add("dual-pane-browser");
 
         // Double-click a file → transfer it to the opposite pane's directory.
@@ -46,10 +49,20 @@ public final class DualPaneBrowser extends BorderPane {
         remotePane.setOnDropFromOther(this::upload);
         localPane.setOnDropFromOther(this::download);
 
+        // Refresh the destination pane each time a transfer completes.
+        queue.setOnItemFinished(item -> {
+            if (item.status() != TransferStatus.DONE) return;
+            Platform.runLater(() -> {
+                if (item.direction() == TransferItem.Direction.UPLOAD) remotePane.refresh();
+                else localPane.refresh();
+            });
+        });
+        queue.startWorker();
+
         SplitPane split = new SplitPane(localPane, buildTransferColumn(), remotePane);
         split.setDividerPositions(0.43, 0.57);
         setCenter(split);
-        setBottom(buildProgressBar());
+        setBottom(buildBottom());
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -82,75 +95,75 @@ public final class DualPaneBrowser extends BorderPane {
         return col;
     }
 
-    private HBox buildProgressBar() {
-        progress.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(progress, Priority.ALWAYS);
-        progressLabel.getStyleClass().add("meta-label");
-        progressLabel.setMinWidth(220);
-        HBox bar = new HBox(10, progressLabel, progress);
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setPadding(new Insets(8));
-        return bar;
+    private VBox buildBottom() {
+        messageLabel.getStyleClass().add("meta-label");
+        VBox box = new VBox(4, messageLabel, queuePanel);
+        box.setPadding(new Insets(6, 8, 6, 8));
+        return box;
     }
 
     private void upload(List<FileItem> items) {
-        runTransfer(items, true);
+        enqueue(items, TransferItem.Direction.UPLOAD);
     }
 
     private void download(List<FileItem> items) {
-        runTransfer(items, false);
+        enqueue(items, TransferItem.Direction.DOWNLOAD);
     }
 
-    /** Transfers the given items; {@code uploading} chooses direction (local→remote vs remote→local). */
-    private void runTransfer(List<FileItem> itemsRaw, boolean uploading) {
+    /** Filters out directories/".." and enqueues the rest toward the opposite pane's directory. */
+    private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction) {
         List<FileItem> items = itemsRaw.stream().filter(f -> !f.parent() && !f.directory()).toList();
         if (items.isEmpty()) {
-            progressLabel.setText("Select one or more files to transfer");
+            messageLabel.setText("Select one or more files to transfer");
             return;
         }
-        String remoteDir = remotePane.currentPath();
-        Path localDir = Path.of(localPane.currentPath());
-
-        Task<Void> task = new Task<>() {
-            @Override protected Void call() throws Exception {
-                int i = 0;
-                for (FileItem f : items) {
-                    final int idx = ++i;
-                    updateMessage((uploading ? "Uploading " : "Downloading ") + f.name()
-                            + "  (" + idx + "/" + items.size() + ")");
-                    long bytes = Math.max(f.size(), 1);
-                    if (uploading) {
-                        transfer.upload(Path.of(f.path()), remoteDir,
-                                sent -> updateProgress(sent, bytes));
-                    } else {
-                        transfer.download(f, localDir,
-                                read -> updateProgress(read, bytes));
-                    }
-                }
-                return null;
-            }
-        };
-        progress.progressProperty().bind(task.progressProperty());
-        progressLabel.textProperty().bind(task.messageProperty());
-        task.setOnSucceeded(e -> finishTransfer(uploading, items.size(), null));
-        task.setOnFailed(e -> finishTransfer(uploading, items.size(), task.getException()));
-        Thread t = new Thread(task, "file-transfer");
-        t.setDaemon(true);
-        t.start();
+        String destDir = direction == TransferItem.Direction.UPLOAD
+                ? remotePane.currentPath() : localPane.currentPath();
+        // Each batch gets its own resolver so "Overwrite all / Skip all" applies only to this batch.
+        OverwriteResolver resolver = new OverwriteResolver(this::promptOverwrite);
+        List<TransferItem> created = queue.enqueue(direction, items, destDir, resolver);
+        messageLabel.setText("Queued " + created.size() + " "
+                + (direction == TransferItem.Direction.UPLOAD ? "upload" : "download") + "(s)");
+        logger.accept("Queued " + created.size() + " "
+                + (direction == TransferItem.Direction.UPLOAD ? "upload" : "download") + "(s)");
+        queuePanel.setExpanded(true);
     }
 
-    private void finishTransfer(boolean uploading, int count, Throwable error) {
-        progress.progressProperty().unbind();
-        progressLabel.textProperty().unbind();
-        if (error == null) {
-            progress.setProgress(1);
-            progressLabel.setText("✔ " + (uploading ? "Uploaded " : "Downloaded ") + count + " file(s)");
-            logger.accept((uploading ? "Uploaded " : "Downloaded ") + count + " file(s)");
-            Platform.runLater(() -> { if (uploading) remotePane.refresh(); else localPane.refresh(); });
-        } else {
-            progress.setProgress(0);
-            progressLabel.setText("✖ Transfer failed: " + error.getMessage());
-            logger.accept("Transfer FAILED: " + error.getMessage());
-        }
+    /**
+     * Shows the overwrite/skip dialog for a conflicting target. Called on the queue worker thread,
+     * so it blocks until the user (on the FX thread) answers.
+     */
+    private OverwriteResolver.Choice promptOverwrite(String name) {
+        AtomicReference<OverwriteResolver.Choice> result =
+                new AtomicReference<>(OverwriteResolver.Choice.SKIP);
+        CountDownLatch latch = new CountDownLatch(1);
+        Platform.runLater(() -> {
+            try {
+                ButtonType overwrite = new ButtonType("Overwrite", ButtonBar.ButtonData.YES);
+                ButtonType overwriteAll = new ButtonType("Overwrite all", ButtonBar.ButtonData.OTHER);
+                ButtonType skip = new ButtonType("Skip", ButtonBar.ButtonData.NO);
+                ButtonType skipAll = new ButtonType("Skip all", ButtonBar.ButtonData.OTHER);
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
+                        "\"" + name + "\" already exists in the target directory.",
+                        overwrite, overwriteAll, skip, skipAll);
+                alert.setHeaderText("File already exists");
+                alert.setTitle("Overwrite?");
+                if (getScene() != null) {
+                    alert.initOwner(getScene().getWindow());
+                    alert.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+                        if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+                    });
+                }
+                ButtonType picked = alert.showAndWait().orElse(skip);
+                if (picked == overwrite) result.set(OverwriteResolver.Choice.OVERWRITE);
+                else if (picked == overwriteAll) result.set(OverwriteResolver.Choice.OVERWRITE_ALL);
+                else if (picked == skipAll) result.set(OverwriteResolver.Choice.SKIP_ALL);
+                else result.set(OverwriteResolver.Choice.SKIP);
+            } finally {
+                latch.countDown();
+            }
+        });
+        try { latch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        return result.get();
     }
 }

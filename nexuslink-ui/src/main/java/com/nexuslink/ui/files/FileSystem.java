@@ -24,6 +24,15 @@ public interface FileSystem {
     /** Lists the entries of {@code path} (directories first, then files; no "." / ".."). */
     List<FileItem> list(String path) throws Exception;
 
+    /**
+     * True if an entry named {@code name} already exists in directory {@code dir}. Used by the
+     * transfer queue to decide whether to raise an overwrite/skip prompt. The default lists
+     * {@code dir} and matches by name; implementations may override with a cheaper check.
+     */
+    default boolean exists(String dir, String name) throws Exception {
+        return list(dir).stream().anyMatch(f -> f.name().equals(name));
+    }
+
     /** Creates a new directory at {@code path}. */
     void mkdir(String path) throws Exception;
 
