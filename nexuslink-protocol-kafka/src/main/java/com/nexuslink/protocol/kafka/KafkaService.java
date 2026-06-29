@@ -1,16 +1,23 @@
 package com.nexuslink.protocol.kafka;
 
+import com.nexuslink.protocol.kafka.ConsumerLagCalculator.LagRow;
+import com.nexuslink.protocol.kafka.ConsumerLagCalculator.TopicPartitionKey;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
+import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 
 import java.time.Duration;
@@ -80,6 +87,39 @@ public final class KafkaService implements AutoCloseable {
 
     public TopicDescription describe(String topic) throws Exception {
         return admin.describeTopics(List.of(topic)).allTopicNames().get(12, TimeUnit.SECONDS).get(topic);
+    }
+
+    /** Lists the broker's consumer group ids, sorted. Needs a live broker. */
+    public List<String> listConsumerGroups() throws Exception {
+        List<String> ids = new ArrayList<>();
+        for (ConsumerGroupListing g : admin.listConsumerGroups().all().get(12, TimeUnit.SECONDS)) {
+            ids.add(g.groupId());
+        }
+        Collections.sort(ids);
+        return ids;
+    }
+
+    /**
+     * Computes per-partition lag for {@code group} by pairing its committed offsets with each
+     * partition's current log-end (latest) offset and feeding them to
+     * {@link ConsumerLagCalculator}. Partitions the group has committed but the broker no longer
+     * reports an end offset for are skipped. Needs a live broker.
+     */
+    public List<LagRow> consumerGroupLag(String group) throws Exception {
+        Map<TopicPartition, OffsetAndMetadata> committedRaw = admin.listConsumerGroupOffsets(group)
+                .partitionsToOffsetAndMetadata().get(12, TimeUnit.SECONDS);
+
+        Map<TopicPartition, OffsetSpec> latestSpecs = new HashMap<>();
+        for (TopicPartition tp : committedRaw.keySet()) latestSpecs.put(tp, OffsetSpec.latest());
+        Map<TopicPartition, ListOffsetsResultInfo> endRaw = admin.listOffsets(latestSpecs)
+                .all().get(15, TimeUnit.SECONDS);
+
+        Map<TopicPartitionKey, Long> committed = new HashMap<>();
+        committedRaw.forEach((tp, om) -> committed.put(new TopicPartitionKey(tp.topic(), tp.partition()), om.offset()));
+        Map<TopicPartitionKey, Long> endOffsets = new HashMap<>();
+        endRaw.forEach((tp, info) -> endOffsets.put(new TopicPartitionKey(tp.topic(), tp.partition()), info.offset()));
+
+        return ConsumerLagCalculator.compute(group, committed, endOffsets);
     }
 
     /** Sends one record (synchronously) and returns where it landed. */
