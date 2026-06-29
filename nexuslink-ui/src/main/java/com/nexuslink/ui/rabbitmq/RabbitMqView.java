@@ -8,6 +8,7 @@ import com.nexuslink.protocol.rabbitmq.RabbitMqManagementClient;
 import com.nexuslink.protocol.rabbitmq.RabbitMqService;
 import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
@@ -18,7 +19,6 @@ import javafx.scene.layout.*;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -63,7 +63,13 @@ public final class RabbitMqView extends BorderPane {
     private final Button refreshBtn = new Button("Refresh");
     private final Button purgeBtn = new Button("Purge selected queue");
     private final Label mgmtStatus = new Label("Not loaded");
-    private final TextArea overviewArea = new TextArea();
+    // Overview stats strip — the headline cluster totals.
+    private final Label statConnections = statValue();
+    private final Label statChannels = statValue();
+    private final Label statQueues = statValue();
+    private final Label statMessages = statValue();
+    private final Label statConsumers = statValue();
+    private final Label overviewInfo = new Label();
     private final TableView<QueueInfo> queuesTable = new TableView<>();
     private final TableView<ExchangeInfo> exchangesTable = new TableView<>();
     private final TableView<BindingInfo> bindingsTable = new TableView<>();
@@ -206,12 +212,6 @@ public final class RabbitMqView extends BorderPane {
     // Management dashboard — RabbitMQ HTTP management API (port 15672).
     // ------------------------------------------------------------------
 
-    /** Snapshot of a single management refresh, gathered off the FX thread. */
-    private record ManagementSnapshot(OverviewInfo overview,
-                                      List<QueueInfo> queues,
-                                      List<ExchangeInfo> exchanges,
-                                      List<BindingInfo> bindings) {}
-
     private VBox buildManagement() {
         mgmtHost.getStyleClass().add("nl-field");
         mgmtHost.setPromptText("management host");
@@ -229,10 +229,7 @@ public final class RabbitMqView extends BorderPane {
         HBox infoRow = new HBox(12, mgmtStatus, credHint);
         infoRow.setAlignment(Pos.CENTER_LEFT);
 
-        overviewArea.getStyleClass().add("code-area");
-        overviewArea.setEditable(false);
-        overviewArea.setPrefRowCount(5);
-        overviewArea.setPromptText("Cluster overview appears here after Refresh…");
+        overviewInfo.getStyleClass().add("meta-label");
 
         buildQueuesColumns();
         buildExchangesColumns();
@@ -247,7 +244,7 @@ public final class RabbitMqView extends BorderPane {
         VBox.setVgrow(exchangesTable, Priority.ALWAYS);
         VBox.setVgrow(bindingsTable, Priority.ALWAYS);
 
-        VBox box = new VBox(8, connRow, infoRow, label("Overview:"), overviewArea, new Separator(),
+        VBox box = new VBox(8, connRow, infoRow, buildStatsStrip(), overviewInfo, new Separator(),
                 queueHeader, queuesTable, new Separator(),
                 label("Exchanges:"), exchangesTable, new Separator(),
                 label("Bindings:"), bindingsTable);
@@ -255,14 +252,51 @@ public final class RabbitMqView extends BorderPane {
         return box;
     }
 
+    /** A horizontal strip of headline cluster stats (populated on every Refresh). */
+    private HBox buildStatsStrip() {
+        HBox strip = new HBox(0,
+                statCell("Connections", statConnections),
+                statSep(),
+                statCell("Channels", statChannels),
+                statSep(),
+                statCell("Queues", statQueues),
+                statSep(),
+                statCell("Consumers", statConsumers),
+                statSep(),
+                statCell("Messages", statMessages));
+        strip.setAlignment(Pos.CENTER_LEFT);
+        strip.setPadding(new Insets(4, 0, 4, 0));
+        return strip;
+    }
+
+    private static Label statValue() {
+        Label l = new Label("–");
+        l.getStyleClass().add("sidebar-title");
+        return l;
+    }
+
+    private VBox statCell(String caption, Label value) {
+        VBox cell = new VBox(2, value, label(caption));
+        cell.setAlignment(Pos.CENTER_LEFT);
+        cell.setPadding(new Insets(0, 18, 0, 0));
+        cell.setMinWidth(90);
+        return cell;
+    }
+
+    private static Separator statSep() {
+        Separator s = new Separator(javafx.geometry.Orientation.VERTICAL);
+        HBox.setMargin(s, new Insets(0, 18, 0, 0));
+        return s;
+    }
+
     private void buildQueuesColumns() {
         queuesTable.getColumns().setAll(
                 col("Name", QueueInfo::name),
                 col("Vhost", QueueInfo::vhost),
-                col("Ready", q -> String.valueOf(q.messagesReady())),
-                col("Unacked", q -> String.valueOf(q.messagesUnacknowledged())),
-                col("Total", q -> String.valueOf(q.messages())),
-                col("Consumers", q -> String.valueOf(q.consumers())),
+                numCol("Ready", QueueInfo::messagesReady),
+                numCol("Unacked", QueueInfo::messagesUnacknowledged),
+                numCol("Total", QueueInfo::messages),
+                numCol("Consumers", QueueInfo::consumers),
                 col("State", QueueInfo::state));
         queuesTable.setPlaceholder(new Label("No queues loaded"));
         queuesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -291,6 +325,14 @@ public final class RabbitMqView extends BorderPane {
     private static <T> TableColumn<T, String> col(String title, Function<T, String> value) {
         TableColumn<T, String> c = new TableColumn<>(title);
         c.setCellValueFactory(cd -> new ReadOnlyStringWrapper(value.apply(cd.getValue())));
+        return c;
+    }
+
+    /** A right-aligned numeric column that sorts by value (not lexicographically). */
+    private static <T> TableColumn<T, Long> numCol(String title, java.util.function.ToLongFunction<T> value) {
+        TableColumn<T, Long> c = new TableColumn<>(title);
+        c.setCellValueFactory(cd -> new ReadOnlyObjectWrapper<>(value.applyAsLong(cd.getValue())));
+        c.setStyle("-fx-alignment: CENTER-RIGHT;");
         return c;
     }
 
@@ -328,15 +370,14 @@ public final class RabbitMqView extends BorderPane {
         mgmtStatus.setText("Loading…");
         logger.accept("RabbitMQ management refresh → " + Env.resolve(mgmtHost.getText().trim()));
 
-        Task<ManagementSnapshot> task = new Task<>() {
-            @Override protected ManagementSnapshot call() {
-                return new ManagementSnapshot(client.overview(), client.listQueues(),
-                        client.listExchanges(), client.listBindings());
+        Task<RabbitMqManagementClient.Dashboard> task = new Task<>() {
+            @Override protected RabbitMqManagementClient.Dashboard call() {
+                return client.dashboard();
             }
         };
         task.setOnSucceeded(e -> {
-            ManagementSnapshot snap = task.getValue();
-            overviewArea.setText(describeOverview(snap.overview()));
+            RabbitMqManagementClient.Dashboard snap = task.getValue();
+            applyOverview(snap.overview());
             queuesTable.setItems(FXCollections.observableArrayList(snap.queues()));
             exchangesTable.setItems(FXCollections.observableArrayList(snap.exchanges()));
             bindingsTable.setItems(FXCollections.observableArrayList(snap.bindings()));
@@ -357,16 +398,17 @@ public final class RabbitMqView extends BorderPane {
         runBg(task, "rabbitmq-mgmt-refresh");
     }
 
-    private String describeOverview(OverviewInfo o) {
-        if (o == null) {
-            return "";
-        }
-        return "Cluster:   " + describe(o.clusterName()) + "\n"
-                + "RabbitMQ:  " + describe(o.rabbitmqVersion()) + "    Erlang: " + describe(o.erlangVersion()) + "\n"
-                + "Objects:   " + o.queues() + " queues · " + o.exchanges() + " exchanges · "
-                + o.connections() + " connections · " + o.channels() + " channels · " + o.consumers() + " consumers\n"
-                + "Messages:  " + o.messages() + " total (" + o.messagesReady() + " ready, "
-                + o.messagesUnacknowledged() + " unacked)";
+    /** Populates the overview stats strip and the cluster/version sub-label. */
+    private void applyOverview(OverviewInfo o) {
+        statConnections.setText(o == null ? "–" : String.valueOf(o.connections()));
+        statChannels.setText(o == null ? "–" : String.valueOf(o.channels()));
+        statQueues.setText(o == null ? "–" : String.valueOf(o.queues()));
+        statConsumers.setText(o == null ? "–" : String.valueOf(o.consumers()));
+        statMessages.setText(o == null ? "–"
+                : o.messages() + " (" + o.messagesReady() + " ready, " + o.messagesUnacknowledged() + " unacked)");
+        overviewInfo.setText(o == null ? ""
+                : "Cluster " + describe(o.clusterName()) + " · RabbitMQ " + describe(o.rabbitmqVersion())
+                        + " · Erlang " + describe(o.erlangVersion()) + " · " + o.exchanges() + " exchange(s)");
     }
 
     private void purgeSelectedQueue() {

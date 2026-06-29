@@ -156,6 +156,56 @@ class RabbitMqJsonParseTest {
     }
 
     @Test
+    void parseDashboardAggregatesAllFourBodies() {
+        String overview = """
+                {
+                  "rabbitmq_version": "3.13.2",
+                  "object_totals": {"queues": 2, "exchanges": 3, "connections": 1, "channels": 1, "consumers": 1},
+                  "queue_totals": {"messages": 7, "messages_ready": 5, "messages_unacknowledged": 2}
+                }
+                """;
+        String queues = """
+                [
+                  {"name":"orders","vhost":"/","messages":5,"consumers":1},
+                  {"name":"audit","vhost":"/","messages":2,"consumers":0}
+                ]
+                """;
+        String exchanges = """
+                [
+                  {"name":"events","vhost":"/","type":"topic","durable":true},
+                  {"name":"dlx","vhost":"/","type":"fanout","durable":true}
+                ]
+                """;
+        String bindings = """
+                [
+                  {"source":"events","vhost":"/","destination":"audit","destination_type":"queue","routing_key":"order.*"}
+                ]
+                """;
+
+        RabbitMqManagementClient.Dashboard d =
+                RabbitMqManagementClient.parseDashboard(overview, queues, exchanges, bindings);
+
+        assertEquals("3.13.2", d.overview().rabbitmqVersion());
+        assertEquals(7, d.overview().messages());
+        assertEquals(2, d.queues().size());
+        assertEquals("orders", d.queues().get(0).name());
+        assertEquals(2, d.exchanges().size());
+        assertEquals("topic", d.exchanges().get(0).type());
+        assertEquals(1, d.bindings().size());
+        assertEquals("order.*", d.bindings().get(0).routingKey());
+    }
+
+    @Test
+    void parseDashboardToleratesEmptyCollections() {
+        RabbitMqManagementClient.Dashboard d =
+                RabbitMqManagementClient.parseDashboard("{}", "[]", "[]", "[]");
+        assertEquals(0, d.overview().queues());
+        assertTrue(d.queues().isEmpty());
+        assertTrue(d.exchanges().isEmpty());
+        assertTrue(d.bindings().isEmpty());
+    }
+
+    @Test
     void invalidJsonRaisesManagementException() {
         assertThrows(RabbitMqManagementException.class,
                 () -> RabbitMqManagementClient.parseOverview("not json"));

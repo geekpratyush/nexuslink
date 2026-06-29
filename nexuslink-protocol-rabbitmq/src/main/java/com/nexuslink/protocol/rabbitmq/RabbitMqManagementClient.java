@@ -28,6 +28,15 @@ public final class RabbitMqManagementClient {
     /** Default RabbitMQ management plugin port. */
     public static final int DEFAULT_PORT = 15672;
 
+    /**
+     * Aggregated snapshot of a single dashboard refresh: the cluster overview plus the queue,
+     * exchange and binding lists. Lists are never {@code null} (empty when the broker has none).
+     */
+    public record Dashboard(OverviewInfo overview,
+                            List<QueueInfo> queues,
+                            List<ExchangeInfo> exchanges,
+                            List<BindingInfo> bindings) {}
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final String apiBase;
@@ -175,6 +184,20 @@ public final class RabbitMqManagementClient {
         return out;
     }
 
+    /**
+     * Builds a {@link Dashboard} from the four raw JSON bodies returned by {@code /api/overview},
+     * {@code /api/queues}, {@code /api/exchanges} and {@code /api/bindings}. Pure (no I/O), so the
+     * aggregation is unit-testable without a running broker.
+     */
+    public static Dashboard parseDashboard(String overviewJson, String queuesJson,
+                                           String exchangesJson, String bindingsJson) {
+        return new Dashboard(
+                parseOverview(overviewJson),
+                parseQueues(queuesJson),
+                parseExchanges(exchangesJson),
+                parseBindings(bindingsJson));
+    }
+
     /** Parses the JSON array body of {@code GET /api/bindings}. */
     public static List<BindingInfo> parseBindings(String json) {
         List<BindingInfo> out = new ArrayList<>();
@@ -226,6 +249,18 @@ public final class RabbitMqManagementClient {
 
     public List<BindingInfo> listBindings() {
         return parseBindings(get(bindingsPath(null)));
+    }
+
+    /**
+     * Refresh-all for the management dashboard: fetches the cluster overview plus the queue,
+     * exchange and binding lists (all vhosts) and returns them as a single {@link Dashboard}.
+     */
+    public Dashboard dashboard() {
+        return parseDashboard(
+                get(overviewPath()),
+                get(queuesPath(null)),
+                get(exchangesPath(null)),
+                get(bindingsPath(null)));
     }
 
     public QueueInfo getQueue(String vhost, String name) {
