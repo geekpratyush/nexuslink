@@ -123,13 +123,57 @@ public final class TransferQueue {
         }
     }
 
-    /** Removes all terminal (DONE/SKIPPED/FAILED) items. */
+    /** Removes all terminal (DONE/SKIPPED/FAILED/CANCELLED) items. */
     public void clearCompleted() {
         boolean removed;
         synchronized (lock) {
             removed = items.removeIf(i -> i.status().terminal());
         }
         if (removed) fireChanged();
+    }
+
+    /**
+     * Cancels a still-pending item. A QUEUED item is marked CANCELLED so the worker skips it; an item
+     * already ACTIVE or terminal is left alone (the in-flight copy can't be interrupted mid-stream).
+     * Returns true if the item was cancelled.
+     */
+    public boolean cancel(TransferItem item) {
+        boolean changed = false;
+        synchronized (lock) {
+            if (item != null && item.status() == TransferStatus.QUEUED) {
+                item.setStatus(TransferStatus.CANCELLED);
+                changed = true;
+            }
+        }
+        if (changed) finish(item);
+        return changed;
+    }
+
+    /** Re-queues a single FAILED/CANCELLED item; no-op for DONE/SKIPPED/QUEUED/ACTIVE. */
+    public boolean retry(TransferItem item) {
+        boolean changed = false;
+        synchronized (lock) {
+            if (item != null && item.status().retryable()) {
+                item.resetForRetry();
+                changed = true;
+                lock.notifyAll();
+            }
+        }
+        if (changed) fireChanged();
+        return changed;
+    }
+
+    /** Re-queues every FAILED/CANCELLED item; returns how many were reset. */
+    public int retryAllFailed() {
+        int n = 0;
+        synchronized (lock) {
+            for (TransferItem i : items) {
+                if (i.status().retryable()) { i.resetForRetry(); n++; }
+            }
+            if (n > 0) lock.notifyAll();
+        }
+        if (n > 0) fireChanged();
+        return n;
     }
 
     // ---- accounting ----

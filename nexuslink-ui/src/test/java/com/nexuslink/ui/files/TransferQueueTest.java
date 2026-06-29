@@ -296,6 +296,61 @@ class TransferQueueTest {
         assertEquals(1000, q.activeBytesPerSecond(s), 1.0, "two active items sum their rates");
     }
 
+    @Test
+    void cancelledQueuedItemIsSkippedByTheWorker(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hi");
+        TransferQueue q = queue(local, remote);
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(src)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+
+        assertTrue(q.cancel(item));
+        assertEquals(TransferStatus.CANCELLED, item.status());
+        assertTrue(item.status().terminal());
+        q.runPending();
+        assertFalse(Files.exists(remote.resolve("a.txt")), "cancelled item is never transferred");
+        assertEquals(1, q.count(TransferStatus.CANCELLED));
+    }
+
+    @Test
+    void retryRequeuesAFailedItemAndItThenSucceeds(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("gone.txt"), "x");
+        FileItem item = fileItemFor(src);
+        Files.delete(src);                                           // first run fails (source missing)
+        TransferQueue q = queue(local, remote);
+        TransferItem ti = q.enqueue(TransferItem.Direction.UPLOAD, List.of(item),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+        assertEquals(TransferStatus.FAILED, ti.status());
+
+        Files.writeString(src, "back");                              // restore the source, then retry
+        assertTrue(q.retry(ti));
+        assertEquals(TransferStatus.QUEUED, ti.status());
+        assertNull(ti.error(), "retry clears the prior error");
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, ti.status());
+        assertEquals("back", Files.readString(remote.resolve("gone.txt")));
+    }
+
+    @Test
+    void retryIsRejectedForDoneItemsAndRetryAllCountsOnlyFailures(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path ok = Files.writeString(local.resolve("ok.txt"), "ok");
+        Path bad = Files.writeString(local.resolve("bad.txt"), "x");
+        FileItem badItem = fileItemFor(bad);
+        Files.delete(bad);
+        TransferQueue q = queue(local, remote);
+        TransferItem good = q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(ok)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.enqueue(TransferItem.Direction.UPLOAD, List.of(badItem),
+                remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, good.status());
+        assertFalse(q.retry(good), "a successful item is not retryable");
+        assertEquals(1, q.retryAllFailed(), "only the FAILED item is requeued");
+        assertEquals(1, q.count(TransferStatus.QUEUED));
+    }
+
     private static FileItem dirItemFor(Path parent, String name) throws Exception {
         return new LocalFileSystem().list(parent.toString()).stream()
                 .filter(f -> f.directory() && f.name().equals(name))

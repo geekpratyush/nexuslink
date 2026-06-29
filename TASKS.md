@@ -419,8 +419,10 @@
       worker, collapsible `TransferQueuePanel` (per-row progress bars, overall bar, live counts,
       clear-completed), enqueued from buttons/double-click/drag-drop; **speed & ETA** — items stamp
       start/finish nanos, expose `bytesPerSecond`/`etaSeconds` (pure helpers + human formatters), queue
-      exposes `activeBytesPerSecond`; panel shows a per-row Speed column + overall rate in the footer
-      (18 tests). **TODO:** pause/resume/retry/cancel, reorder, bandwidth throttle
+      exposes `activeBytesPerSecond`; panel shows a per-row Speed column + overall rate in the footer;
+      **cancel** (QUEUED→CANCELLED, worker skips it) + **retry** (FAILED/CANCELLED→QUEUED via
+      `retry`/`retryAllFailed`) with a row context menu + "Retry failed" button (21 tests).
+      **TODO:** pause/resume of an in-flight transfer, reorder, bandwidth throttle
 - [x] **Recursive directory transfers** — `TransferQueue.enqueueRecursive` walks a selected folder
       (via the source `FileSystem`), recreates the tree on the destination side (`mkdir`), and enqueues
       every contained file into the normal sequential worker; `DualPaneBrowser` no longer filters out

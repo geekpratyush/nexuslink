@@ -53,11 +53,15 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         counts.getStyleClass().add("meta-label");
         counts.setMinWidth(260);
 
+        Button retryFailed = new Button("Retry failed");
+        retryFailed.getStyleClass().add("btn-secondary");
+        retryFailed.setOnAction(e -> queue.retryAllFailed());
+
         Button clear = new Button("Clear completed");
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> queue.clearCompleted());
 
-        HBox footer = new HBox(10, counts, overall, clear);
+        HBox footer = new HBox(10, counts, overall, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 
@@ -102,6 +106,27 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         table.getColumns().setAll(dir, name, size, prog, speed, status);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("No transfers yet"));
+        table.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.MULTIPLE);
+        installRowContextMenu();
+    }
+
+    /** Right-click menu: Cancel queued items, Retry failed/cancelled ones. */
+    private void installRowContextMenu() {
+        javafx.scene.control.MenuItem cancel = new javafx.scene.control.MenuItem("Cancel");
+        cancel.setOnAction(e -> {
+            for (TransferItem i : table.getSelectionModel().getSelectedItems()) queue.cancel(i);
+        });
+        javafx.scene.control.MenuItem retry = new javafx.scene.control.MenuItem("Retry");
+        retry.setOnAction(e -> {
+            for (TransferItem i : table.getSelectionModel().getSelectedItems()) queue.retry(i);
+        });
+        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu(cancel, retry);
+        menu.setOnShowing(e -> {
+            var sel = table.getSelectionModel().getSelectedItems();
+            cancel.setDisable(sel.stream().noneMatch(i -> i.status() == TransferStatus.QUEUED));
+            retry.setDisable(sel.stream().noneMatch(i -> i.status().retryable()));
+        });
+        table.setContextMenu(menu);
     }
 
     // ---- TransferQueue.Listener (called off the FX thread) ----
@@ -160,6 +185,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
             note.setText(switch (item.status()) {
                 case SKIPPED -> "skipped";
                 case FAILED -> "failed";
+                case CANCELLED -> "cancelled";
                 case DONE -> "✔";
                 default -> "";
             });

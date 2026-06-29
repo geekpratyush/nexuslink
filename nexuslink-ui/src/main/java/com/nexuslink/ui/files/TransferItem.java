@@ -50,6 +50,15 @@ public final class TransferItem {
     public TransferStatus status() { return status; }
     void setStatus(TransferStatus status) { this.status = status; }
 
+    /** Resets a terminal item back to QUEUED so the worker will pick it up again. */
+    void resetForRetry() {
+        this.status = TransferStatus.QUEUED;
+        this.transferredBytes = 0;
+        this.error = null;
+        this.startNanos = -1;
+        this.endNanos = -1;
+    }
+
     public long transferredBytes() { return transferredBytes; }
     void setTransferredBytes(long bytes) { this.transferredBytes = bytes; }
 
