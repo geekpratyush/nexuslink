@@ -351,6 +351,38 @@ class TransferQueueTest {
         assertEquals(1, q.count(TransferStatus.QUEUED));
     }
 
+    @Test
+    void moveReordersQueuedItemsAndRespectsEnds(@TempDir Path local, @TempDir Path remote) throws Exception {
+        TransferQueue q = queue(local, remote);
+        TransferItem a = enqueueOne(q, local, remote, "a.txt");
+        TransferItem b = enqueueOne(q, local, remote, "b.txt");
+        TransferItem c = enqueueOne(q, local, remote, "c.txt");
+        // order: a, b, c
+        assertTrue(q.move(c, -1));                       // c up → a, c, b
+        assertEquals(List.of(a, c, b), q.items());
+        assertTrue(q.move(c, -1));                       // c up → c, a, b
+        assertEquals(List.of(c, a, b), q.items());
+        assertFalse(q.move(c, -1), "already at the top");
+        assertFalse(q.move(b, 1), "already at the bottom");
+        assertFalse(q.move(a, 0), "zero delta is a no-op");
+    }
+
+    @Test
+    void moveWontDisplaceANonQueuedItem(@TempDir Path local, @TempDir Path remote) throws Exception {
+        TransferQueue q = queue(local, remote);
+        TransferItem a = enqueueOne(q, local, remote, "a.txt");
+        TransferItem b = enqueueOne(q, local, remote, "b.txt");
+        a.setStatus(TransferStatus.ACTIVE);              // a is in flight at the top
+        assertFalse(q.move(b, -1), "a queued item must not jump over an active one");
+        assertEquals(List.of(a, b), q.items());
+    }
+
+    private static TransferItem enqueueOne(TransferQueue q, Path local, Path remote, String name) throws Exception {
+        Path src = Files.writeString(local.resolve(name), name);
+        return q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(src)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+    }
+
     private static FileItem dirItemFor(Path parent, String name) throws Exception {
         return new LocalFileSystem().list(parent.toString()).stream()
                 .filter(f -> f.directory() && f.name().equals(name))

@@ -120,13 +120,30 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         retry.setOnAction(e -> {
             for (TransferItem i : table.getSelectionModel().getSelectedItems()) queue.retry(i);
         });
-        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu(cancel, retry);
+        javafx.scene.control.MenuItem up = new javafx.scene.control.MenuItem("Move up");
+        up.setOnAction(e -> moveSelected(-1));
+        javafx.scene.control.MenuItem down = new javafx.scene.control.MenuItem("Move down");
+        down.setOnAction(e -> moveSelected(1));
+        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu(
+                cancel, retry, new javafx.scene.control.SeparatorMenuItem(), up, down);
         menu.setOnShowing(e -> {
             var sel = table.getSelectionModel().getSelectedItems();
-            cancel.setDisable(sel.stream().noneMatch(i -> i.status() == TransferStatus.QUEUED));
+            boolean anyQueued = sel.stream().anyMatch(i -> i.status() == TransferStatus.QUEUED);
+            cancel.setDisable(!anyQueued);
             retry.setDisable(sel.stream().noneMatch(i -> i.status().retryable()));
+            up.setDisable(sel.size() != 1 || !anyQueued);
+            down.setDisable(sel.size() != 1 || !anyQueued);
         });
         table.setContextMenu(menu);
+    }
+
+    /** Moves the single selected queued item by {@code delta} and keeps it selected. */
+    private void moveSelected(int delta) {
+        TransferItem sel = table.getSelectionModel().getSelectedItem();
+        if (sel != null && queue.move(sel, delta)) {
+            refreshNow();
+            table.getSelectionModel().select(sel);
+        }
     }
 
     // ---- TransferQueue.Listener (called off the FX thread) ----

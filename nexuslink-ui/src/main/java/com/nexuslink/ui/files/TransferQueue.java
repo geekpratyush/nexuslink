@@ -163,6 +163,38 @@ public final class TransferQueue {
         return changed;
     }
 
+    /**
+     * Moves a still-QUEUED item one slot earlier ({@code delta < 0}) or later ({@code delta > 0}) in
+     * the queue, so the user can reprioritise pending transfers. Only reorders relative to other
+     * QUEUED items; ACTIVE/terminal items keep their place and are never displaced. Returns true if
+     * the item actually moved.
+     */
+    public boolean move(TransferItem item, int delta) {
+        if (item == null || delta == 0) return false;
+        boolean moved = false;
+        synchronized (lock) {
+            int from = items.indexOf(item);
+            if (from < 0 || item.status() != TransferStatus.QUEUED) return false;
+            int step = Integer.signum(delta);
+            int remaining = Math.abs(delta);
+            int to = from;
+            while (remaining > 0) {
+                int next = to + step;
+                // Stop at the ends or at a non-QUEUED item (never displace active/terminal entries).
+                if (next < 0 || next >= items.size()
+                        || items.get(next).status() != TransferStatus.QUEUED) break;
+                to = next;
+                remaining--;
+            }
+            if (to != from) {
+                items.add(to, items.remove(from));
+                moved = true;
+            }
+        }
+        if (moved) fireChanged();
+        return moved;
+    }
+
     /** Re-queues every FAILED/CANCELLED item; returns how many were reset. */
     public int retryAllFailed() {
         int n = 0;

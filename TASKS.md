@@ -421,8 +421,9 @@
       start/finish nanos, expose `bytesPerSecond`/`etaSeconds` (pure helpers + human formatters), queue
       exposes `activeBytesPerSecond`; panel shows a per-row Speed column + overall rate in the footer;
       **cancel** (QUEUED→CANCELLED, worker skips it) + **retry** (FAILED/CANCELLED→QUEUED via
-      `retry`/`retryAllFailed`) with a row context menu + "Retry failed" button (21 tests).
-      **TODO:** pause/resume of an in-flight transfer, reorder, bandwidth throttle
+      `retry`/`retryAllFailed`) + **reorder** (`move` a QUEUED item up/down without displacing
+      active/terminal ones) with a row context menu + "Retry failed" button (20 tests).
+      **TODO:** pause/resume of an in-flight transfer, bandwidth throttle
 - [x] **Recursive directory transfers** — `TransferQueue.enqueueRecursive` walks a selected folder
       (via the source `FileSystem`), recreates the tree on the destination side (`mkdir`), and enqueues
       every contained file into the normal sequential worker; `DualPaneBrowser` no longer filters out
