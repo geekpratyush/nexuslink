@@ -159,6 +159,17 @@ public final class TransferQueue {
         }
     }
 
+    /** Combined throughput of all currently-active items in bytes/second (0 when none are active). */
+    public double activeBytesPerSecond(long nowNanos) {
+        synchronized (lock) {
+            double sum = 0;
+            for (TransferItem i : items) {
+                if (i.status() == TransferStatus.ACTIVE) sum += i.bytesPerSecond(nowNanos);
+            }
+            return sum;
+        }
+    }
+
     // ---- processing ----
 
     /**
@@ -213,12 +224,14 @@ public final class TransferQueue {
 
     private void process(TransferItem item) {
         item.setStatus(TransferStatus.ACTIVE);
+        item.markStarted(System.nanoTime());
         fireChanged();
         try {
             if (targetExists(item)) {
                 OverwriteResolver.Action action = item.resolver().resolve(item.name());
                 if (action == OverwriteResolver.Action.SKIP) {
                     item.setStatus(TransferStatus.SKIPPED);
+                    item.markFinished(System.nanoTime());
                     finish(item);
                     return;
                 }
@@ -230,6 +243,7 @@ public final class TransferQueue {
             item.setError(e.getMessage() == null ? e.toString() : e.getMessage());
             item.setStatus(TransferStatus.FAILED);
         }
+        item.markFinished(System.nanoTime());
         finish(item);
     }
 

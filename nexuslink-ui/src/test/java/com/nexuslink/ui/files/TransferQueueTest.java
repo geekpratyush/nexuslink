@@ -239,6 +239,63 @@ class TransferQueueTest {
         assertEquals(1, created.size(), "the .. row is ignored");
     }
 
+    @Test
+    void rateAndEtaPureHelpers() {
+        // 1 MiB over 1s ⇒ 1 MiB/s; "1.0 MB/s".
+        long mib = 1024L * 1024;
+        assertEquals(mib, TransferItem.rate(mib, 1_000_000_000L), 1e-6);
+        assertEquals("1.0 MB/s", TransferItem.formatRate(mib));
+        assertEquals("", TransferItem.formatRate(0), "zero rate renders blank");
+
+        // 10 MiB left at 1 MiB/s ⇒ 10s.
+        assertEquals(10, TransferItem.etaSeconds(10 * mib, mib));
+        assertEquals(-1, TransferItem.etaSeconds(mib, 0), "no rate ⇒ unknown ETA");
+        assertEquals(0, TransferItem.rate(0, 0), "no time, no bytes ⇒ 0");
+
+        assertEquals("--", TransferItem.formatEta(-1));
+        assertEquals("42s", TransferItem.formatEta(42));
+        assertEquals("3m07s", TransferItem.formatEta(187));
+        assertEquals("1h02m", TransferItem.formatEta(3720));
+    }
+
+    @Test
+    void itemTracksThroughputAndEtaWhileActive(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("big.bin"), "x".repeat(2_000_000));
+        TransferItem item = new TransferItem(TransferItem.Direction.UPLOAD,
+                fileItemFor(src), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        item.setStatus(TransferStatus.ACTIVE);
+        item.markStarted(0);
+        item.setTransferredBytes(1_000_000);                 // half, at t = 1s
+        long oneSecond = 1_000_000_000L;
+
+        assertEquals(1_000_000, item.bytesPerSecond(oneSecond), 1.0);
+        assertEquals(1, item.etaSeconds(oneSecond), "1 MB left at 1 MB/s ⇒ 1s");
+
+        item.markFinished(2 * oneSecond);                    // rate now frozen at the finish time
+        item.setStatus(TransferStatus.DONE);
+        assertEquals(0, item.etaSeconds(99 * oneSecond), "terminal ⇒ ETA 0");
+        // elapsed frozen at 2s for 1 MB transferred ⇒ 0.5 MB/s regardless of 'now'.
+        assertEquals(500_000, item.bytesPerSecond(99 * oneSecond), 1.0);
+    }
+
+    @Test
+    void queueAggregatesActiveThroughput(@TempDir Path local, @TempDir Path remote) throws Exception {
+        TransferQueue q = queue(local, remote);
+        Path a = Files.writeString(local.resolve("a"), "x".repeat(1000));
+        Path b = Files.writeString(local.resolve("b"), "x".repeat(1000));
+        TransferItem i1 = q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(a)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        TransferItem i2 = q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(b)),
+                remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        long s = 1_000_000_000L;
+        for (TransferItem i : List.of(i1, i2)) {
+            i.setStatus(TransferStatus.ACTIVE);
+            i.markStarted(0);
+            i.setTransferredBytes(500);                      // 500 B in 1s each ⇒ 500 B/s each
+        }
+        assertEquals(1000, q.activeBytesPerSecond(s), 1.0, "two active items sum their rates");
+    }
+
     private static FileItem dirItemFor(Path parent, String name) throws Exception {
         return new LocalFileSystem().list(parent.toString()).stream()
                 .filter(f -> f.directory() && f.name().equals(name))

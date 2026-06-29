@@ -28,6 +28,8 @@ public final class TransferItem {
     private volatile TransferStatus status = TransferStatus.QUEUED;
     private volatile long transferredBytes;
     private volatile String error;
+    private volatile long startNanos = -1;   // set when the transfer goes ACTIVE
+    private volatile long endNanos = -1;      // set when it reaches a terminal state
 
     public TransferItem(Direction direction, FileItem source, String destDir, OverwriteResolver resolver) {
         this.direction = direction;
@@ -53,6 +55,68 @@ public final class TransferItem {
 
     public String error() { return error; }
     void setError(String error) { this.error = error; }
+
+    // ---- timing / speed / ETA ----
+
+    /** Records the moment the transfer became active (nanoTime). */
+    void markStarted(long nanos) { this.startNanos = nanos; }
+    /** Records the moment the transfer reached a terminal state (nanoTime). */
+    void markFinished(long nanos) { this.endNanos = nanos; }
+
+    /** Elapsed transfer time in nanos: 0 before start, frozen at the finish time once terminal. */
+    long elapsedNanos(long nowNanos) {
+        if (startNanos < 0) return 0;
+        long end = endNanos >= 0 ? endNanos : nowNanos;
+        return Math.max(0, end - startNanos);
+    }
+
+    /** Current throughput in bytes/second ({@code 0} until enough has elapsed to be meaningful). */
+    public double bytesPerSecond(long nowNanos) {
+        return rate(transferredBytes, elapsedNanos(nowNanos));
+    }
+
+    /**
+     * Estimated seconds remaining for an in-flight transfer, or {@code -1} when unknown (not active,
+     * unknown size, or no measurable rate yet). Terminal items return {@code 0}.
+     */
+    public long etaSeconds(long nowNanos) {
+        if (status.terminal()) return 0;
+        if (status != TransferStatus.ACTIVE || totalBytes <= 0) return -1;
+        double bps = bytesPerSecond(nowNanos);
+        return etaSeconds(totalBytes - transferredBytes, bps);
+    }
+
+    /** Pure rate helper: bytes over an elapsed nanosecond window ({@code 0} when no time elapsed). */
+    public static double rate(long bytes, long elapsedNanos) {
+        if (elapsedNanos <= 0 || bytes <= 0) return 0;
+        return bytes / (elapsedNanos / 1_000_000_000.0);
+    }
+
+    /** Pure ETA helper: remaining bytes at a rate, rounded up; {@code -1} when the rate is unusable. */
+    public static long etaSeconds(long remainingBytes, double bytesPerSecond) {
+        if (bytesPerSecond <= 0 || remainingBytes < 0) return -1;
+        return (long) Math.ceil(remainingBytes / bytesPerSecond);
+    }
+
+    /** Formats a byte rate as a human string, e.g. {@code "1.2 MB/s"}; blank for a zero rate. */
+    public static String formatRate(double bytesPerSecond) {
+        if (bytesPerSecond <= 0) return "";
+        String[] units = {"B/s", "KB/s", "MB/s", "GB/s"};
+        double s = bytesPerSecond;
+        int u = 0;
+        while (s >= 1024 && u < units.length - 1) { s /= 1024; u++; }
+        return (u == 0 ? String.format("%.0f %s", s, units[u]) : String.format("%.1f %s", s, units[u]));
+    }
+
+    /** Formats an ETA in seconds as {@code "--"} (unknown), {@code "42s"}, or {@code "3m07s"}. */
+    public static String formatEta(long seconds) {
+        if (seconds < 0) return "--";
+        if (seconds < 60) return seconds + "s";
+        long m = seconds / 60, s = seconds % 60;
+        if (m < 60) return String.format("%dm%02ds", m, s);
+        long h = m / 60; m %= 60;
+        return String.format("%dh%02dm", h, m);
+    }
 
     /** Fraction transferred in {@code [0,1]}; terminal items report 1.0 so the bar settles full. */
     public double progress() {

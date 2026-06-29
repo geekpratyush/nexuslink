@@ -90,11 +90,16 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         prog.setCellFactory(c -> new ProgressCell());
         prog.setPrefWidth(160);
 
+        TableColumn<TransferItem, String> speed = new TableColumn<>("Speed");
+        speed.setCellValueFactory(c -> new SimpleStringProperty(speedText(c.getValue())));
+        speed.setPrefWidth(120);
+        speed.setStyle("-fx-alignment: CENTER-RIGHT;");
+
         TableColumn<TransferItem, String> status = new TableColumn<>("Status");
         status.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().status().name().toLowerCase()));
         status.setPrefWidth(90);
 
-        table.getColumns().setAll(dir, name, size, prog, status);
+        table.getColumns().setAll(dir, name, size, prog, speed, status);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("No transfers yet"));
     }
@@ -115,11 +120,23 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         rows.setAll(queue.items());
         table.refresh();
         overall.setProgress(queue.size() == 0 ? 0 : queue.overallProgress());
-        counts.setText(String.format("%d queued · %d active · %d done · %d skipped · %d failed",
+        String base = String.format("%d queued · %d active · %d done · %d skipped · %d failed",
                 queue.count(TransferStatus.QUEUED), queue.count(TransferStatus.ACTIVE),
                 queue.count(TransferStatus.DONE), queue.count(TransferStatus.SKIPPED),
-                queue.count(TransferStatus.FAILED)));
+                queue.count(TransferStatus.FAILED));
+        String rate = TransferItem.formatRate(queue.activeBytesPerSecond(System.nanoTime()));
+        counts.setText(rate.isEmpty() ? base : base + "  —  " + rate);
         if (queue.hasPending() && !isExpanded()) setExpanded(true);
+    }
+
+    /** Per-row speed · ETA text, shown only while a transfer is active. */
+    private static String speedText(TransferItem item) {
+        if (item.status() != TransferStatus.ACTIVE) return "";
+        long now = System.nanoTime();
+        String rate = TransferItem.formatRate(item.bytesPerSecond(now));
+        if (rate.isEmpty()) return "";
+        long eta = item.etaSeconds(now);
+        return eta < 0 ? rate : rate + " · " + TransferItem.formatEta(eta);
     }
 
     /** Per-row progress bar that also shows a short status note for terminal items. */
