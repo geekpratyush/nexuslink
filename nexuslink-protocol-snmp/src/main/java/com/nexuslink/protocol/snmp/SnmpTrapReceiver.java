@@ -5,6 +5,7 @@ import org.snmp4j.CommandResponderEvent;
 import org.snmp4j.PDU;
 import org.snmp4j.PDUv1;
 import org.snmp4j.Snmp;
+import org.snmp4j.mp.StatusInformation;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.UdpAddress;
 import org.snmp4j.smi.VariableBinding;
@@ -41,6 +42,8 @@ public final class SnmpTrapReceiver implements AutoCloseable {
      * A decoded SNMP trap / notification. {@code trapOid} is numeric and {@code trapName} is its
      * symbolic MIB resolution (via {@link OidRegistry}); {@code varBinds} reuses the browser's
      * {@link SnmpService.VarBind} decode (OID, SMI type, value) and is an immutable copy.
+     * {@code inform} is {@code true} only for a confirmed {@link PDU#INFORM} notification, which the
+     * receiver acknowledges with a RESPONSE back to the sender.
      */
     public record Trap(
             Instant timestamp,
@@ -49,7 +52,8 @@ public final class SnmpTrapReceiver implements AutoCloseable {
             String community,
             String trapOid,
             String trapName,
-            List<SnmpService.VarBind> varBinds) {
+            List<SnmpService.VarBind> varBinds,
+            boolean inform) {
 
         public Trap {
             varBinds = varBinds == null ? List.of() : List.copyOf(varBinds);
@@ -80,6 +84,10 @@ public final class SnmpTrapReceiver implements AutoCloseable {
                 Trap trap = decode(event);
                 if (trap != null) {
                     event.setProcessed(true);
+                    // An INFORM is confirmed: acknowledge it before delivery so the sender does not retry.
+                    if (trap.inform()) {
+                        replyToInform(event);
+                    }
                     listener.accept(trap);
                 }
             }
@@ -134,13 +142,43 @@ public final class SnmpTrapReceiver implements AutoCloseable {
     /** Builds a {@link Trap} from an already-decoded PDU — the offline-testable core of {@link #decode}. */
     public static Trap decode(PDU pdu, String source, String community, Instant timestamp) {
         String version = pdu.getType() == PDU.V1TRAP ? "v1" : "v2c";
+        boolean inform = pdu.getType() == PDU.INFORM;
         String trapOid = trapOidOf(pdu);
         List<SnmpService.VarBind> binds = new ArrayList<>();
         for (VariableBinding vb : pdu.getVariableBindings()) {
             binds.add(SnmpService.toVarBind(vb));
         }
         return new Trap(timestamp, source, version, community, trapOid,
-                OidRegistry.nameFor(trapOid), binds);
+                OidRegistry.nameFor(trapOid), binds, inform);
+    }
+
+    /**
+     * Acknowledges a confirmed {@link PDU#INFORM} by returning a RESPONSE to the sender. The incoming
+     * PDU is reused — its request-id and varbinds are echoed back, the type is switched to
+     * {@link PDU#RESPONSE} and the error-status/index cleared — and dispatched through the same
+     * message-processing model, security model/level/name and transport state the event arrived on.
+     * Best-effort: any failure is swallowed (the sender simply retries / times out), so the responder
+     * never throws.
+     */
+    private static <A extends org.snmp4j.smi.Address> void replyToInform(CommandResponderEvent<A> event) {
+        PDU pdu = event.getPDU();
+        if (pdu == null || pdu.getType() != PDU.INFORM) return;
+        pdu.setType(PDU.RESPONSE);
+        pdu.setErrorStatus(PDU.noError);
+        pdu.setErrorIndex(0);
+        try {
+            event.getMessageDispatcher().returnResponsePdu(
+                    event.getMessageProcessingModel(),
+                    event.getSecurityModel(),
+                    event.getSecurityName(),
+                    event.getSecurityLevel(),
+                    pdu,
+                    event.getMaxSizeResponsePDU(),
+                    event.getStateReference(),
+                    new StatusInformation());
+        } catch (Exception ignored) {
+            /* best-effort: never propagate out of the command responder */
+        }
     }
 
     /** True for the trap / notification / inform PDU types. */
