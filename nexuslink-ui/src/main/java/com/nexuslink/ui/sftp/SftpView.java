@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * SFTP client tab — connect over SSH (host/port + username/password or a private key) and manage
  * files through a WinSCP/MobaXterm-style two-pane commander: the local disk on the left, the remote
  * server on the right, with upload/download, drag-free transfers, new-folder, rename, delete and
- * chmod. Until connected, a placeholder explains the layout.
+ * chmod. The local pane is shown immediately; the remote pane reads "not connected" until you connect.
  */
 public final class SftpView extends BorderPane {
 
@@ -30,19 +30,25 @@ public final class SftpView extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Button disconnectBtn = new Button("Disconnect");
     private final Label statusLabel = new Label("Not connected");
-    private final StackPane bodyHost = new StackPane(placeholder());
 
-    private DualPaneBrowser browser;
+    private final DualPaneBrowser browser;
     private Consumer<String> logger = s -> {};
 
     public SftpView() {
         getStyleClass().add("sftp-view");
         setTop(buildBar());
-        setCenter(bodyHost);
+        // The remote pane wraps the long-lived service, so the commander can be built up-front: the
+        // local pane is browsable straight away and the remote side stays "not connected" until connect.
+        SftpFileSystem remote = new SftpFileSystem(service);
+        browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
+        browser.startLocal();
+        browser.disconnectRemote();
+        setCenter(browser);
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
+        browser.setLogger(this.logger);
     }
 
     /** Pre-fills connection details (used when opening a saved/sample connection). */
@@ -55,17 +61,6 @@ public final class SftpView extends BorderPane {
         }
         if (user != null) userField.setText(user);
         if (password != null) passField.setText(password);
-    }
-
-    private Label placeholder() {
-        Label l = new Label("Connect to an SFTP server to browse files.\n\n"
-                + "Once connected you get a two-pane file manager:\n"
-                + "   • Local files on the left, remote files on the right\n"
-                + "   • Upload → / ← Download, double-click a file to transfer\n"
-                + "   • New Folder, Rename (F2), Delete (Del), and chmod on the remote side");
-        l.getStyleClass().add("meta-label");
-        l.setAlignment(Pos.CENTER);
-        return l;
     }
 
     private VBox buildBar() {
@@ -140,7 +135,7 @@ public final class SftpView extends BorderPane {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + user + "@" + host);
             logger.accept("SFTP connected");
-            showBrowser();
+            browser.connectRemote();
             connectBtn.setDisable(false);
             disconnectBtn.setDisable(false);
         });
@@ -155,18 +150,9 @@ public final class SftpView extends BorderPane {
         t.start();
     }
 
-    private void showBrowser() {
-        SftpFileSystem remote = new SftpFileSystem(service);
-        browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
-        browser.setLogger(logger);
-        bodyHost.getChildren().setAll(browser);
-        browser.start();
-    }
-
     private void disconnect() {
         service.close();
-        browser = null;
-        bodyHost.getChildren().setAll(placeholder());
+        browser.disconnectRemote();
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Not connected");
         disconnectBtn.setDisable(true);

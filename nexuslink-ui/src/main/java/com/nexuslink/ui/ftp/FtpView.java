@@ -15,7 +15,8 @@ import java.util.function.Consumer;
 /**
  * FTP / FTPS client tab — connect with host/port + username/password (anonymous supported) and
  * manage files through a WinSCP/MobaXterm-style two-pane commander: the local disk on the left, the
- * remote server on the right, with upload/download, new-folder, rename and delete.
+ * remote server on the right, with upload/download, new-folder, rename and delete. The local pane is
+ * shown immediately; the remote pane reads "not connected" until you connect.
  */
 public final class FtpView extends BorderPane {
 
@@ -30,31 +31,26 @@ public final class FtpView extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Button disconnectBtn = new Button("Disconnect");
     private final Label statusLabel = new Label("Not connected");
-    private final StackPane bodyHost = new StackPane(placeholder());
 
-    private DualPaneBrowser browser;
+    private final DualPaneBrowser browser;
     private Consumer<String> logger = s -> {};
 
     public FtpView() {
         getStyleClass().add("ftp-view");
         passiveBox.setSelected(true);
         setTop(buildBar());
-        setCenter(bodyHost);
+        // The remote pane wraps the long-lived service, so the commander can be built up-front: the
+        // local pane is browsable straight away and the remote side stays "not connected" until connect.
+        FtpFileSystem remote = new FtpFileSystem(service);
+        browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
+        browser.startLocal();
+        browser.disconnectRemote();
+        setCenter(browser);
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
-    }
-
-    private Label placeholder() {
-        Label l = new Label("Connect to an FTP/FTPS server to manage files.\n\n"
-                + "Once connected you get a two-pane file manager:\n"
-                + "   • Local files on the left, remote files on the right\n"
-                + "   • Upload → / ← Download, double-click a file to transfer\n"
-                + "   • New Folder, Rename (F2) and Delete (Del)");
-        l.getStyleClass().add("meta-label");
-        l.setAlignment(Pos.CENTER);
-        return l;
+        browser.setLogger(this.logger);
     }
 
     /** Pre-fills connection details (used when opening a saved/sample connection). */
@@ -124,7 +120,7 @@ public final class FtpView extends BorderPane {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + user + "@" + host);
             logger.accept("FTP connected");
-            showBrowser();
+            browser.connectRemote();
             connectBtn.setDisable(false);
             disconnectBtn.setDisable(false);
         });
@@ -139,18 +135,9 @@ public final class FtpView extends BorderPane {
         t.start();
     }
 
-    private void showBrowser() {
-        FtpFileSystem remote = new FtpFileSystem(service);
-        browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
-        browser.setLogger(logger);
-        bodyHost.getChildren().setAll(browser);
-        browser.start();
-    }
-
     private void disconnect() {
         service.close();
-        browser = null;
-        bodyHost.getChildren().setAll(placeholder());
+        browser.disconnectRemote();
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Not connected");
         disconnectBtn.setDisable(true);

@@ -33,6 +33,7 @@ public final class DualPaneBrowser extends BorderPane {
 
     private final Label messageLabel = new Label();
     private Consumer<String> logger = s -> {};
+    private boolean remoteConnected = false;
 
     public DualPaneBrowser(FileSystem local, FileSystem remote, FileTransfer transfer) {
         this.localPane = new FileBrowserPane(local, "Local — " + local.name());
@@ -73,8 +74,32 @@ public final class DualPaneBrowser extends BorderPane {
 
     /** Loads the local home in the left pane and the remote home in the right pane. */
     public void start() {
+        startLocal();
+        connectRemote();
+    }
+
+    /**
+     * Loads just the local pane's home directory. Call as soon as the commander is shown so the local
+     * file tree is browsable immediately, before any server connection — the WinSCP/MobaXterm feel
+     * where the local pane is always present.
+     */
+    public void startLocal() {
         localPane.loadHome();
+    }
+
+    /** Marks the remote side connected and loads its home directory into the right pane. */
+    public void connectRemote() {
+        remoteConnected = true;
         remotePane.loadHome();
+    }
+
+    /**
+     * Marks the remote side disconnected and shows a "not connected" placeholder in the right pane.
+     * The local pane keeps its current directory, so local navigation survives connect/disconnect.
+     */
+    public void disconnectRemote() {
+        remoteConnected = false;
+        remotePane.showDisconnected("Not connected — use Connect above to browse the remote server");
     }
 
     private VBox buildTransferColumn() {
@@ -112,6 +137,10 @@ public final class DualPaneBrowser extends BorderPane {
 
     /** Enqueues the selection (files and whole folders) toward the opposite pane's directory. */
     private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction) {
+        if (!remoteConnected) {
+            messageLabel.setText("Connect to a remote server before transferring files");
+            return;
+        }
         List<FileItem> items = itemsRaw.stream().filter(f -> !f.parent()).toList();
         if (items.isEmpty()) {
             messageLabel.setText("Select one or more files or folders to transfer");

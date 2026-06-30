@@ -241,6 +241,19 @@ public final class FileBrowserPane extends VBox {
 
     public void refresh() { navigateTo(currentPath); }
 
+    /**
+     * Puts the pane into a "not connected" state: clears the current listing and shows {@code message}
+     * as both the table placeholder and the status line. Used by the {@link DualPaneBrowser} so the
+     * remote pane reads "not connected" before a server connection rather than appearing empty.
+     */
+    public void showDisconnected(String message) {
+        currentPath = "/";
+        addressField.clear();
+        table.setItems(FXCollections.observableArrayList());
+        table.setPlaceholder(new Label(message));
+        statusLabel.setText(message);
+    }
+
     private void newFolder() {
         TextInputDialog d = themedInput("new-folder", "New Folder", "Folder name:");
         d.showAndWait().ifPresent(nameRaw -> {
