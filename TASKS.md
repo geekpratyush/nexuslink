@@ -231,7 +231,8 @@
     connection-pooling caveat, verified by an offline loopback-server handshake test); full Auth-tab UI +
     code-gen placeholder)
     + **cURL import** (`CurlImporter.fromCurl` — parses method/URL/-H/-d(×N)/-u basic/-X and ignores
-    benign flags into a `RestRequest`, inverse of the code generator; **14 tests**);
+    benign flags into a `RestRequest`, inverse of the code generator; **14 tests**; surfaced via an
+    **Import cURL** button + paste dialog that populates the editor);
     _Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
@@ -316,7 +317,11 @@
 - [ ] Offset reset dialog: earliest/latest/specific timestamp/specific offset
 
 ### 4.7 Schema Registry
-- [ ] `SchemaRegistryService` — Confluent and Apicurio REST API client (Caffeine cached, TTL=60s)
+- [x] `SchemaRegistryClient` — Confluent-style REST client (list subjects, list versions, get schema by
+      subject+version or by global id, register a version; optional HTTP basic auth) over `java.net.http`.
+      Responses parsed by a dependency-free `SchemaRegistryJson` reader/writer (full string-escape +
+      `\uXXXX`), so the module stays JSON-lib-free like `KafkaMessageExporter`. 12 tests (7 parser incl.
+      embedded escaped schema + round-trip, 5 loopback-server client). _(Caffeine cache + UI panel TODO)_
 - [ ] Subject list, version history, schema viewer (Avro/Protobuf/JSON Schema)
 - [ ] Compatibility mode display + change dialog
 - [ ] Schema evolution diff (side-by-side version compare)
@@ -433,7 +438,10 @@
 - [x] Keep the connect bar **and** the dual pane visible together (the body is no longer swapped for a placeholder)
 
 **Per-pane navigation**
-- [ ] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history
+- [-] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history —
+      **done:** editable address field + a clickable **breadcrumb trail** (pure `PathCrumbs` helper walks
+      up via the FileSystem's parent fn, works for POSIX + local paths; 5 tests) + Up button. _(back/forward
+      history still TODO)_
 - [x] Default listing order: ".." first, directories before files, case-insensitive name (pure `FileOrder`
       comparator, 5 tests) — _interactive click-to-sort columns still TODO_
 - [ ] Hidden-files toggle; in-pane quick filter/search box
@@ -593,7 +601,10 @@
       v3 session via SNMP4J's native USM (local engine ID, `UsmUser`, `UserTarget`, `ScopedPDU`), reusing the
       shared varbind `decode`. Pure `SnmpV3Usm` mapper (auth MD5/SHA/SHA-256 → OID, priv DES/AES-128 → OID,
       security level → `SecurityLevel`, `toUsmUser`) is the offline-tested seam (12 tests; mapper + construction
-      smoke). Existing v1/v2c `get`/`walk` untouched. _(SnmpView v3 tab + live E2E against a v3 agent still TODO)_
+      smoke). Existing v1/v2c `get`/`walk` untouched. **SnmpView now has a v3 tab:** "3" in the version
+      selector reveals a USM panel (security level, user, auth proto+passphrase, priv proto+passphrase,
+      context) and hides community; GET/WALK validate an `SnmpV3Config` and call `getV3`/`walkV3` (port-aware
+      overloads added). _(live E2E against a real v3 agent still TODO)_
 - [x] **Trap receiver** — `SnmpTrapReceiver` listens on UDP 162 (configurable/ephemeral) for v1/v2c
       traps, decodes trap OID (RFC 3584 for v1) + varbinds with `OidRegistry` name resolution; `SnmpView`
       **Traps** tab with start/stop, community filter, live table (7 tests incl. loopback round-trip)
