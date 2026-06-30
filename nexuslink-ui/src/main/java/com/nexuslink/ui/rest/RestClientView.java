@@ -10,6 +10,7 @@ import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.protocol.http.rest.AssertionSpec;
 import com.nexuslink.protocol.http.rest.BodyFormatter;
+import com.nexuslink.protocol.http.rest.CurlImporter;
 import com.nexuslink.protocol.http.rest.ResponseAssertions;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
@@ -220,6 +221,49 @@ public final class RestClientView extends BorderPane {
 
     // ---- Method bar ----
 
+    /** Prompts for a curl command and populates the editor from {@link CurlImporter}. */
+    private void importCurl() {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Import cURL");
+        dialog.setHeaderText("Paste a curl command:");
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        TextArea area = new TextArea();
+        area.setPromptText("curl -X POST https://api.example.com/v1/things -H 'Content-Type: application/json' -d '{\"a\":1}'");
+        area.setPrefRowCount(8);
+        area.setPrefColumnCount(60);
+        area.setWrapText(true);
+        dialog.getDialogPane().setContent(area);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.setResultConverter(b -> b == ButtonType.OK ? area.getText() : null);
+        dialog.showAndWait().ifPresent(text -> {
+            if (text == null || text.isBlank()) return;
+            try {
+                applyImported(CurlImporter.fromCurl(text));
+                logger.accept("Imported cURL request");
+            } catch (IllegalArgumentException ex) {
+                logger.accept("cURL import failed: " + ex.getMessage());
+            }
+        });
+    }
+
+    /** Pushes a parsed {@link RestRequest} into the editor's visible fields. */
+    private void applyImported(RestRequest r) {
+        methodCombo.setValue(r.getMethod());
+        urlField.setText(r.getUrl());
+        paramRows.setAll(r.getQueryParams());
+        headerRows.setAll(r.getHeaders());
+        bodyTypeCombo.setValue(r.getBodyType());
+        bodyArea.setText(r.getBody());
+        // Setting the auth type fires the combo listener, which re-runs the auth-field visibility.
+        authTypeCombo.setValue(r.getAuthType());
+        authUser.setText(r.getAuthUsername());
+        authPass.setText(r.getAuthPassword());
+        authToken.setText(r.getAuthToken());
+    }
+
     private VBox buildMethodBar() {
         methodCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"));
@@ -251,11 +295,16 @@ public final class RestClientView extends BorderPane {
         saveBtn.setTooltip(new Tooltip("Save this request as a connection"));
         saveBtn.setOnAction(e -> saveCurrent());
 
+        Button curlBtn = new Button("Import cURL");
+        curlBtn.getStyleClass().add("btn-secondary");
+        curlBtn.setTooltip(new Tooltip("Paste a curl command to populate this request"));
+        curlBtn.setOnAction(e -> importCurl());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, saveBtn, helpBtn);
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 
