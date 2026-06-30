@@ -3,6 +3,7 @@ package com.nexuslink.ui.snmp;
 import com.nexuslink.protocol.snmp.OidRegistry;
 import com.nexuslink.protocol.snmp.SnmpService;
 import com.nexuslink.protocol.snmp.SnmpTrapReceiver;
+import com.nexuslink.protocol.snmp.SnmpV3Config;
 import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -86,9 +87,20 @@ public final class SnmpView extends BorderPane {
     private final TextField hostField = new TextField();
     private final TextField portField = new TextField("161");
     private final TextField communityField = new TextField("public");
+    private final Label communityLbl = label("Community:");
     private final ComboBox<String> versionCombo = new ComboBox<>();
     private final Button connectBtn = new Button("Open");
     private final Label statusLabel = new Label("Not open");
+
+    // ---- SNMPv3 / USM config (shown only for version "3"; v3 queries open their own session per call) ----
+    private final ComboBox<SnmpV3Config.SecurityLevel> v3Level = new ComboBox<>();
+    private final TextField v3User = new TextField();
+    private final ComboBox<SnmpV3Config.AuthProtocol> v3AuthProto = new ComboBox<>();
+    private final PasswordField v3AuthPass = new PasswordField();
+    private final ComboBox<SnmpV3Config.PrivProtocol> v3PrivProto = new ComboBox<>();
+    private final PasswordField v3PrivPass = new PasswordField();
+    private final TextField v3Context = new TextField();
+    private final VBox v3Panel = new VBox(6);
 
     private final TextField oidField = new TextField("1.3.6.1.2.1.1");
     private final Button getBtn = new Button("GET");
@@ -139,8 +151,9 @@ public final class SnmpView extends BorderPane {
         portField.setPrefWidth(70);
         communityField.getStyleClass().add("nl-field");
         communityField.setPrefWidth(130);
-        versionCombo.getItems().addAll("2c", "1");
+        versionCombo.getItems().addAll("2c", "1", "3");
         versionCombo.setValue("2c");
+        versionCombo.valueProperty().addListener((o, a, b) -> updateVersionUi());
 
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> toggleOpen());
@@ -150,14 +163,87 @@ public final class SnmpView extends BorderPane {
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("snmp"));
 
         HBox row = new HBox(8, label("Host:"), hostField, label("Port:"), portField,
-                label("Community:"), communityField, label("v:"), versionCombo, connectBtn, helpBtn);
+                communityLbl, communityField, label("v:"), versionCombo, connectBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10, 10, 4, 10));
+
+        buildV3Panel();
 
         statusLabel.getStyleClass().add("meta-label");
         HBox statusRow = new HBox(statusLabel);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
-        return new VBox(row, statusRow);
+        VBox bar = new VBox(row, v3Panel, statusRow);
+        updateVersionUi();
+        return bar;
+    }
+
+    /** Builds the collapsible USM parameter panel (security level, user, auth + priv, context). */
+    private void buildV3Panel() {
+        v3Level.getItems().addAll(SnmpV3Config.SecurityLevel.values());
+        v3Level.setValue(SnmpV3Config.SecurityLevel.AUTH_PRIV);
+        v3Level.valueProperty().addListener((o, a, b) -> updateVersionUi());
+        v3AuthProto.getItems().addAll(SnmpV3Config.AuthProtocol.values());
+        v3AuthProto.setValue(SnmpV3Config.AuthProtocol.SHA);
+        v3PrivProto.getItems().addAll(SnmpV3Config.PrivProtocol.values());
+        v3PrivProto.setValue(SnmpV3Config.PrivProtocol.AES_128);
+        for (TextField f : new TextField[]{v3User, v3AuthPass, v3PrivPass, v3Context}) {
+            f.getStyleClass().add("nl-field");
+        }
+        v3User.setPromptText("security name");
+        v3User.setPrefWidth(130);
+        v3AuthPass.setPromptText("auth passphrase (≥8)");
+        v3PrivPass.setPromptText("priv passphrase (≥8)");
+        v3Context.setPromptText("context (optional)");
+        v3Context.setPrefWidth(130);
+
+        HBox r1 = new HBox(8, label("Level:"), v3Level, label("User:"), v3User, label("Context:"), v3Context);
+        r1.setAlignment(Pos.CENTER_LEFT);
+        HBox r2 = new HBox(8, label("Auth:"), v3AuthProto, v3AuthPass, label("Priv:"), v3PrivProto, v3PrivPass);
+        r2.setAlignment(Pos.CENTER_LEFT);
+        v3Panel.getChildren().setAll(r1, r2);
+        v3Panel.setPadding(new Insets(0, 10, 4, 10));
+    }
+
+    /** Shows the community field for v1/v2c and the USM panel for v3, and disables Open for v3. */
+    private void updateVersionUi() {
+        boolean v3 = isV3();
+        setManaged(communityLbl, !v3);
+        setManaged(communityField, !v3);
+        setManaged(v3Panel, v3);
+        // Within the USM panel, auth fields only matter at authNoPriv+, priv fields only at authPriv.
+        SnmpV3Config.SecurityLevel lvl = v3Level.getValue();
+        boolean auth = lvl != null && lvl.requiresAuth();
+        boolean priv = lvl != null && lvl.requiresPriv();
+        for (Control c : new Control[]{v3AuthProto, v3AuthPass}) c.setDisable(!auth);
+        for (Control c : new Control[]{v3PrivProto, v3PrivPass}) c.setDisable(!priv);
+        // v3 queries open their own session per call, so the persistent Open button doesn't apply.
+        if (v3 && service.isOpen()) service.close();
+        connectBtn.setDisable(v3);
+        connectBtn.setText(v3 ? "(v3 per-call)" : (service.isOpen() ? "Close" : "Open"));
+    }
+
+    private static void setManaged(javafx.scene.Node n, boolean on) {
+        n.setVisible(on);
+        n.setManaged(on);
+    }
+
+    private boolean isV3() { return "3".equals(versionCombo.getValue()); }
+
+    private int parsePort() {
+        try { return Integer.parseInt(portField.getText().trim()); }
+        catch (NumberFormatException e) { return 161; }
+    }
+
+    private SnmpV3Config buildV3Config() {
+        String ctx = Env.resolve(v3Context.getText().trim());
+        return new SnmpV3Config(
+                Env.resolve(v3User.getText().trim()),
+                v3Level.getValue(),
+                v3AuthProto.getValue(),
+                Env.resolve(v3AuthPass.getText()),
+                v3PrivProto.getValue(),
+                Env.resolve(v3PrivPass.getText()),
+                ctx.isEmpty() ? null : ctx);
     }
 
     private VBox buildBody() {
@@ -241,14 +327,38 @@ public final class SnmpView extends BorderPane {
 
     private void doGet() {
         String oid = resolveOid(oidField.getText().trim());   // resolve ${VAR} + symbolic MIB name
+        if (isV3()) { runV3("GET " + oid, oid, (cfg, host, port) -> service.getV3(cfg, host, port, oid)); return; }
         if (!checkReady(oid)) return;
         runQuery("GET " + oid, () -> service.get(oid));
     }
 
     private void doWalk() {
         String oid = resolveOid(oidField.getText().trim());
+        if (isV3()) { runV3("WALK " + oid, oid, (cfg, host, port) -> service.walkV3(cfg, host, port, oid, 0)); return; }
         if (!checkReady(oid)) return;
         runQuery("WALK " + oid, () -> service.walk(oid, 0));
+    }
+
+    private interface V3Query { List<SnmpService.VarBind> run(SnmpV3Config cfg, String host, int port) throws Exception; }
+
+    /** Validates the USM config + host, then runs a v3 GET/WALK on the shared query plumbing. */
+    private void runV3(String label, String oid, V3Query q) {
+        if (!SnmpService.isValidOid(oid)) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Not a valid numeric OID: " + oid);
+            return;
+        }
+        SnmpV3Config cfg = buildV3Config();
+        List<String> errors = cfg.validate();
+        if (!errors.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText(errors.get(0));
+            return;
+        }
+        String host = Env.resolve(hostField.getText().trim());
+        if (host.isEmpty()) { statusLabel.setText("Enter an agent host"); return; }
+        int port = parsePort();
+        runQuery(label, () -> q.run(cfg, host, port));
     }
 
     /** Resolves {@code ${VAR}} then a symbolic MIB name (e.g. {@code sysDescr.0}) to a numeric OID. */

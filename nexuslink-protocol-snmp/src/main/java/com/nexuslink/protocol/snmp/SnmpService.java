@@ -125,9 +125,14 @@ public final class SnmpService implements AutoCloseable {
      * @throws IllegalArgumentException if {@code cfg} is null or fails {@link SnmpV3Config#validate()}
      */
     public List<VarBind> getV3(SnmpV3Config cfg, String host, String... oids) throws IOException {
+        return getV3(cfg, host, 161, oids);
+    }
+
+    /** As {@link #getV3(SnmpV3Config, String, String...)} but targeting an explicit UDP {@code port}. */
+    public List<VarBind> getV3(SnmpV3Config cfg, String host, int port, String... oids) throws IOException {
         requireValid(cfg);
         try (Snmp s = openV3Session(cfg)) {
-            UserTarget<UdpAddress> t = v3Target(cfg, host, 161);
+            UserTarget<UdpAddress> t = v3Target(cfg, host, port);
             ScopedPDU pdu = v3Pdu(cfg, PDU.GET);
             for (String oid : oids) pdu.add(new VariableBinding(new OID(oid)));
 
@@ -148,6 +153,11 @@ public final class SnmpService implements AutoCloseable {
      * @throws IllegalArgumentException if {@code cfg} is null or fails {@link SnmpV3Config#validate()}
      */
     public List<VarBind> walkV3(SnmpV3Config cfg, String host, String rootOid, int maxRows) throws IOException {
+        return walkV3(cfg, host, 161, rootOid, maxRows);
+    }
+
+    /** As {@link #walkV3(SnmpV3Config, String, String, int)} but targeting an explicit UDP {@code port}. */
+    public List<VarBind> walkV3(SnmpV3Config cfg, String host, int port, String rootOid, int maxRows) throws IOException {
         requireValid(cfg);
         OID root = new OID(rootOid);
         OID current = root;
@@ -155,7 +165,7 @@ public final class SnmpService implements AutoCloseable {
         List<VarBind> out = new ArrayList<>();
 
         try (Snmp s = openV3Session(cfg)) {
-            UserTarget<UdpAddress> t = v3Target(cfg, host, 161);
+            UserTarget<UdpAddress> t = v3Target(cfg, host, port);
             while (out.size() < cap) {
                 ScopedPDU pdu = v3Pdu(cfg, PDU.GETNEXT);
                 pdu.add(new VariableBinding(current));
