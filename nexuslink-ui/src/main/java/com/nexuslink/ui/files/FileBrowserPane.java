@@ -35,6 +35,7 @@ public final class FileBrowserPane extends VBox {
 
     private final FileSystem fs;
     private final TextField addressField = new TextField();
+    private final javafx.scene.layout.FlowPane breadcrumbBar = new javafx.scene.layout.FlowPane();
     private final TableView<FileItem> table = new TableView<>();
     private final Label statusLabel = new Label();
     private String currentPath = "/";
@@ -49,7 +50,10 @@ public final class FileBrowserPane extends VBox {
         getStyleClass().add("file-pane");
         setSpacing(6);
         setPadding(new Insets(6));
-        getChildren().addAll(buildHeader(title), buildAddressBar(), buildTable(), statusLabel);
+        breadcrumbBar.setHgap(2);
+        breadcrumbBar.setVgap(2);
+        breadcrumbBar.getStyleClass().add("breadcrumb-bar");
+        getChildren().addAll(buildHeader(title), buildAddressBar(), breadcrumbBar, buildTable(), statusLabel);
         VBox.setVgrow(table, Priority.ALWAYS);
         statusLabel.getStyleClass().add("meta-label");
     }
@@ -228,6 +232,7 @@ public final class FileBrowserPane extends VBox {
             Object[] r = (Object[]) result;
             currentPath = (String) r[0];
             addressField.setText(currentPath);
+            updateBreadcrumbs();
             @SuppressWarnings("unchecked")
             List<FileItem> items = (List<FileItem>) r[1];
             var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
@@ -242,6 +247,24 @@ public final class FileBrowserPane extends VBox {
 
     public void refresh() { navigateTo(currentPath); }
 
+    /** Rebuilds the clickable breadcrumb trail for {@link #currentPath}; each segment navigates to it. */
+    private void updateBreadcrumbs() {
+        breadcrumbBar.getChildren().clear();
+        var crumbs = PathCrumbs.of(currentPath, fs::parent);
+        for (int i = 0; i < crumbs.size(); i++) {
+            PathCrumbs.Crumb crumb = crumbs.get(i);
+            Hyperlink link = new Hyperlink(crumb.label());
+            link.getStyleClass().add("breadcrumb-link");
+            link.setOnAction(e -> navigateTo(crumb.path()));
+            breadcrumbBar.getChildren().add(link);
+            if (i < crumbs.size() - 1) {
+                Label sep = new Label("›");
+                sep.getStyleClass().add("meta-label");
+                breadcrumbBar.getChildren().add(sep);
+            }
+        }
+    }
+
     /**
      * Puts the pane into a "not connected" state: clears the current listing and shows {@code message}
      * as both the table placeholder and the status line. Used by the {@link DualPaneBrowser} so the
@@ -250,6 +273,7 @@ public final class FileBrowserPane extends VBox {
     public void showDisconnected(String message) {
         currentPath = "/";
         addressField.clear();
+        breadcrumbBar.getChildren().clear();
         table.setItems(FXCollections.observableArrayList());
         table.setPlaceholder(new Label(message));
         statusLabel.setText(message);
