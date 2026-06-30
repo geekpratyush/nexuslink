@@ -88,6 +88,10 @@ public final class RestClientView extends BorderPane {
     private ComboBox<com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding> hmacEncoding;
     private final TextField hmacKeyId = new TextField();
     private final PasswordField hmacSecret = new PasswordField();
+    private final TextField ntlmDomain = new TextField();
+    private final TextField ntlmUsername = new TextField();
+    private final PasswordField ntlmPassword = new PasswordField();
+    private final TextField ntlmWorkstation = new TextField();
     private final TextField hmacStringToSign = new TextField("{method}\\n{path}\\n{date}");
     private final TextField hmacHeaderName = new TextField("Authorization");
     private final TextField hmacHeaderValue = new TextField("HMAC {signature}");
@@ -559,6 +563,29 @@ public final class RestClientView extends BorderPane {
         grid.add(hmacHdrValLbl, 0, 23);   grid.add(hmacHeaderValue, 1, 23);
         grid.add(hmacHint, 1, 24);
 
+        Label ntlmDomainLbl = new Label("Domain:");
+        Label ntlmUserLbl = new Label("Username:");
+        Label ntlmPassLbl = new Label("Password:");
+        Label ntlmWsLbl = new Label("Workstation:");
+        for (Label l : new Label[]{ntlmDomainLbl, ntlmUserLbl, ntlmPassLbl, ntlmWsLbl}) l.getStyleClass().add("meta-label");
+        for (TextField f : new TextField[]{ntlmDomain, ntlmUsername, ntlmPassword, ntlmWorkstation}) {
+            f.getStyleClass().add("nl-field");
+            f.setPrefWidth(280);
+        }
+        ntlmDomain.setPromptText("Windows / AD domain");
+        ntlmWorkstation.setPromptText("optional client host name");
+        Label ntlmHint = new Label("NTLMv2 challenge-response. Note: java.net.http reuses a pooled "
+                + "connection for the challenge round-trip; servers that strictly pin auth to one TCP "
+                + "connection may not be supported.");
+        ntlmHint.getStyleClass().add("meta-label");
+        ntlmHint.setWrapText(true);
+        ntlmHint.setMaxWidth(380);
+        grid.add(ntlmDomainLbl, 0, 25);  grid.add(ntlmDomain, 1, 25);
+        grid.add(ntlmUserLbl, 0, 26);    grid.add(ntlmUsername, 1, 26);
+        grid.add(ntlmPassLbl, 0, 27);    grid.add(ntlmPassword, 1, 27);
+        grid.add(ntlmWsLbl, 0, 28);      grid.add(ntlmWorkstation, 1, 28);
+        grid.add(ntlmHint, 1, 29);
+
         Runnable refresh = () -> {
             RestRequest.AuthType t = authTypeCombo.getValue();
             boolean basic = t == RestRequest.AuthType.BASIC;
@@ -568,6 +595,7 @@ public final class RestClientView extends BorderPane {
             boolean oauth = t == RestRequest.AuthType.OAUTH2;
             boolean sigv4 = t == RestRequest.AuthType.AWS_SIGV4;
             boolean hmac = t == RestRequest.AuthType.HMAC;
+            boolean ntlm = t == RestRequest.AuthType.NTLM;
             // Basic + Digest both use the username/password fields.
             setRowVisible(basic || digest, userLbl, authUser, passLbl, authPass);
             setRowVisible(bearer, tokenLbl, authToken);
@@ -579,6 +607,8 @@ public final class RestClientView extends BorderPane {
             setRowVisible(hmac, hmacAlgoLbl, hmacAlgorithm, hmacKeyIdLbl, hmacKeyId, hmacSecretLbl, hmacSecret,
                     hmacEncLbl, hmacEncoding, hmacStsLbl, hmacStringToSign, hmacHdrNameLbl, hmacHeaderName,
                     hmacHdrValLbl, hmacHeaderValue, hmacHint);
+            setRowVisible(ntlm, ntlmDomainLbl, ntlmDomain, ntlmUserLbl, ntlmUsername,
+                    ntlmPassLbl, ntlmPassword, ntlmWsLbl, ntlmWorkstation, ntlmHint);
         };
         authTypeCombo.valueProperty().addListener((o, ov, nv) -> refresh.run());
         refresh.run();
@@ -812,6 +842,10 @@ public final class RestClientView extends BorderPane {
         request.setHmacStringToSign(hmacStringToSign.getText());
         request.setHmacHeaderName(hmacHeaderName.getText());
         request.setHmacHeaderValue(hmacHeaderValue.getText());
+        request.setNtlmDomain(ntlmDomain.getText());
+        request.setNtlmUsername(ntlmUsername.getText());
+        request.setNtlmPassword(ntlmPassword.getText());
+        request.setNtlmWorkstation(ntlmWorkstation.getText());
         request.setTlsTrustStorePath(tlsTrustStore.getText());
         request.setTlsTrustStorePassword(tlsTrustStorePw.getText());
         request.setTlsKeyStorePath(tlsKeyStore.getText());
@@ -898,6 +932,10 @@ public final class RestClientView extends BorderPane {
         root.put("hmacStringToSign", request.getHmacStringToSign());
         root.put("hmacHeaderName", request.getHmacHeaderName());
         root.put("hmacHeaderValue", request.getHmacHeaderValue());
+        // NTLM: persist non-secret fields only (password is re-entered, like other secrets)
+        root.put("ntlmDomain", request.getNtlmDomain());
+        root.put("ntlmUsername", request.getNtlmUsername());
+        root.put("ntlmWorkstation", request.getNtlmWorkstation());
         // TLS: persist store paths + trust-all (passwords are re-entered, like other secrets)
         root.put("tlsTrustStorePath", request.getTlsTrustStorePath());
         root.put("tlsKeyStorePath", request.getTlsKeyStorePath());
@@ -958,6 +996,9 @@ public final class RestClientView extends BorderPane {
             hmacStringToSign.setText(root.path("hmacStringToSign").asText("{method}\\n{path}\\n{date}"));
             hmacHeaderName.setText(root.path("hmacHeaderName").asText("Authorization"));
             hmacHeaderValue.setText(root.path("hmacHeaderValue").asText("HMAC {signature}"));
+            ntlmDomain.setText(root.path("ntlmDomain").asText(""));
+            ntlmUsername.setText(root.path("ntlmUsername").asText(""));
+            ntlmWorkstation.setText(root.path("ntlmWorkstation").asText(""));
             tlsTrustStore.setText(root.path("tlsTrustStorePath").asText(""));
             tlsKeyStore.setText(root.path("tlsKeyStorePath").asText(""));
             tlsTrustAll.setSelected(root.path("tlsTrustAll").asBoolean(false));

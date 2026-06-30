@@ -76,6 +76,24 @@ public final class RestExecutionService {
                     captureCookies(req, resp);
                 }
             }
+
+            // NTLM is a connection-bound challenge-response: the first request already carried the
+            // Type 1 (negotiate) token; on a 401 returning the Type 2 challenge we answer with a Type 3
+            // on the same client. (java.net.http pools connections per origin and normally reuses one
+            // for these back-to-back requests; a server that strictly pins auth to the exact TCP
+            // connection would need a dedicated single-connection transport.)
+            if (req.getAuthType() == RestRequest.AuthType.NTLM && resp.statusCode() == 401) {
+                String challenge = resp.headers().firstValue("WWW-Authenticate").orElse("");
+                if (challenge.regionMatches(true, 0, "NTLM ", 0, 5)) {
+                    NtlmAuthenticator.Type2 type2 =
+                            NtlmAuthenticator.parseType2(challenge.substring(5).trim());
+                    String type3 = NtlmAuthenticator.type3Message(req.getNtlmDomain(),
+                            req.getNtlmUsername(), req.getNtlmPassword(), type2, req.getNtlmWorkstation());
+                    resp = client.send(buildRequest(req, "NTLM " + type3),
+                            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    captureCookies(req, resp);
+                }
+            }
             long now = System.nanoTime();
 
             long totalMs = nanosToMs(now - start);
@@ -108,10 +126,11 @@ public final class RestExecutionService {
     }
 
     /**
-     * Builds the JDK {@link HttpRequest} including body, headers, and auth. {@code digestAuthHeader}
-     * is the precomputed Digest {@code Authorization} value for a retry (null on the first attempt).
+     * Builds the JDK {@link HttpRequest} including body, headers, and auth. {@code authorizationOverride}
+     * carries a precomputed {@code Authorization} value for a challenge-response retry — the Digest
+     * header, or the NTLM Type 3 token — and is null on the first attempt.
      */
-    private HttpRequest buildRequest(RestRequest req, String digestAuthHeader) {
+    private HttpRequest buildRequest(RestRequest req, String authorizationOverride) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(req.requestUri()))
                 .timeout(Duration.ofMillis(req.getReadTimeoutMs()));
@@ -178,7 +197,15 @@ public final class RestExecutionService {
             }
             case DIGEST -> {
                 // First attempt sends no auth (to obtain the challenge); the retry passes the header.
-                if (digestAuthHeader != null) builder.header("Authorization", digestAuthHeader);
+                if (authorizationOverride != null) builder.header("Authorization", authorizationOverride);
+            }
+            case NTLM -> {
+                // First request carries the Type 1 (negotiate) token; the retry carries the Type 3.
+                String header = authorizationOverride != null
+                        ? authorizationOverride
+                        : "NTLM " + NtlmAuthenticator.type1Message(
+                                req.getNtlmDomain(), req.getNtlmWorkstation());
+                builder.header("Authorization", header);
             }
             case HMAC -> {
                 var headers = HmacAuthenticator.sign(req.getHmacAlgorithm(), req.getHmacSecret(),

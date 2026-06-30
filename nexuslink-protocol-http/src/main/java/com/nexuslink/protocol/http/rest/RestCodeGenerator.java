@@ -73,6 +73,7 @@ public final class RestCodeGenerator {
                     "Bearer <access_token from " + r.getOauthTokenUrl() + ">");
             case HMAC -> h.put(r.getHmacHeaderName().isBlank() ? "Authorization" : r.getHmacHeaderName(),
                     "<" + r.getHmacAlgorithm() + " of \"" + r.getHmacStringToSign() + "\">");
+            case NTLM -> h.put("Authorization", "NTLM <negotiate token — connection-bound handshake>");
             case NONE -> { /* none */ }
         }
         return h;

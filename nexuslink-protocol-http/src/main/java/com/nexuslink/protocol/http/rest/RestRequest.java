@@ -22,7 +22,7 @@ public final class RestRequest {
     private String body = "";
 
     // Auth
-    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST, HMAC }
+    public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST, HMAC, NTLM }
     /** Where an API key is sent. */
     public enum ApiKeyLocation { HEADER, QUERY }
     private AuthType authType = AuthType.NONE;
@@ -51,6 +51,11 @@ public final class RestRequest {
     private String hmacStringToSign = "{method}\\n{path}\\n{date}";
     private String hmacHeaderName = "Authorization";
     private String hmacHeaderValue = "HMAC {signature}";
+    // NTLM / Windows-integrated auth (NTLMv2 challenge-response; see NtlmAuthenticator)
+    private String ntlmDomain = "";
+    private String ntlmUsername = "";
+    private String ntlmPassword = "";
+    private String ntlmWorkstation = "";
 
     // TLS / mTLS (trust store verifies the server; key store presents a client cert for mutual TLS)
     private String tlsTrustStorePath = "";
@@ -153,6 +158,18 @@ public final class RestRequest {
     public String getHmacHeaderValue() { return hmacHeaderValue; }
     public void setHmacHeaderValue(String v) { this.hmacHeaderValue = v; }
 
+    public String getNtlmDomain() { return ntlmDomain; }
+    public void setNtlmDomain(String v) { this.ntlmDomain = v; }
+
+    public String getNtlmUsername() { return ntlmUsername; }
+    public void setNtlmUsername(String v) { this.ntlmUsername = v; }
+
+    public String getNtlmPassword() { return ntlmPassword; }
+    public void setNtlmPassword(String v) { this.ntlmPassword = v; }
+
+    public String getNtlmWorkstation() { return ntlmWorkstation; }
+    public void setNtlmWorkstation(String v) { this.ntlmWorkstation = v; }
+
     public String getTlsTrustStorePath() { return tlsTrustStorePath; }
     public void setTlsTrustStorePath(String v) { this.tlsTrustStorePath = v; }
 
@@ -232,6 +249,10 @@ public final class RestRequest {
         r.hmacStringToSign = fn.apply(hmacStringToSign);
         r.hmacHeaderName = fn.apply(hmacHeaderName);
         r.hmacHeaderValue = fn.apply(hmacHeaderValue);
+        r.ntlmDomain = fn.apply(ntlmDomain);
+        r.ntlmUsername = fn.apply(ntlmUsername);
+        r.ntlmPassword = fn.apply(ntlmPassword);
+        r.ntlmWorkstation = fn.apply(ntlmWorkstation);
         r.tlsTrustStorePath = fn.apply(tlsTrustStorePath);
         r.tlsTrustStorePassword = fn.apply(tlsTrustStorePassword);
         r.tlsKeyStorePath = fn.apply(tlsKeyStorePath);
