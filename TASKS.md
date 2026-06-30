@@ -222,8 +222,12 @@
     + **HMAC** (`HmacAuthenticator`: generic shared-secret signer over a templated canonical
     string — `{method}/{path}/{query}/{url}/{host}/{date}/{body}/{body-sha256-hex|base64}/{keyId}`
     placeholders + `\n` escape; HmacSHA256/SHA1/SHA512, hex/base64; emits `Date` when signed;
-    applied in `RestExecutionService`, full Auth-tab UI; **5/5 tests** incl. the RFC 4231 §4.3 KAT);
-    _NTLM / Custom Script TODO_
+    applied in `RestExecutionService`, full Auth-tab UI; **5/5 tests** incl. the RFC 4231 §4.3 KAT)
+    + **NTLM** core (`NtlmAuthenticator`: NTLMv2/MS-NLMP Type 1/2/3 message generation, hand-rolled
+    RFC 1320 MD4 — no new deps — + HMAC-MD5; vectors match MS-NLMP §4.2.4 NTOWFv2/NTProofStr & RFC 1320
+    MD4; injectable timestamp/client-challenge for determinism; **6/6 tests**. _UI/RestExecutionService
+    wiring TODO_);
+    _Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
   - [ ] Form-Data table with file picker per row
@@ -284,7 +288,11 @@
 
 ### 4.5 Message Browser
 - [ ] Poll-based browser (no consumer group side effects)
-- [ ] Filters: offset range, timestamp range, key contains, value contains, header filter
+- [x] Filters: offset range, timestamp range, key contains, value contains, header filter — pure
+      `MessageFilter` (protocol-kafka, immutable fluent builder over a Kafka-type-free `Record` view;
+      AND-combined offset/timestamp/partition + key/value substring-or-regex w/ case flag + header
+      presence/equals/contains; eager regex compile; 11 tests). Wired into the consume tab as a live
+      filter bar (key/value/partition + Regex/Case toggles) over a `FilteredList`, "showing n of m"
 - [x] Export selected messages as JSON/CSV — consume panel upgraded to a multi-select `TableView`
       (time/partition/offset/key/value, bounded at 10k rows); **Export JSON/CSV** writes selected rows
       (or all when none selected) via FileChooser. `KafkaMessageExporter` (protocol-kafka, hand-rolled
@@ -410,15 +418,17 @@
 > apply to **every** file-style connector (SFTP, FTP/FTPS, and later S3/Azure/GCS object storage).
 
 **Layout / always-visible panes**
-- [ ] **Show the LOCAL pane immediately** — before/without a remote connection (WinSCP-style); the remote
-      pane shows a "not connected" state and populates on connect. _(Today `SftpView.showBrowser()` only
-      runs on a successful connect, so with no live server you see a placeholder and **no panels** — the
-      reported gap.)_ Same fix for `FtpView`.
-- [ ] Keep the connect bar **and** the dual pane visible together (don't swap the whole body for a placeholder)
+- [x] **Show the LOCAL pane immediately** — the commander is now built at view construction (the remote
+      `FileSystem` adapter wraps the long-lived service), so the local pane is browsable straight away and
+      the remote pane reads "not connected" until Connect succeeds. `DualPaneBrowser.startLocal()/
+      connectRemote()/disconnectRemote()` + `FileBrowserPane.showDisconnected()`; transfers guarded while
+      disconnected. Local navigation now survives connect/disconnect (browser no longer rebuilt). SFTP+FTP.
+- [x] Keep the connect bar **and** the dual pane visible together (the body is no longer swapped for a placeholder)
 
 **Per-pane navigation**
 - [ ] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history
-- [ ] Column sort (name/size/modified/permissions) with indicators; remember per-pane sort
+- [x] Default listing order: ".." first, directories before files, case-insensitive name (pure `FileOrder`
+      comparator, 5 tests) — _interactive click-to-sort columns still TODO_
 - [ ] Hidden-files toggle; in-pane quick filter/search box
 - [ ] Synchronized browsing — mirror navigation across both panes by relative path
 - [ ] Per-pane status line: item count, selected size, free space
@@ -569,6 +579,10 @@
       `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
 - [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
 - [x] `SnmpV3Config` — USM model (security level + auth MD5/SHA/SHA-256 + priv DES/AES-128, validation); 10 tests
+- [-] **USM auth crypto** — **done (core):** `UsmSecurity` (pure, JDK-only) implements RFC 3414 §A.2
+      password-to-key (1 MB-stream KDF, MD5 + SHA-1), §2.6 engine-ID key localization, and HMAC-96 auth
+      parameters; verified against the RFC 3414 §A.3 published vectors (10 tests). **TODO:** wire into
+      `SnmpService` for real v3/USM auth+priv **on the wire** (+ AES/DES privacy)
 - [x] **Trap receiver** — `SnmpTrapReceiver` listens on UDP 162 (configurable/ephemeral) for v1/v2c
       traps, decodes trap OID (RFC 3584 for v1) + varbinds with `OidRegistry` name resolution; `SnmpView`
       **Traps** tab with start/stop, community filter, live table (7 tests incl. loopback round-trip)
