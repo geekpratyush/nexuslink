@@ -223,10 +223,15 @@
     string — `{method}/{path}/{query}/{url}/{host}/{date}/{body}/{body-sha256-hex|base64}/{keyId}`
     placeholders + `\n` escape; HmacSHA256/SHA1/SHA512, hex/base64; emits `Date` when signed;
     applied in `RestExecutionService`, full Auth-tab UI; **5/5 tests** incl. the RFC 4231 §4.3 KAT)
-    + **NTLM** core (`NtlmAuthenticator`: NTLMv2/MS-NLMP Type 1/2/3 message generation, hand-rolled
+    + **NTLM** (`NtlmAuthenticator`: NTLMv2/MS-NLMP Type 1/2/3 message generation, hand-rolled
     RFC 1320 MD4 — no new deps — + HMAC-MD5; vectors match MS-NLMP §4.2.4 NTOWFv2/NTProofStr & RFC 1320
-    MD4; injectable timestamp/client-challenge for determinism; **6/6 tests**. _UI/RestExecutionService
-    wiring TODO_);
+    MD4; injectable timestamp/client-challenge for determinism; **6 tests**. **Now wired end-to-end:**
+    NTLM `AuthType` + domain/username/password/workstation on `RestRequest` (interpolated); the
+    connection-bound 401→Type2→Type3 handshake in `RestExecutionService` (with a documented java.net.http
+    connection-pooling caveat, verified by an offline loopback-server handshake test); full Auth-tab UI +
+    code-gen placeholder)
+    + **cURL import** (`CurlImporter.fromCurl` — parses method/URL/-H/-d(×N)/-u basic/-X and ignores
+    benign flags into a `RestRequest`, inverse of the code generator; **14 tests**);
     _Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
@@ -303,8 +308,10 @@
       nested `TopicPartitionKey`) combines committed + end offsets → sorted `LagRow`s with `max(0,end−committed)`
       clamp + `totalLag` (9 tests); `KafkaService.listConsumerGroups()`/`consumerGroupLag(group)` fetch
       committed (`listConsumerGroupOffsets`) + end (`listOffsets` latest) via the existing AdminClient.
-      **TODO:** 5s polling + Caffeine cache. _(live methods need a broker for E2E.)_
-- [x] Lag table data: group, topic, partition, committed offset, end offset, lag — produced by `ConsumerLagCalculator` _(UI table wiring TODO)_
+      Now surfaced in a **Consumer Lag** tab: editable group combo + Load groups, Refresh into a
+      Topic/Partition/Committed/End/Lag table (numeric right-aligned), "Total lag", and an Auto-refresh-5s
+      `Timeline` (overlap-guarded, stopped on toggle-off/empty/failure). _(live methods need a broker for E2E.)_
+- [x] Lag table data: group, topic, partition, committed offset, end offset, lag — produced by `ConsumerLagCalculator`, shown in the Consumer Lag tab
 - [ ] Lag chart: real-time line chart per partition over time
 - [ ] Offset reset dialog: earliest/latest/specific timestamp/specific offset
 
@@ -579,10 +586,14 @@
       `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
 - [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
 - [x] `SnmpV3Config` — USM model (security level + auth MD5/SHA/SHA-256 + priv DES/AES-128, validation); 10 tests
-- [-] **USM auth crypto** — **done (core):** `UsmSecurity` (pure, JDK-only) implements RFC 3414 §A.2
+- [x] **USM auth crypto (reference)** — `UsmSecurity` (pure, JDK-only) implements RFC 3414 §A.2
       password-to-key (1 MB-stream KDF, MD5 + SHA-1), §2.6 engine-ID key localization, and HMAC-96 auth
-      parameters; verified against the RFC 3414 §A.3 published vectors (10 tests). **TODO:** wire into
-      `SnmpService` for real v3/USM auth+priv **on the wire** (+ AES/DES privacy)
+      parameters; verified against the RFC 3414 §A.3 published vectors (10 tests).
+- [x] **SNMPv3/USM on the wire** — `SnmpService.getV3(cfg,host,oids…)`/`walkV3(cfg,host,root,maxRows)` open a
+      v3 session via SNMP4J's native USM (local engine ID, `UsmUser`, `UserTarget`, `ScopedPDU`), reusing the
+      shared varbind `decode`. Pure `SnmpV3Usm` mapper (auth MD5/SHA/SHA-256 → OID, priv DES/AES-128 → OID,
+      security level → `SecurityLevel`, `toUsmUser`) is the offline-tested seam (12 tests; mapper + construction
+      smoke). Existing v1/v2c `get`/`walk` untouched. _(SnmpView v3 tab + live E2E against a v3 agent still TODO)_
 - [x] **Trap receiver** — `SnmpTrapReceiver` listens on UDP 162 (configurable/ephemeral) for v1/v2c
       traps, decodes trap OID (RFC 3584 for v1) + varbinds with `OidRegistry` name resolution; `SnmpView`
       **Traps** tab with start/stop, community filter, live table (7 tests incl. loopback round-trip)
