@@ -1,6 +1,7 @@
 package com.nexuslink.ui.kafka;
 
 import com.nexuslink.plugin.ResourceNode;
+import com.nexuslink.protocol.kafka.ConsumerLagCalculator;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaService;
@@ -8,6 +9,9 @@ import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -20,6 +24,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
+import javafx.util.Duration;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -79,6 +84,17 @@ public final class KafkaView extends BorderPane {
     private final CheckBox regexFilter = new CheckBox("Regex");
     private final CheckBox caseSensitiveFilter = new CheckBox("Case");
     private final Label filterStatus = new Label();
+
+    // Consumer-group lag monitor: pick/type a group, refresh the per-partition lag table, optionally poll.
+    private final ComboBox<String> lagGroupCombo = new ComboBox<>();
+    private final ObservableList<ConsumerLagCalculator.LagRow> lagRows = FXCollections.observableArrayList();
+    private final TableView<ConsumerLagCalculator.LagRow> lagTable = new TableView<>(lagRows);
+    private final CheckBox lagAutoRefresh = new CheckBox("Auto-refresh 5s");
+    private final Label lagTotal = new Label("Total lag: 0");
+    private final Label lagStatus = new Label();
+    private Timeline lagTimeline;
+    /** Guards against overlapping refreshes when a poll fires before the previous one finishes. */
+    private boolean lagRefreshing = false;
 
     /** Cap on retained consumed messages so a long-running stream stays bounded. */
     private static final int MAX_MESSAGES = 10_000;
@@ -178,7 +194,8 @@ public final class KafkaView extends BorderPane {
         TabPane tabs = new TabPane();
         tabs.getStyleClass().add("editor-tabs");
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        tabs.getTabs().addAll(new Tab("Produce", buildProduce()), new Tab("Consume", buildConsume()));
+        tabs.getTabs().addAll(new Tab("Produce", buildProduce()), new Tab("Consume", buildConsume()),
+                new Tab("Consumer Lag", buildLag()));
 
         SplitPane sp = new SplitPane(explorer, tabs);
         sp.setDividerPositions(0.28);
@@ -242,6 +259,168 @@ public final class KafkaView extends BorderPane {
         box.setPadding(new Insets(8));
         VBox.setVgrow(messageTable, Priority.ALWAYS);
         return box;
+    }
+
+    /**
+     * Consumer-group lag monitor — load the broker's consumer groups, pick (or type) one, and
+     * refresh a per-partition committed/end-offset/lag table. An optional 5-second auto-refresh
+     * polls without stacking overlapping calls.
+     */
+    private VBox buildLag() {
+        lagGroupCombo.setEditable(true);
+        lagGroupCombo.getStyleClass().add("nl-field");
+        lagGroupCombo.setPromptText("consumer group");
+        lagGroupCombo.setPrefWidth(220);
+
+        Button loadGroups = new Button("Load groups");
+        loadGroups.getStyleClass().add("btn-secondary");
+        loadGroups.setOnAction(e -> loadGroups());
+
+        Button refresh = new Button("Refresh");
+        refresh.getStyleClass().add("btn-primary");
+        refresh.setOnAction(e -> refreshLag());
+
+        lagAutoRefresh.setOnAction(e -> toggleLagAutoRefresh());
+        lagTotal.getStyleClass().add("meta-label");
+        lagStatus.getStyleClass().add("meta-label");
+
+        buildLagTable();
+
+        HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh,
+                lagAutoRefresh, lagTotal, lagStatus);
+        top.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(8, top, lagTable);
+        box.setPadding(new Insets(8));
+        VBox.setVgrow(lagTable, Priority.ALWAYS);
+        return box;
+    }
+
+    private void buildLagTable() {
+        lagTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        lagTable.setPlaceholder(new Label("Pick a consumer group and Refresh to see per-partition lag."));
+
+        TableColumn<ConsumerLagCalculator.LagRow, String> topic = new TableColumn<>("Topic");
+        topic.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().topic()));
+
+        TableColumn<ConsumerLagCalculator.LagRow, Number> part = new TableColumn<>("Partition");
+        part.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().partition()));
+        part.setMaxWidth(110);
+        rightAlign(part);
+
+        TableColumn<ConsumerLagCalculator.LagRow, Number> committed = new TableColumn<>("Committed");
+        committed.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().committed()));
+        rightAlign(committed);
+
+        TableColumn<ConsumerLagCalculator.LagRow, Number> end = new TableColumn<>("End offset");
+        end.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().endOffset()));
+        rightAlign(end);
+
+        TableColumn<ConsumerLagCalculator.LagRow, Number> lag = new TableColumn<>("Lag");
+        lag.setCellValueFactory(c -> new SimpleObjectProperty<>(c.getValue().lag()));
+        rightAlign(lag);
+
+        lagTable.getColumns().addAll(List.of(topic, part, committed, end, lag));
+    }
+
+    /** Right-aligns a numeric column's cell content. */
+    private static <S> void rightAlign(TableColumn<S, Number> col) {
+        col.setStyle("-fx-alignment: CENTER-RIGHT;");
+    }
+
+    /** Loads the broker's consumer groups into the combo (off the FX thread). */
+    private void loadGroups() {
+        lagStatus.getStyleClass().setAll("meta-label");
+        lagStatus.setText("Loading groups…");
+        Task<List<String>> task = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                return service.listConsumerGroups();
+            }
+        };
+        task.setOnSucceeded(e -> {
+            List<String> groups = task.getValue();
+            String current = lagGroupCombo.getEditor().getText();
+            lagGroupCombo.getItems().setAll(groups);
+            if (current != null && !current.isBlank()) lagGroupCombo.getEditor().setText(current);
+            lagStatus.setText(groups.size() + " group(s)");
+            logger.accept("Kafka lag: loaded " + groups.size() + " consumer group(s)");
+        });
+        task.setOnFailed(e -> {
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("✖ " + task.getException().getMessage());
+            logger.accept("Kafka lag: load groups FAILED: " + task.getException().getMessage());
+        });
+        runBg(task, "kafka-lag-groups");
+    }
+
+    /** Reads the currently selected/typed group name from the editable combo. */
+    private String currentLagGroup() {
+        String typed = lagGroupCombo.getEditor().getText();
+        if (typed != null && !typed.isBlank()) return Env.resolve(typed.trim());
+        String value = lagGroupCombo.getValue();
+        return value == null ? "" : Env.resolve(value.trim());
+    }
+
+    /** Refreshes the lag table for the current group (off the FX thread; skips if one is in flight). */
+    private void refreshLag() {
+        String group = currentLagGroup();
+        if (group.isEmpty()) {
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("Enter a consumer group");
+            if (lagAutoRefresh.isSelected()) { lagAutoRefresh.setSelected(false); stopLagTimeline(); }
+            return;
+        }
+        if (lagRefreshing) return;   // a previous refresh is still running — don't stack
+        lagRefreshing = true;
+        lagStatus.getStyleClass().setAll("meta-label");
+        lagStatus.setText("Refreshing…");
+        Task<List<ConsumerLagCalculator.LagRow>> task = new Task<>() {
+            @Override protected List<ConsumerLagCalculator.LagRow> call() throws Exception {
+                return service.consumerGroupLag(group);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            lagRefreshing = false;
+            List<ConsumerLagCalculator.LagRow> rows = task.getValue();
+            lagRows.setAll(rows);
+            lagTotal.setText("Total lag: " + ConsumerLagCalculator.totalLag(rows));
+            lagStatus.setText(rows.size() + " partition(s) · " + LocalTime.now().format(TIME));
+        });
+        task.setOnFailed(e -> {
+            lagRefreshing = false;
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("✖ " + task.getException().getMessage());
+            logger.accept("Kafka lag: refresh FAILED: " + task.getException().getMessage());
+            // Stop polling on failure so we don't spam a broken connection every 5s.
+            if (lagAutoRefresh.isSelected()) { lagAutoRefresh.setSelected(false); stopLagTimeline(); }
+        });
+        runBg(task, "kafka-lag-refresh");
+    }
+
+    /** Starts or stops the 5-second auto-refresh poll based on the checkbox state. */
+    private void toggleLagAutoRefresh() {
+        if (lagAutoRefresh.isSelected()) {
+            if (currentLagGroup().isEmpty()) {
+                lagAutoRefresh.setSelected(false);
+                lagStatus.getStyleClass().setAll("status-err");
+                lagStatus.setText("Enter a consumer group");
+                return;
+            }
+            stopLagTimeline();
+            lagTimeline = new Timeline(new KeyFrame(Duration.seconds(5), e -> refreshLag()));
+            lagTimeline.setCycleCount(Animation.INDEFINITE);
+            lagTimeline.play();
+            refreshLag();   // immediate first refresh, then every 5s
+        } else {
+            stopLagTimeline();
+        }
+    }
+
+    /** Stops and discards the poll timer so it doesn't leak or keep firing. */
+    private void stopLagTimeline() {
+        if (lagTimeline != null) {
+            lagTimeline.stop();
+            lagTimeline = null;
+        }
     }
 
     /** A live filter bar over the consumed-message table, backed by {@link MessageFilter}. */
