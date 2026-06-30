@@ -4,6 +4,7 @@ import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaService;
+import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
@@ -12,6 +13,7 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -66,8 +68,17 @@ public final class KafkaView extends BorderPane {
     private final ToggleButton consumeToggle = new ToggleButton("Start consuming");
     private final TextArea consumeLog = new TextArea();
     private final ObservableList<KafkaService.KafkaMessage> consumedMessages = FXCollections.observableArrayList();
-    private final TableView<KafkaService.KafkaMessage> messageTable = new TableView<>(consumedMessages);
+    private final FilteredList<KafkaService.KafkaMessage> filteredMessages = new FilteredList<>(consumedMessages);
+    private final TableView<KafkaService.KafkaMessage> messageTable = new TableView<>(filteredMessages);
     private final ComboBox<PayloadFormatter.Format> formatCombo = new ComboBox<>();
+
+    // Live message-browser filter (AND-combined key/value/partition predicates over the consumed list).
+    private final TextField keyFilter = new TextField();
+    private final TextField valueFilter = new TextField();
+    private final TextField partitionFilter = new TextField();
+    private final CheckBox regexFilter = new CheckBox("Regex");
+    private final CheckBox caseSensitiveFilter = new CheckBox("Case");
+    private final Label filterStatus = new Label();
 
     /** Cap on retained consumed messages so a long-running stream stays bounded. */
     private static final int MAX_MESSAGES = 10_000;
@@ -227,10 +238,84 @@ public final class KafkaView extends BorderPane {
         HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup,
                 fromBeginning, consumeToggle, label("Format:"), formatCombo, exportJson, exportCsv, clear);
         top.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, top, messageTable, consumeLog);
+        VBox box = new VBox(8, top, buildFilterBar(), messageTable, consumeLog);
         box.setPadding(new Insets(8));
         VBox.setVgrow(messageTable, Priority.ALWAYS);
         return box;
+    }
+
+    /** A live filter bar over the consumed-message table, backed by {@link MessageFilter}. */
+    private HBox buildFilterBar() {
+        keyFilter.getStyleClass().add("nl-field");
+        keyFilter.setPromptText("key contains…");
+        keyFilter.setPrefWidth(150);
+        valueFilter.getStyleClass().add("nl-field");
+        valueFilter.setPromptText("value contains…");
+        valueFilter.setPrefWidth(180);
+        partitionFilter.getStyleClass().add("nl-field");
+        partitionFilter.setPromptText("part.");
+        partitionFilter.setPrefWidth(60);
+        filterStatus.getStyleClass().add("meta-label");
+
+        // Re-apply whenever any control changes so the table filters as you type.
+        keyFilter.textProperty().addListener((o, a, b) -> applyFilter());
+        valueFilter.textProperty().addListener((o, a, b) -> applyFilter());
+        partitionFilter.textProperty().addListener((o, a, b) -> applyFilter());
+        regexFilter.selectedProperty().addListener((o, a, b) -> applyFilter());
+        caseSensitiveFilter.selectedProperty().addListener((o, a, b) -> applyFilter());
+
+        Button clearFilter = new Button("Clear filter");
+        clearFilter.getStyleClass().add("btn-secondary");
+        clearFilter.setOnAction(e -> {
+            keyFilter.clear();
+            valueFilter.clear();
+            partitionFilter.clear();
+            regexFilter.setSelected(false);
+            caseSensitiveFilter.setSelected(false);
+        });
+
+        HBox bar = new HBox(8, label("Filter — Key:"), keyFilter, label("Value:"), valueFilter,
+                label("Partition:"), partitionFilter, regexFilter, caseSensitiveFilter, clearFilter, filterStatus);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        return bar;
+    }
+
+    /**
+     * Rebuilds the {@link MessageFilter} from the filter bar and applies it to the table's
+     * {@link FilteredList}. An empty bar shows everything; an invalid regex is reported inline
+     * (and leaves the previous predicate in place rather than throwing).
+     */
+    private void applyFilter() {
+        String key = keyFilter.getText() == null ? "" : keyFilter.getText().trim();
+        String value = valueFilter.getText() == null ? "" : valueFilter.getText().trim();
+        String partText = partitionFilter.getText() == null ? "" : partitionFilter.getText().trim();
+        boolean regex = regexFilter.isSelected();
+        boolean cs = caseSensitiveFilter.isSelected();
+
+        MessageFilter.Builder b = MessageFilter.builder();
+        try {
+            if (!key.isEmpty()) {
+                if (regex) b.keyMatches(key, cs); else b.keyContains(key, cs);
+            }
+            if (!value.isEmpty()) {
+                if (regex) b.valueMatches(value, cs); else b.valueContains(value, cs);
+            }
+            if (!partText.isEmpty()) b.partition(Integer.parseInt(partText));
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            filterStatus.setText("✖ invalid regex");
+            return;
+        } catch (NumberFormatException ex) {
+            filterStatus.setText("✖ partition must be a number");
+            return;
+        }
+
+        MessageFilter filter = b.build();
+        filteredMessages.setPredicate(m -> filter.matches(
+                new MessageFilter.Record(m.partition(), m.offset(), m.timestamp(), m.key(), m.value(), Map.of())));
+        boolean active = !key.isEmpty() || !value.isEmpty() || !partText.isEmpty();
+        filterStatus.setText(active
+                ? "showing " + filteredMessages.size() + " of " + consumedMessages.size()
+                : "");
     }
 
     private void buildMessageTable() {
