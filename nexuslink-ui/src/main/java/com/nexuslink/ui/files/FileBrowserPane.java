@@ -230,10 +230,11 @@ public final class FileBrowserPane extends VBox {
             addressField.setText(currentPath);
             @SuppressWarnings("unchecked")
             List<FileItem> items = (List<FileItem>) r[1];
-            var rows = FXCollections.<FileItem>observableArrayList();
+            var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
             rows.add(FileItem.up(fs.parent(currentPath)));
             rows.addAll(items);
-            table.setItems(rows);
+            // Show ".." first, then directories before files, each name-sorted (commander convention).
+            table.setItems(FXCollections.observableArrayList(FileOrder.sorted(rows)));
             statusLabel.setText(items.size() + " item(s)");
             onChanged.run();
         });
