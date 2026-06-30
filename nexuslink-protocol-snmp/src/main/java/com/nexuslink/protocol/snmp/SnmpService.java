@@ -2,9 +2,15 @@ package com.nexuslink.protocol.snmp;
 
 import org.snmp4j.CommunityTarget;
 import org.snmp4j.PDU;
+import org.snmp4j.ScopedPDU;
 import org.snmp4j.Snmp;
+import org.snmp4j.UserTarget;
 import org.snmp4j.event.ResponseEvent;
+import org.snmp4j.mp.MPv3;
 import org.snmp4j.mp.SnmpConstants;
+import org.snmp4j.security.SecurityModels;
+import org.snmp4j.security.SecurityProtocols;
+import org.snmp4j.security.USM;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.OID;
 import org.snmp4j.smi.Null;
@@ -19,13 +25,14 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * SNMP browser client over SNMP4J — community-based v1 / v2c GET and WALK (GETNEXT) over UDP.
- * Returns decoded variable bindings (OID, SMI type, value) for display. Blocking I/O; the UI drives
- * it on a background task.
+ * SNMP browser client over SNMP4J — community-based v1 / v2c GET and WALK (GETNEXT) over UDP, plus
+ * SNMPv3 / USM GET and WALK ({@link #getV3}, {@link #walkV3}). Returns decoded variable bindings
+ * (OID, SMI type, value) for display. Blocking I/O; the UI drives it on a background task.
  *
  * <p>The pure helpers — {@link #versionOf}, {@link #normalizeAddress}, {@link #isValidOid} and
- * {@link #toVarBind} — are unit-tested offline; live GET/WALK needs a reachable SNMP agent.
- * (SNMPv3 / USM is a roadmap item.)
+ * {@link #toVarBind} — are unit-tested offline; live GET/WALK needs a reachable SNMP agent. The v3
+ * USM mapping lives in {@link SnmpV3Usm} (config → SNMP4J auth/priv OIDs, security level, UsmUser)
+ * and is unit-tested offline.
  */
 public final class SnmpService implements AutoCloseable {
 
@@ -71,9 +78,7 @@ public final class SnmpService implements AutoCloseable {
         if (response.getErrorStatus() != PDU.noError) {
             throw new IOException("SNMP error: " + response.getErrorStatusText());
         }
-        List<VarBind> out = new ArrayList<>();
-        for (VariableBinding vb : response.getVariableBindings()) out.add(toVarBind(vb));
-        return out;
+        return decode(response.getVariableBindings());
     }
 
     /**
@@ -109,6 +114,117 @@ public final class SnmpService implements AutoCloseable {
         return out;
     }
 
+    // ---- SNMPv3 / USM (additive) ----
+
+    /**
+     * Performs an SNMPv3 GET for one or more OIDs against {@code host} (UDP port 161) using the USM
+     * security parameters in {@code cfg}. A fresh v3 session — with a local engine ID, the configured
+     * {@link org.snmp4j.security.UsmUser} and a {@link UserTarget} — is opened for the call and closed
+     * on return. The response decoding is shared with the v1 / v2c {@link #get} path.
+     *
+     * @throws IllegalArgumentException if {@code cfg} is null or fails {@link SnmpV3Config#validate()}
+     */
+    public List<VarBind> getV3(SnmpV3Config cfg, String host, String... oids) throws IOException {
+        requireValid(cfg);
+        try (Snmp s = openV3Session(cfg)) {
+            UserTarget<UdpAddress> t = v3Target(cfg, host, 161);
+            ScopedPDU pdu = v3Pdu(cfg, PDU.GET);
+            for (String oid : oids) pdu.add(new VariableBinding(new OID(oid)));
+
+            ResponseEvent<UdpAddress> event = s.get(pdu, t);
+            PDU response = event == null ? null : event.getResponse();
+            if (response == null) throw new IOException("No response from agent (timeout) for " + String.join(", ", oids));
+            if (response.getErrorStatus() != PDU.noError) {
+                throw new IOException("SNMP error: " + response.getErrorStatusText());
+            }
+            return decode(response.getVariableBindings());
+        }
+    }
+
+    /**
+     * Walks the subtree under {@code rootOid} over SNMPv3, with the same GETNEXT loop and stop
+     * conditions as {@link #walk}, using the USM security parameters in {@code cfg}.
+     *
+     * @throws IllegalArgumentException if {@code cfg} is null or fails {@link SnmpV3Config#validate()}
+     */
+    public List<VarBind> walkV3(SnmpV3Config cfg, String host, String rootOid, int maxRows) throws IOException {
+        requireValid(cfg);
+        OID root = new OID(rootOid);
+        OID current = root;
+        int cap = maxRows > 0 ? maxRows : 10_000;
+        List<VarBind> out = new ArrayList<>();
+
+        try (Snmp s = openV3Session(cfg)) {
+            UserTarget<UdpAddress> t = v3Target(cfg, host, 161);
+            while (out.size() < cap) {
+                ScopedPDU pdu = v3Pdu(cfg, PDU.GETNEXT);
+                pdu.add(new VariableBinding(current));
+
+                ResponseEvent<UdpAddress> event = s.getNext(pdu, t);
+                PDU response = event == null ? null : event.getResponse();
+                if (response == null) throw new IOException("No response from agent (timeout) during walk");
+                if (response.getErrorStatus() != PDU.noError) {
+                    throw new IOException("SNMP error: " + response.getErrorStatusText());
+                }
+                VariableBinding vb = response.get(0);
+                OID next = vb.getOid();
+                if (Null.isExceptionSyntax(vb.getVariable().getSyntax())) break;
+                if (!next.startsWith(root)) break;
+                if (next.compareTo(current) <= 0) break;   // guard against non-advancing agents
+                out.add(toVarBind(vb));
+                current = next;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Opens a v3-capable {@link Snmp} session: a local engine ID, a {@link USM} registered with the
+     * shared {@link SecurityModels}, an {@link MPv3} message-processing model and the configured
+     * {@link org.snmp4j.security.UsmUser}. The caller owns the returned session and must close it.
+     */
+    private Snmp openV3Session(SnmpV3Config cfg) throws IOException {
+        byte[] engineId = MPv3.createLocalEngineID();
+        USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(engineId), 0);
+        SecurityModels.getInstance().addSecurityModel(usm);
+
+        Snmp s = new Snmp(new DefaultUdpTransportMapping());
+        s.getMessageDispatcher().addMessageProcessingModel(new MPv3(engineId));
+        usm.addUser(SnmpV3Usm.toUsmUser(cfg));
+        s.listen();
+        return s;
+    }
+
+    /** Builds the v3 {@link UserTarget} for {@code cfg} at {@code host:port} (no I/O). */
+    static UserTarget<UdpAddress> v3Target(SnmpV3Config cfg, String host, int port) {
+        UserTarget<UdpAddress> t = new UserTarget<>();
+        t.setAddress((UdpAddress) GenericAddress.parse(normalizeAddress(host, port)));
+        t.setVersion(SnmpConstants.version3);
+        t.setSecurityName(SnmpV3Usm.securityName(cfg));
+        t.setSecurityLevel(SnmpV3Usm.securityLevel(cfg.level()));
+        t.setRetries(1);
+        t.setTimeout(3_000);
+        return t;
+    }
+
+    /** Builds a v3 {@link ScopedPDU} of the given type, carrying the config context name if set (no I/O). */
+    static ScopedPDU v3Pdu(SnmpV3Config cfg, int type) {
+        ScopedPDU pdu = new ScopedPDU();
+        pdu.setType(type);
+        if (cfg.contextName() != null && !cfg.contextName().isBlank()) {
+            pdu.setContextName(new OctetString(cfg.contextName()));
+        }
+        return pdu;
+    }
+
+    private static void requireValid(SnmpV3Config cfg) {
+        if (cfg == null) throw new IllegalArgumentException("SnmpV3Config must not be null");
+        List<String> errors = cfg.validate();
+        if (!errors.isEmpty()) {
+            throw new IllegalArgumentException("Invalid SNMPv3 config: " + String.join("; ", errors));
+        }
+    }
+
     // ---- pure helpers (unit-tested) ----
 
     /** Maps a textual SNMP version to the SNMP4J constant; defaults to v2c. */
@@ -139,6 +255,13 @@ public final class SnmpService implements AutoCloseable {
             catch (NumberFormatException e) { return false; }
         }
         return true;
+    }
+
+    /** Decodes a list of SNMP4J variable bindings into display records (shared by v1/v2c and v3). */
+    private static List<VarBind> decode(List<? extends VariableBinding> bindings) {
+        List<VarBind> out = new ArrayList<>();
+        for (VariableBinding vb : bindings) out.add(toVarBind(vb));
+        return out;
     }
 
     /** Decodes an SNMP4J {@link VariableBinding} into a display record. */
