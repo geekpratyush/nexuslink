@@ -290,6 +290,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
       `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting
       `toString()` round-trip; `MediaTypeParseException` on malformed input. 23 tests.
+- [x] **URI Template (RFC 6570) expander** — pure `UriTemplate.expand(template, vars)` (Levels 1-3): `{var}`,
+      reserved `{+var}`, fragment `{#var}`, multi `{x,y}`, label `{.x}`, path `{/x}`, path-param `{;x}`,
+      query `{?x,y}`/`{&x}`, plus prefix `{var:3}` and explode `{var*}` over String/List/Map values, with
+      operator-aware percent-encoding and undefined-var omission; `UriTemplateException` on malformed input. 21 tests.
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
 
@@ -579,6 +583,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`;`-props + `databaseName`), Oracle thin (service `@//host:port/svc` and legacy SID `@host:port:sid`), and
       SQLite; fills vendor default ports, keeps insertion-ordered params, handles IPv6 hosts, round-trips canonical
       forms, throws `JdbcUrlException` on malformed input. 24 tests. _(Wire into the SQL connect form field-splitting.)_
+- [x] **SQL tokenizer** — pure `SqlTokenizer` → `SqlToken(type,text,start,end)` spans (contiguous, round-trips
+      the input) with `SqlTokenType` KEYWORD/IDENTIFIER/STRING/QUOTED_IDENTIFIER/NUMBER/OPERATOR/LINE_COMMENT/
+      BLOCK_COMMENT/PARAMETER(`?`/`:name`/`$1`)/WHITESPACE; case-insensitive keyword set (`keywords()`/`isKeyword`),
+      best-effort (never throws; unterminated string/comment run to EOF). Feeds offline editor highlighting. 27 tests.
 - [x] **SQL script splitter** — pure `SqlScriptSplitter` splits a script into statements on `;`, ignoring
       semicolons inside single-quoted literals (`''` escapes), `"`/`` ` `` quoted identifiers, `--`/`#` line
       comments, `/* */` block comments (optional nesting), and Postgres `$$`/`$tag$` dollar-quoting;
@@ -629,6 +637,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack. _Cluster + Sentinel TODO._
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
 - [-] Command console — `RedisService.execute()` supports ~20 common commands; _auto-complete TODO_
+- [x] **Glob matcher** — pure `RedisGlob.matches(pattern, key)` mirrors Redis `stringmatchlen` (`*`/`?`,
+      `[..]` classes with ranges + `^` negation, `\` escapes; whole-string, case-sensitive) so `KEYS`/`SCAN MATCH`
+      listings can be filtered client-side without a round-trip. 7 tests.
 - [x] **RESP wire codec** — pure, dependency-free `RespCodec` + sealed `RespValue` hierarchy covering
       RESP2 (simple string/error/integer/bulk incl. null, array incl. null) and RESP3 (null/boolean/double/
       big-number/bulk-error/verbatim/map/set/push). `encodeCommand(String…|List<byte[]>)` builds the client
@@ -694,6 +705,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `SnmpView` — open v1/v2c session, GET an OID or WALK a subtree into an OID/type/value table;
       `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
 - [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
+- [x] **`Oid` value type** — pure immutable numeric OID: `parse`/`toString` round-trip (optional leading dot),
+      `child`/`parent`/`sub`, `Comparable` **lexicographic** ordering (the GETNEXT/walk order), `isPrefixOf`/
+      `startsWith` (subtree bounds) and `next()`; sub-ids as unsigned 32-bit `long`; `OidFormatException` on bad
+      input. 29 tests. _(The offline seam for tighter walk/subtree logic in `SnmpService`.)_
 - [x] `SnmpV3Config` — USM model (security level + auth MD5/SHA/SHA-256 + priv DES/AES-128, validation); 10 tests
 - [x] **USM auth crypto (reference)** — `UsmSecurity` (pure, JDK-only) implements RFC 3414 §A.2
       password-to-key (1 MB-stream KDF, MD5 + SHA-1), §2.6 engine-ID key localization, and HMAC-96 auth
