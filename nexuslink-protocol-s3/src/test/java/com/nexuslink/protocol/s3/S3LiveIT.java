@@ -65,4 +65,21 @@ class S3LiveIT {
             assertEquals(BODY, svc.getObjectAsText(BUCKET, KEY, 4096));
         }
     }
+
+    @Test
+    void uploadReadThenDelete() {
+        try (S3Service svc = new S3Service()) {
+            svc.connect(ENDPOINT, "test", "test", "us-east-1", true);
+            String key = "uploaded/it-" + System.currentTimeMillis() + ".txt";
+
+            svc.putText(BUCKET, key, "written-by-nexuslink");
+            assertTrue(svc.listObjects(BUCKET, "uploaded/", 100).stream()
+                    .anyMatch(o -> o.key().equals(key)));
+            assertEquals("written-by-nexuslink", svc.getObjectAsText(BUCKET, key, 4096));
+
+            svc.deleteObject(BUCKET, key);
+            assertTrue(svc.listObjects(BUCKET, "uploaded/", 100).stream()
+                    .noneMatch(o -> o.key().equals(key)));
+        }
+    }
 }

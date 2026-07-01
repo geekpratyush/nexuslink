@@ -2,13 +2,16 @@ package com.nexuslink.protocol.s3;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -61,6 +64,23 @@ public final class S3Service implements AutoCloseable {
                 o.lastModified() == null ? "" : o.lastModified().toString(),
                 o.eTag(), o.storageClassAsString())));
         return items;
+    }
+
+    /** Uploads {@code bytes} to {@code bucket}/{@code key}; {@code contentType} may be null. */
+    public void putObject(String bucket, String key, byte[] bytes, String contentType) {
+        PutObjectRequest.Builder req = PutObjectRequest.builder().bucket(bucket).key(key);
+        if (contentType != null && !contentType.isBlank()) req.contentType(contentType);
+        client.putObject(req.build(), RequestBody.fromBytes(bytes));
+    }
+
+    /** Uploads UTF-8 {@code text} to {@code bucket}/{@code key} as {@code text/plain}. */
+    public void putText(String bucket, String key, String text) {
+        putObject(bucket, key, text.getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+    }
+
+    /** Deletes a single object. */
+    public void deleteObject(String bucket, String key) {
+        client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
     /** Fetches the first {@code maxBytes} of an object as UTF-8 text (for previews). */
