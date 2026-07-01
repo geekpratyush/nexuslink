@@ -35,10 +35,14 @@ public final class FileBrowserPane extends VBox {
 
     private final FileSystem fs;
     private final TextField addressField = new TextField();
+    private final TextField filterField = new TextField();
+    private final ToggleButton showHidden = new ToggleButton("• Hidden");
     private final javafx.scene.layout.FlowPane breadcrumbBar = new javafx.scene.layout.FlowPane();
     private final TableView<FileItem> table = new TableView<>();
     private final Label statusLabel = new Label();
     private String currentPath = "/";
+    // The full listing (including the ".." row) as last loaded; the table shows a filtered view of it.
+    private List<FileItem> listing = List.of();
 
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
@@ -101,7 +105,16 @@ public final class FileBrowserPane extends VBox {
         addressField.setOnAction(e -> navigateTo(addressField.getText().trim()));
         HBox.setHgrow(addressField, Priority.ALWAYS);
 
-        HBox bar = new HBox(6, up, refresh, addressField, mkdir);
+        // Quick filter: type to narrow the listing by name; the toggle reveals dotfiles.
+        filterField.getStyleClass().add("nl-field");
+        filterField.setPromptText("Filter…");
+        filterField.setPrefWidth(140);
+        filterField.textProperty().addListener((o, ov, nv) -> applyView());
+        showHidden.getStyleClass().add("btn-secondary");
+        showHidden.setTooltip(new Tooltip("Show hidden (dot) files"));
+        showHidden.setOnAction(e -> applyView());
+
+        HBox bar = new HBox(6, up, refresh, addressField, filterField, showHidden, mkdir);
         bar.setAlignment(Pos.CENTER_LEFT);
         return bar;
     }
@@ -245,13 +258,28 @@ public final class FileBrowserPane extends VBox {
             var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
             rows.add(FileItem.up(fs.parent(currentPath)));
             rows.addAll(items);
-            // Order via the sort policy so a column the user clicked persists across navigation;
-            // with no column selected it falls back to the ".."/dirs-first/name default.
-            table.setItems(FXCollections.observableArrayList(rows));
-            table.sort();
-            statusLabel.setText(items.size() + " item(s)");
+            listing = rows;
+            applyView();
             onChanged.run();
         });
+    }
+
+    /**
+     * Renders the current {@link #listing} into the table, applying the hidden-files toggle and the
+     * quick-filter text ({@link FileFilter}) then the active sort policy. Called on navigation and
+     * whenever a filter control changes, so filtering never re-hits the file system.
+     */
+    private void applyView() {
+        List<FileItem> shown = FileFilter.apply(listing, showHidden.isSelected(), filterField.getText());
+        // Order via the sort policy so a column the user clicked persists across navigation/filtering;
+        // with no column selected it falls back to the ".."/dirs-first/name default.
+        table.setItems(FXCollections.observableArrayList(shown));
+        table.sort();
+        long total = listing.stream().filter(f -> !f.parent()).count();
+        long visible = shown.stream().filter(f -> !f.parent()).count();
+        statusLabel.setText(visible == total
+                ? total + " item(s)"
+                : "showing " + visible + " of " + total + " item(s)");
     }
 
     public void refresh() { navigateTo(currentPath); }
@@ -282,6 +310,8 @@ public final class FileBrowserPane extends VBox {
     public void showDisconnected(String message) {
         currentPath = "/";
         addressField.clear();
+        filterField.clear();
+        listing = List.of();
         breadcrumbBar.getChildren().clear();
         table.setItems(FXCollections.observableArrayList());
         table.setPlaceholder(new Label(message));
