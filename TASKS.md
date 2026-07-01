@@ -366,6 +366,11 @@
 - [x] `MqttView` — broker URL, client ID, auth, QoS selector, topic subscribe/publish, live
       message log; wired into the shell (File menu + sidebar + HiveMQ public sample)
 - [ ] v5 properties: user properties, message expiry, content type, correlation data
+- [x] **Topic-filter matching + validation** — pure `MqttTopicFilter` (spec §4.7): `compile(String)`
+      returns a reusable immutable matcher (`+`/`#` wildcards, single/multi-level, parent-level match,
+      `$`-topic exclusion, empty levels), plus `isValidFilter`/`isValidTopicName` per §4.7.3 (whole-level
+      wildcards, `#` only last, no wildcards in names, no U+0000, ≤65535 UTF-8 bytes). Index-walking, no
+      per-match allocation; 71 tests. _(UI subscription-overlap highlighting can build on this.)_
 - [-] Message history — live in-session log (timestamp, QoS, retained flag); _persistent history TODO_
 
 ### 5.5 RabbitMQ
@@ -513,6 +518,11 @@
 
 ### 8.1 JDBC SQL Client
 - [x] `JdbcService` — DriverManager connection (now accepts extra driver props), SELECT/update detection _(HikariCP pool TODO)_
+- [x] **SQL script splitter** — pure `SqlScriptSplitter` splits a script into statements on `;`, ignoring
+      semicolons inside single-quoted literals (`''` escapes), `"`/`` ` `` quoted identifiers, `--`/`#` line
+      comments, `/* */` block comments (optional nesting), and Postgres `$$`/`$tag$` dollar-quoting;
+      comment-only fragments dropped by default (retainable), plus a `splitWithOffsets` variant returning
+      `Statement(text, startOffset)`. 20 tests. _(Wire into SqlView for run-all / run-at-cursor.)_
 - [x] **Driver-specific TLS/SSL** — `SslMode` + `JdbcTlsSpec` → `JdbcTlsParams` maps generic TLS material to
       Postgres/CockroachDB (`ssl`/`sslmode`/`sslrootcert`/`sslcert`/`sslkey`), MySQL (`sslMode` + `*KeyStoreUrl`),
       MariaDB (`serverSslCert`/`trustStore`/`keyStore`), SQL Server (`encrypt`/`trustServerCertificate`);
@@ -558,6 +568,12 @@
 - [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. _Cluster + Sentinel TODO. Needs a live server for E2E test._
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
 - [-] Command console — `RedisService.execute()` supports ~20 common commands; _auto-complete TODO_
+- [x] **RESP wire codec** — pure, dependency-free `RespCodec` + sealed `RespValue` hierarchy covering
+      RESP2 (simple string/error/integer/bulk incl. null, array incl. null) and RESP3 (null/boolean/double/
+      big-number/bulk-error/verbatim/map/set/push). `encodeCommand(String…|List<byte[]>)` builds the client
+      array-of-bulk-strings request; `decode(byte[]/ByteBuffer/InputStream)` reads one full reply (byte[]/
+      buffer throw `RespIncompleteException` on a partial reply; the stream overload leaves pipelined bytes).
+      Binary-safe bulk strings, UTF-8 text; 41 tests. _(raw-command console + pipeline UI can build on this.)_
 - [x] `RedisExplorer` + `RedisView` (key browser with lazy value-on-select + console); wired into the shell
 - [ ] Pub/Sub subscriber panel
 
