@@ -263,6 +263,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
     **Import cURL** button + paste dialog that populates the editor);
     _Custom Script TODO_
 - [-] `BodyTab` — type selector: NONE/JSON/XML/TEXT/FORM_URLENCODED done; Form-Data/GraphQL/File TODO
+      — **multipart backend done:** pure RFC 7578 `MultipartFormData` encoder (text + file parts, default
+      `application/octet-stream`, collision-free lazy boundary exposed via `getBoundary()`/`getContentType()`,
+      binary-safe `ByteArrayOutputStream` assembly, WHATWG percent-escaped names); 10 tests. _(BodyTab UI wiring TODO.)_
   - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
   - [ ] Form-Data table with file picker per row
 - [ ] `PreRequestTab` — JavaScript/Groovy script editor
@@ -495,7 +498,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       the other by relative path (descend into the same sub-folder / climb the same number of levels); pure
       JavaFX-free `SyncBrowsing` path math (8 tests) with a suppression counter to break the mirror loop;
       enabling it snapshots both paths so it never jumps on activation.
-- [ ] Per-pane status line: item count, selected size, free space
+- [-] Per-pane status line: item count, **selected count + total size** done (each pane shows
+      `N selected · <size>` on selection, reverting to the item count otherwise; pure reusable
+      `FileItem.humanSize(long)`, 2 tests). _(free space TODO.)_
 
 **Transfers**
 - [-] `TransferQueue` panel — **done:** observable engine driving existing `FileTransfer`, sequential
@@ -619,6 +624,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 8.3 MongoDB Client (separate driver — not JDBC)
 > **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.
 - [x] `MongoService` — `org.mongodb:mongodb-driver-sync` (Apache-2.0) in its own `nexuslink-protocol-mongo` module: connect, list dbs/collections, find, aggregate, count, insertOne, updateMany, deleteMany (Extended-JSON in/out) + `MongoQueryResult`
+- [x] **Connection-string parser** — pure driver-free `MongoConnectionString.parse(...)` for `mongodb://`
+      (host list, default port 27017) + `mongodb+srv://` (single host, SRV-flagged, no DNS resolution);
+      percent-decoded userinfo/db/options, case-insensitive option keys, typed helpers (`tls`/`ssl`,
+      `replicaSet`, `authSource`, `retryWrites`), IPv6 hosts, password-masking `redacted()`;
+      `MongoConnectionStringException` on malformed input. 22 tests.
 - [x] `MongoClientView` UI — connection bar, database picker + collection list, operation selector (find/aggregate/insert/update/delete), Extended-JSON editor (Ctrl+Enter), result pane; wired into `MainWindow` (File menu + sidebar + tab opener)
 - [x] Document CRUD + **visual aggregation pipeline builder** (stage-by-stage, run or load into editor); in-grid edit/delete (matched by _id) from the Table view
 - [x] **SQL-like queries** (`executeSql`) beside the JSON filter — both options; **explain plan**; **export** results to JSON/CSV; **query history** (recall recent)
@@ -649,6 +659,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       byCn, 9 tests) behind a **Build…** filter dialog; `LdapService.addEntry/modifyEntry/deleteEntry`
       (UnboundID, UI-friendly `Mod`/`ModType`, 4 in-memory-server tests); LdapView Add-child/Modify/Delete
       via toolbar + context menus on the list and DIT tree, refreshing after each write
+- [x] **RFC 4515 filter parser** (inverse of `LdapFilterBuilder`) — pure `LdapFilterParser.parse(String)` →
+      sealed `LdapFilter` AST (`And`/`Or`/`Not`/`Present`/`Equality`/`Substring`/`GreaterOrEqual`/`LessOrEqual`/
+      `Approx`/`ExtensibleMatch`); recursive-descent, decodes `\HH` escapes and re-escapes on `render()`
+      (round-trips), throws `LdapFilterParseException` on malformed input. 33 tests. **Live-verified** end-to-end:
+      `LdapLiveIT` searches use RFC-4515 filters against the local OpenLDAP.
 
 ### 8.5 SSH Terminal
 - [ ] `SshTerminalService` — Apache MINA SSHD
