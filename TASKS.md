@@ -313,6 +313,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 4.2 Topic Browser & Admin
 - [x] `TopicTreeView` — `KafkaExplorer` + `ResourceExplorerView`: topics (partition/replication counts) → partitions (leader/replicas/ISR)
 - [-] `TopicDetailPanel` — partition leader/replica/ISR in the details panel; _configs table + create/delete/alter + reassignment TODO_
+- [x] **Config diff** — pure `ConfigDiff.compare(desired, current[, readOnlyKeys])` (Kafka-type-free `Map<String,String>`)
+      classifies each key ADDED/REMOVED/CHANGED/UNCHANGED with old/new values + a read-only flag; `changesToApply()`
+      (actionable set), `applicableChanges()`/`readOnlyChanges()`, `hasChanges()`; key-sorted, immutable. 17 tests.
+      _(Backs a future topic/broker config editor with alter-config preview.)_
 
 ### 4.3 Producer
 - [x] `KafkaProducerService` — `KafkaService.send()` (acks=all, lazy producer); _idempotent/transactions TODO_
@@ -487,7 +491,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       ascending)` is the pure, JavaFX-free seam both the policy and the default listing share, so a chosen
       sort persists across navigation. 9 `FileOrderTest` tests.
 - [ ] Hidden-files toggle; in-pane quick filter/search box
-- [ ] Synchronized browsing — mirror navigation across both panes by relative path
+- [x] Synchronized browsing — a **⇄ Sync** toggle in the commander mirrors each pane's navigation onto
+      the other by relative path (descend into the same sub-folder / climb the same number of levels); pure
+      JavaFX-free `SyncBrowsing` path math (8 tests) with a suppression counter to break the mirror loop;
+      enabling it snapshots both paths so it never jumps on activation.
 - [ ] Per-pane status line: item count, selected size, free space
 
 **Transfers**
@@ -546,6 +553,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 ### 8.1 JDBC SQL Client
 - [x] `JdbcService` — DriverManager connection (now accepts extra driver props), SELECT/update detection _(HikariCP pool TODO)_
+- [x] **JDBC URL parser/builder** — pure `JdbcUrl` parses/rebuilds URLs for PostgreSQL, MySQL, MariaDB, SQL Server
+      (`;`-props + `databaseName`), Oracle thin (service `@//host:port/svc` and legacy SID `@host:port:sid`), and
+      SQLite; fills vendor default ports, keeps insertion-ordered params, handles IPv6 hosts, round-trips canonical
+      forms, throws `JdbcUrlException` on malformed input. 24 tests. _(Wire into the SQL connect form field-splitting.)_
 - [x] **SQL script splitter** — pure `SqlScriptSplitter` splits a script into statements on `;`, ignoring
       semicolons inside single-quoted literals (`''` escapes), `"`/`` ` `` quoted identifiers, `--`/`#` line
       comments, `/* */` block comments (optional nesting), and Postgres `$$`/`$tag$` dollar-quoting;
@@ -693,7 +704,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [ ] Connection state panel (active/idle/failed counts)
 
 ### 9.2 Distributed Tracing
-- [ ] W3C Trace Context injection/parsing (`traceparent`, `tracestate`)
+- [x] W3C Trace Context injection/parsing (`traceparent`, `tracestate`) — pure `TraceContext` (Level 1):
+      `parseTraceparent`/`tryParseTraceparent` (validates field count, lowercase-hex, all-zero trace/parent-id,
+      version-`00` trailing data, reserved `ff`), `formatTraceparent`, `newRootTraceparent`, `childOf`/`child`,
+      `injectInto`/`extract`; nested immutable `TraceState` (OWS trimming, whole-list drop on invalid/dup/>32,
+      `with(k,v)` move-to-front + evict). `SecureRandom` ids. 44 tests. _(UI: auto-inject on REST requests TODO.)_
 - [ ] Jaeger/Zipkin span export
 - [ ] Trace tree view in response panel
 
