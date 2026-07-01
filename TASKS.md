@@ -128,6 +128,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       generation** (`generateCsr` → CSR PEM + key, SANs in a requested-extensions attribute)
 - [x] `CertificateImporter` — PEM/DER **file import** + **PKCS12/JKS bundle import** (every alias →
       cert chain + private key, `typeForFileName` autodetect); wired to **Import Bundle…**; _drag-and-drop TODO_
+- [x] **PEM parser** — pure `PemParser` (RFC 7468, `java.util.Base64` only): `parseAll`/`first`/`isPem` over
+      one-or-many `-----BEGIN <LABEL>-----` blocks → `PemBlock(label, der[])` with a `type()` classifier
+      (CERTIFICATE/PRIVATE_KEY/PUBLIC_KEY/CRL/CSR/OTHER); tolerates CRLF/LF, explanatory text, and full chains;
+      `PemException` on label mismatch/truncation/bad base64. 14 tests.
 - [x] `CertificateExporter` — **PEM / DER / PKCS#12-with-password** export (key+chain or cert-only
       trust store); wired to the **Export…** format chooser + **Generate CSR…**. **7/7 round-trip tests**
 - [x] **Certificate Bundle Builder** (`CertificateBundleDialog`) — guided: pick certs, order leaf→root,
@@ -290,6 +294,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
       `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting
       `toString()` round-trip; `MediaTypeParseException` on malformed input. 23 tests.
+- [x] **Link header parser (RFC 8288)** — pure `LinkHeader.parse(String)` → immutable links with `uri` +
+      case-insensitive params, `rel()`/`rels()`/`title()`/`type()`/`hreflang()`, and `byRel("next")`/`first()`
+      pagination helpers; lenient (blank→empty, uri-less entries skipped), handles quoted values with embedded
+      commas/semicolons + `\"` escapes. 14 tests.
 - [x] **JWT decoder (inspection-only)** — pure `JwtDecoder.decode(String)` → `DecodedJwt`: Base64URL-decodes
       header/payload (dependency-free JSON reader), exposes `alg`/`typ`/`kid` + standard claims
       (iss/sub/aud/exp/iat/nbf/jti) and `claim(name)`, with `exp`/`iat`/`nbf`→`Instant` and
@@ -328,7 +336,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 ### 4.2 Topic Browser & Admin
 - [x] `TopicTreeView` — `KafkaExplorer` + `ResourceExplorerView`: topics (partition/replication counts) → partitions (leader/replicas/ISR)
-- [-] `TopicDetailPanel` — partition leader/replica/ISR in the details panel; _configs table + create/delete/alter + reassignment TODO_
+- [-] `TopicDetailPanel` — partition leader/replica/ISR in the details panel; _configs table + alter + reassignment TODO_
+- [x] **Topic create / delete** — `KafkaService.createTopic(name, partitions, replicationFactor)` +
+      `deleteTopic(name)` over the Admin client; **live-verified** by `KafkaLiveIT` (create→describe→delete) against
+      the local Kafka broker. _(UI create/delete dialog + alter-configs TODO.)_
 - [x] **Config diff** — pure `ConfigDiff.compare(desired, current[, readOnlyKeys])` (Kafka-type-free `Map<String,String>`)
       classifies each key ADDED/REMOVED/CHANGED/UNCHANGED with old/new values + a read-only flag; `changesToApply()`
       (actionable set), `applicableChanges()`/`readOnlyChanges()`, `hasChanges()`; key-sorted, immutable. 17 tests.
@@ -719,6 +730,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `SnmpView` — open v1/v2c session, GET an OID or WALK a subtree into an OID/type/value table;
       `${VAR}` in host/community/OID; **resolved MIB-name column + symbolic-name input** via `OidRegistry`.
 - [x] `OidRegistry` — OID↔MIB-name (SNMPv2-MIB system/interfaces), longest-prefix + instance suffix; 13 tests
+- [x] **SMI value formatter** — pure `SmiFormatter`: `formatTimeTicks` (→ `d days, H:MM:SS.ss`), unsigned
+      `formatCounter`/`formatGauge` (32-bit) + `formatCounter64` (BigInteger / hi-lo), `formatIpAddress` (dotted
+      quad), `formatOctetString` (printable-text-or-hex, with `looksPrintable`/`hex` helpers), and `formatOid`;
+      static/side-effect-free for value display. 36 tests.
 - [x] **`Oid` value type** — pure immutable numeric OID: `parse`/`toString` round-trip (optional leading dot),
       `child`/`parent`/`sub`, `Comparable` **lexicographic** ordering (the GETNEXT/walk order), `isPrefixOf`/
       `startsWith` (subtree bounds) and `next()`; sub-ids as unsigned 32-bit `long`; `OidFormatException` on bad
