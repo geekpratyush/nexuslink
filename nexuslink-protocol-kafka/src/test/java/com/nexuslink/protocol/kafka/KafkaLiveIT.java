@@ -43,4 +43,25 @@ class KafkaLiveIT {
             assertEquals("hello-nexus", got.get().value());
         }
     }
+
+    @Test
+    void createDescribeThenDeleteTopic() throws Exception {
+        String topic = "nexus-admin-" + System.currentTimeMillis();
+        try (KafkaService svc = new KafkaService()) {
+            svc.connect("localhost:9092", Map.of());
+
+            svc.createTopic(topic, 3, (short) 1);
+            assertTrue(svc.listTopics().contains(topic));
+            assertEquals(3, svc.describe(topic).partitions().size());
+
+            svc.deleteTopic(topic);
+            // Deletion is async on the broker; poll briefly until it's gone.
+            boolean gone = false;
+            for (int i = 0; i < 20 && !gone; i++) {
+                if (!svc.listTopics().contains(topic)) { gone = true; break; }
+                Thread.sleep(250);
+            }
+            assertTrue(gone, "topic was not deleted within timeout");
+        }
+    }
 }

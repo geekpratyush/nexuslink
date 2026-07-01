@@ -5,6 +5,7 @@ import com.nexuslink.protocol.kafka.ConsumerLagCalculator.TopicPartitionKey;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
@@ -83,6 +84,17 @@ public final class KafkaService implements AutoCloseable {
 
     public Map<String, TopicDescription> describeAll(List<String> topics) throws Exception {
         return admin.describeTopics(topics).allTopicNames().get(15, TimeUnit.SECONDS);
+    }
+
+    /** Creates a topic with the given partition count and replication factor. Needs a live broker. */
+    public void createTopic(String name, int partitions, short replicationFactor) throws Exception {
+        admin.createTopics(List.of(new NewTopic(name, partitions, replicationFactor)))
+                .all().get(15, TimeUnit.SECONDS);
+    }
+
+    /** Deletes a topic. Needs a live broker. */
+    public void deleteTopic(String name) throws Exception {
+        admin.deleteTopics(List.of(name)).all().get(15, TimeUnit.SECONDS);
     }
 
     public TopicDescription describe(String topic) throws Exception {
