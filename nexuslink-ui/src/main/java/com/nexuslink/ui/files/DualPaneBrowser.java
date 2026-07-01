@@ -9,6 +9,8 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 
@@ -35,6 +37,12 @@ public final class DualPaneBrowser extends BorderPane {
     private Consumer<String> logger = s -> {};
     private boolean remoteConnected = false;
 
+    // Synchronized browsing: mirror each pane's navigation onto the other by relative path.
+    private boolean syncBrowsing = false;
+    private int suppressSync = 0;               // >0 while a mirrored navigation is in flight
+    private String lastLocalPath = "";
+    private String lastRemotePath = "";
+
     public DualPaneBrowser(FileSystem local, FileSystem remote, FileTransfer transfer) {
         this.localPane = new FileBrowserPane(local, "Local — " + local.name());
         this.remotePane = new FileBrowserPane(remote, "Remote — " + remote.name());
@@ -49,6 +57,10 @@ public final class DualPaneBrowser extends BorderPane {
         // Drag-and-drop: drop local files onto the remote pane to upload, and vice versa.
         remotePane.setOnDropFromOther(this::upload);
         localPane.setOnDropFromOther(this::download);
+
+        // Synchronized browsing: when one pane navigates, mirror the relative move onto the other.
+        localPane.setOnChanged(() -> onPaneNavigated(true));
+        remotePane.setOnChanged(() -> onPaneNavigated(false));
 
         // Refresh the destination pane each time a transfer completes.
         queue.setOnItemFinished(item -> {
@@ -113,11 +125,48 @@ public final class DualPaneBrowser extends BorderPane {
         download.setTooltip(new javafx.scene.control.Tooltip("Fetch the selected remote files to the local directory"));
         download.setOnAction(e -> download(remotePane.selected()));
 
-        VBox col = new VBox(12, upload, download);
+        ToggleButton sync = new ToggleButton("⇄ Sync");
+        sync.getStyleClass().add("btn-secondary");
+        sync.setTooltip(new Tooltip("Synchronized browsing: mirror navigation across both panes by relative path"));
+        sync.selectedProperty().addListener((o, was, now) -> {
+            syncBrowsing = now;
+            // Snapshot current paths so enabling sync doesn't immediately jump either pane.
+            lastLocalPath = localPane.currentPath();
+            lastRemotePath = remotePane.currentPath();
+            messageLabel.setText(now ? "Synchronized browsing on" : "Synchronized browsing off");
+        });
+
+        VBox col = new VBox(12, upload, download, sync);
         col.setAlignment(Pos.CENTER);
         col.setPadding(new Insets(40, 6, 6, 6));
         col.setMinWidth(120);
         return col;
+    }
+
+    /**
+     * Called after either pane finishes navigating. In synchronized-browsing mode, replays the same
+     * relative move on the other pane via {@link SyncBrowsing#mirror}. A suppression counter breaks
+     * the feedback loop: each mirrored navigation fires the other pane's change once, which is then
+     * swallowed instead of bouncing back.
+     */
+    private void onPaneNavigated(boolean isLocal) {
+        String current = (isLocal ? localPane : remotePane).currentPath();
+        if (suppressSync > 0) {                          // this change was our own mirrored navigation
+            suppressSync--;
+            if (isLocal) lastLocalPath = current; else lastRemotePath = current;
+            return;
+        }
+        String old = isLocal ? lastLocalPath : lastRemotePath;
+        if (isLocal) lastLocalPath = current; else lastRemotePath = current;
+
+        if (!syncBrowsing || !remoteConnected) return;
+
+        FileBrowserPane other = isLocal ? remotePane : localPane;
+        String target = SyncBrowsing.mirror(other.currentPath(), old, current);
+        if (target != null && !target.equals(other.currentPath())) {
+            suppressSync++;
+            other.navigateTo(target);
+        }
     }
 
     private VBox buildBottom() {
