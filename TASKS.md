@@ -250,6 +250,11 @@
   - [x] `TimelineViewer` — `TimelineView` Canvas waterfall (DNS/Connect/TLS/Waiting/Download bars laid end-to-end, proportional widths + per-phase ms + total); **Timeline** response tab, redraws on resize. Cumulative model already supports the finer DNS/TCP/TLS split when the OkHttp breakdown lands _(JDK client currently fills Waiting+Download)_
   - [x] `TestResultsPanel` — editable **Tests** request tab (`AssertionSpec` rows: type combo + header/JSON-path + expected/min + max) compiles to the `ResponseAssertions` backend; evaluated after every call into a **Test Results** response tab (tab title shows `n/m passed`, ✔/✘ per assertion). Assertions persist in history replay; `${VAR}` resolved in expected values. `AssertionSpec` + 3 tests (76 in http module)
 - [x] Code generation panel — `RestCodeGenerator` + `CodeGenDialog` (cURL / Python / JavaScript / Java / PowerShell), copy-to-clipboard; `</>` button on the REST bar _(Go TODO)_
+- [x] **HAR 1.2 export** — `HarExporter` renders a `RestRequest` + `RestResponse` into a valid HTTP Archive
+      1.2 log (version/creator/entries[] with request incl. query string + `postData`, response incl. `content`,
+      `timings`, `startedDateTime`, `time`); pure + dependency-free (hand-rolled RFC 8259 JSON with `\uXXXX`
+      escaping, matching the module's existing style); single-entry + list overloads; unmeasured phases as -1.
+      6 tests. _(UI Export-as-HAR button + multi-request session capture TODO.)_
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
 
@@ -443,7 +448,11 @@
       up via the FileSystem's parent fn, works for POSIX + local paths; 5 tests) + Up button. _(back/forward
       history still TODO)_
 - [x] Default listing order: ".." first, directories before files, case-insensitive name (pure `FileOrder`
-      comparator, 5 tests) — _interactive click-to-sort columns still TODO_
+      comparator) — **interactive click-to-sort columns done:** clicking a Name/Size/Modified/Permissions
+      header picks the sort key + direction through a single `TableView` sort policy while the ".." row and
+      dirs-first grouping are always preserved (only the key flips with direction); `FileOrder.by(SortKey,
+      ascending)` is the pure, JavaFX-free seam both the policy and the default listing share, so a chosen
+      sort persists across navigation. 9 `FileOrderTest` tests.
 - [ ] Hidden-files toggle; in-pane quick filter/search box
 - [ ] Synchronized browsing — mirror navigation across both panes by relative path
 - [ ] Per-pane status line: item count, selected size, free space
@@ -570,6 +579,11 @@
       **6/6 tests** end-to-end against the bundled in-memory directory server); _StartTLS TODO_
 - [x] **LDIF + DN model** — `LdifWriter`/`LdifReader` (RFC 2849: base64 `::`, 76-char folding, multi-entry),
       `Dn`/`Rdn` (RFC 4514 parse/escape, parent/child, normalized equality), `LdapEntry`; 29 tests, offline.
+- [x] **LDAP URL (RFC 4516)** — pure `LdapUrl` parse/format for `ldap[s]://host:port/dn?attrs?scope?filter?exts`:
+      percent-encode/decode (UTF-8), scheme-default ports (389/636), IPv6 bracket hosts, `Scope` enum with RFC
+      defaulting, filter defaulting to `(objectClass=*)`, `Extension` records with `!critical`; reuses `Dn` for
+      the base DN, `toString()` omits trailing defaults and round-trips; `LdapUrlException` on malformed input.
+      35 tests, offline.
 - [-] `LdapView` — connect bar (host/port/bind/LDAPS), search (base/filter/scope/limit), DN result list +
       attribute detail; naming contexts pre-fill the base; `${VAR}` in every field. Left pane is now
       tabbed: **List** + **Tree (DIT)** (hierarchy built from result DNs via `Dn.parent()`/`rdn()`,
@@ -613,6 +627,13 @@
       the arriving message-processing/security model+level+name) via `returnResponsePdu`; `Trap` gains an
       `inform` flag; loopback round-trip test asserts both delivery + a non-null RESPONSE to the sender
       (9 tests). **TODO:** real v3/USM auth+priv **on the wire** (model done)
+- [-] **USM privacy crypto** — **done (offline core):** `UsmPrivacy` implements the two classic SNMPv3
+      privacy protocols with `javax.crypto` only (no new deps): **DES-CBC** (RFC 3414 §8 — localized-key
+      bytes 0–7 = DES key, 8–15 = pre-IV, salt = engineBoots‖localInt, IV = pre-IV XOR salt, zero-padded to
+      8) and **AES-128-CFB** (RFC 3826 — 16-byte key, IV = engineBoots‖engineTime‖salt, stream/no-pad).
+      Reuses `UsmSecurity` key localization; `Encrypted(ciphertext, privParameters)` result with defensive
+      copies; 21 tests (RFC 3414 §A.3.1 localized key, round-trips, padding/length, wrong-salt corruption,
+      frozen KAT vectors). **TODO:** wire priv into `SnmpService.getV3/walkV3` on the wire.
 
 ---
 
