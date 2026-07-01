@@ -30,6 +30,34 @@
 
 ---
 
+## LIVE INTEGRATION TESTING — local Docker stack (`test-env/`)
+
+An all-open-source Docker Compose stack (`test-env/docker-compose.yml`) runs one real server per
+protocol module so the clients can be exercised end-to-end on a laptop — no cloud accounts, no
+licences. Each module ships a `*LiveIT` gated on `-Dnexuslink.it=true`, so the default `mvn test`
+stays green without the stack. See `test-env/README.md`; one-shot runner: `test-env/run-live-its.sh`.
+
+**End-to-end verified against the local stack** (13 protocol families):
+
+| Module | LiveIT | Server (open-source image) |
+|---|---|---|
+| protocol-db | `JdbcLiveIT` | PostgreSQL + MariaDB (DDL/insert/select/listTables) |
+| protocol-redis | `RedisLiveIT` | Redis (set/get/scan/type) |
+| protocol-kafka | `KafkaLiveIT` | Kafka KRaft (produce → consume round-trip) |
+| protocol-rabbitmq | `RabbitMqLiveIT` | RabbitMQ (publish → consume) |
+| protocol-mqtt | `MqttLiveIT` | Mosquitto (subscribe → publish) |
+| protocol-ldap | `LdapLiveIT` | OpenLDAP (bind, naming contexts, search) |
+| protocol-snmp | `SnmpLiveIT` | net-snmp (GET + WALK) |
+| protocol-s3 | `S3LiveIT` | LocalStack S3 (list buckets/objects, get) |
+| protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
+| protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
+| protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
+| protocol-ftp | `FtpLiveIT` | vsftpd (upload/list/read/delete) |
+| protocol-http | `RestLiveIT` | go-httpbin (GET/POST/basic-auth) |
+| protocol-mongo | `MongoServiceTest` | MongoDB via Testcontainers (`-DrunMongoIT=true`) |
+
+---
+
 ## PHASE 0 — PROJECT SCAFFOLD ✦ START HERE
 
 **Goal:** Maven multi-module project, JPMS modules, base infrastructure
@@ -508,8 +536,8 @@
 ### 7.3 Object Storage
 - [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play.** _Upload / presigned URLs / versioning TODO._
 - [x] `S3Explorer` + `S3View` — bucket → object tree with size/modified/etag details (reuses `ResourceExplorerView`); wired into the shell (new `nexuslink-protocol-s3` module, S3 sample opens prefilled)
-- [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. _SAS tokens / tiering / upload TODO. Needs an account/emulator for E2E._
-- [-] `GcsService` — Google Cloud Storage client (project + service-account JSON / ADC); connect, listBuckets, listObjects. `GcsExplorer` + `GcsView`. _Signed URLs / upload TODO. Needs GCP credentials for E2E._
+- [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. **Live E2E verified** via `AzureLiveIT` against the local Azurite emulator. _SAS tokens / tiering / upload TODO._
+- [-] `GcsService` — Google Cloud Storage client (project + service-account JSON / ADC); connect, listBuckets, listObjects. **Now emulator-aware** (honours `STORAGE_EMULATOR_HOST` with anonymous creds) and **live E2E verified** via `GcsLiveIT` against fake-gcs-server. `GcsExplorer` + `GcsView`. _Signed URLs / upload TODO._
 - [x] Shared bucket/container browser view — **S3 + Azure Blob + GCS** all use the same `ResourceExplorerView` BUCKET→OBJECT pattern
 
 ---
@@ -565,7 +593,7 @@
 - [x] Per-driver license-ack flag surfaced in the UI for Oracle/DB2
 
 ### 8.2 Redis Client (separate driver — not JDBC)
-- [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. _Cluster + Sentinel TODO. Needs a live server for E2E test._
+- [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack. _Cluster + Sentinel TODO._
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
 - [-] Command console — `RedisService.execute()` supports ~20 common commands; _auto-complete TODO_
 - [x] **RESP wire codec** — pure, dependency-free `RespCodec` + sealed `RespValue` hierarchy covering

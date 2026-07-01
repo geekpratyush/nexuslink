@@ -1,0 +1,40 @@
+# Seed entries for the local OpenLDAP directory (base: dc=nexuslink,dc=dev).
+# Loaded once on first container start.
+
+dn: ou=people,dc=nexuslink,dc=dev
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=nexuslink,dc=dev
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=alice,ou=people,dc=nexuslink,dc=dev
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: alice
+cn: Alice Example
+sn: Example
+mail: alice@nexuslink.dev
+uidNumber: 10001
+gidNumber: 10001
+homeDirectory: /home/alice
+userPassword: alicepw
+
+dn: uid=bob,ou=people,dc=nexuslink,dc=dev
+objectClass: inetOrgPerson
+objectClass: posixAccount
+uid: bob
+cn: Bob Example
+sn: Example
+mail: bob@nexuslink.dev
+uidNumber: 10002
+gidNumber: 10002
+homeDirectory: /home/bob
+userPassword: bobpw
+
+dn: cn=engineers,ou=groups,dc=nexuslink,dc=dev
+objectClass: groupOfNames
+cn: engineers
+member: uid=alice,ou=people,dc=nexuslink,dc=dev
+member: uid=bob,ou=people,dc=nexuslink,dc=dev

@@ -1,6 +1,7 @@
 package com.nexuslink.protocol.gcs;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Bucket;
 import com.google.cloud.storage.Storage;
@@ -13,6 +14,9 @@ import java.util.List;
 /**
  * Google Cloud Storage client. Authenticate with a service-account JSON key file (or fall back to
  * Application Default Credentials when no key is supplied); then browse buckets → objects.
+ * <p>
+ * When the {@code STORAGE_EMULATOR_HOST} environment variable is set (e.g. a local fake-gcs-server),
+ * the client is pointed at that host with anonymous credentials so it can be exercised offline.
  */
 public final class GcsService implements AutoCloseable {
 
@@ -25,7 +29,13 @@ public final class GcsService implements AutoCloseable {
         close();
         StorageOptions.Builder builder = StorageOptions.newBuilder();
         if (projectId != null && !projectId.isBlank()) builder.setProjectId(projectId);
-        if (credentialsJsonPath != null && !credentialsJsonPath.isBlank()) {
+
+        String emulatorHost = System.getenv("STORAGE_EMULATOR_HOST");
+        if (emulatorHost != null && !emulatorHost.isBlank()) {
+            // Local emulator: no real auth, talk to the emulator endpoint directly.
+            builder.setHost(emulatorHost);
+            builder.setCredentials(NoCredentials.getInstance());
+        } else if (credentialsJsonPath != null && !credentialsJsonPath.isBlank()) {
             try (FileInputStream in = new FileInputStream(credentialsJsonPath)) {
                 builder.setCredentials(GoogleCredentials.fromStream(in));
             }
