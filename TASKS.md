@@ -294,6 +294,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
       `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting
       `toString()` round-trip; `MediaTypeParseException` on malformed input. 23 tests.
+- [x] **Cache-Control parser (RFC 7234)** — pure `CacheControl`: boolean directives (`no-cache`/`no-store`/
+      `public`/`private`/`immutable`/…) + delta-seconds (`max-age`/`s-maxage`/`max-stale`/`min-fresh`/
+      `stale-while-revalidate`/…), quoted field-list args, case-insensitive, lenient (bad directive skipped,
+      unknowns preserved); typed accessors (`noStore()`/`maxAge()`→OptionalLong/…) + round-tripping `toString()`. 18 tests.
 - [x] **Link header parser (RFC 8288)** — pure `LinkHeader.parse(String)` → immutable links with `uri` +
       case-insensitive params, `rel()`/`rels()`/`title()`/`type()`/`hreflang()`, and `byRel("next")`/`first()`
       pagination helpers; lenient (blank→empty, uri-less entries skipped), handles quoted values with embedded
@@ -475,6 +479,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Server reflection** — `GrpcService` auto-discovers services/methods + resolves descriptors via reflection (recursive dependency resolution); no `.proto` upload needed. **Verified live vs. grpcb.in.**
 - [x] `GrpcChannelService` — managed channel per connection (plaintext/TLS)
 - [-] `GrpcInvokerService` — **unary** done (DynamicMessage ↔ JSON via JsonFormat + ProtoUtils marshallers); _server/client/bidi streaming TODO_
+- [x] **gRPC status-code registry** — pure `GrpcStatusCodes` (no `io.grpc` dep): the 17 canonical codes 0..16
+      (`Code` enum, ordinal == wire number), `byNumber`/`findByNumber`/`byName`/`name`/`number`/`description`,
+      a gRPC→HTTP status mapping (`httpStatus`), and an immutable `all()` for UI tables. 10 tests.
 - [x] `GrpcView` — host/port/TLS bar, service picker, method picker (streaming-flagged), request JSON editor, response panel; wired into the shell (gRPC sample = grpcb.in)
 - [ ] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection)
 - [ ] Streaming panel: live message list, send message (client/bidi), end stream
@@ -499,7 +506,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
 ### 7.2 FTP / FTPS
-- [x] `FtpService` — Apache Commons Net (password/anonymous, passive, FTPS) + **upload/download (progress), mkdir, rename, delete (recursive), pwd**. **Verified live vs. test.rebex.net.**
+- [x] `FtpService` — Apache Commons Net (password/anonymous, passive, FTPS) + **upload/download (progress), mkdir, rename, delete (recursive), pwd**. **Verified live vs. test.rebex.net** + `FtpLiveIT` (upload/list/read/delete) vs local vsftpd.
+- [x] **Listing-line parser** — pure `FtpListParser` (+`FtpListEntry`) for Unix `LIST` (type/perms/size/date/name,
+      names-with-spaces, `l… -> target` symlinks, year-vs-time) and RFC 3659 `MLSD` (`fact=value;` pairs → type/
+      size/modify); `parseUnix`/`parseMlsd`/auto-detecting `parseLine` return `Optional` (empty on unparseable);
+      bulk `parse(...)` skips blanks + `.`/`..`. 14 tests.
 - [x] `FtpView` — **same two-pane commander** with drag-and-drop transfers (reuses `com.nexuslink.ui.files`)
 
 ### 7.4 File Commander — parity & power features (shared `com.nexuslink.ui.files`)
@@ -665,6 +676,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Glob matcher** — pure `RedisGlob.matches(pattern, key)` mirrors Redis `stringmatchlen` (`*`/`?`,
       `[..]` classes with ranges + `^` negation, `\` escapes; whole-string, case-sensitive) so `KEYS`/`SCAN MATCH`
       listings can be filtered client-side without a round-trip. 7 tests.
+- [x] **RESP codec — live-verified** — `RespCodecLiveIT` opens a raw TCP socket to a real Redis and runs
+      PING/SET/GET/DEL purely through `RespCodec.encodeCommand` + `decode(InputStream)`, proving the hand-rolled
+      codec interoperates with an actual server (SimpleString/BulkString/Integer/null replies).
 - [x] **RESP wire codec** — pure, dependency-free `RespCodec` + sealed `RespValue` hierarchy covering
       RESP2 (simple string/error/integer/bulk incl. null, array incl. null) and RESP3 (null/boolean/double/
       big-number/bulk-error/verbatim/map/set/push). `encodeCommand(String…|List<byte[]>)` builds the client
