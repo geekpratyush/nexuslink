@@ -112,21 +112,28 @@ public final class FileBrowserPane extends VBox {
         name.setCellValueFactory(c -> new SimpleStringProperty(
                 (c.getValue().directory() ? "📁 " : "📄 ") + c.getValue().name()));
         name.setPrefWidth(260);
+        name.setUserData(FileOrder.SortKey.NAME);
 
         TableColumn<FileItem, String> size = new TableColumn<>("Size");
         size.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().sizeText()));
         size.setStyle("-fx-alignment: CENTER-RIGHT;");
         size.setPrefWidth(90);
+        size.setUserData(FileOrder.SortKey.SIZE);
 
         TableColumn<FileItem, String> modified = new TableColumn<>("Modified");
         modified.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().modified()));
         modified.setPrefWidth(140);
+        modified.setUserData(FileOrder.SortKey.MODIFIED);
 
         TableColumn<FileItem, String> perms = new TableColumn<>("Permissions");
         perms.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().permissions()));
         perms.setPrefWidth(110);
+        perms.setUserData(FileOrder.SortKey.PERMISSIONS);
 
         table.getColumns().setAll(name, size, modified, perms);
+        // Click-to-sort: the ".." row and dirs-first grouping are always preserved; the clicked column
+        // only picks the key + direction. A single sort policy backs both the default and user sorts.
+        table.setSortPolicy(FileBrowserPane::applyCommanderSort);
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("Empty"));
@@ -238,8 +245,10 @@ public final class FileBrowserPane extends VBox {
             var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
             rows.add(FileItem.up(fs.parent(currentPath)));
             rows.addAll(items);
-            // Show ".." first, then directories before files, each name-sorted (commander convention).
-            table.setItems(FXCollections.observableArrayList(FileOrder.sorted(rows)));
+            // Order via the sort policy so a column the user clicked persists across navigation;
+            // with no column selected it falls back to the ".."/dirs-first/name default.
+            table.setItems(FXCollections.observableArrayList(rows));
+            table.sort();
             statusLabel.setText(items.size() + " item(s)");
             onChanged.run();
         });
@@ -339,6 +348,24 @@ public final class FileBrowserPane extends VBox {
         pane.sceneProperty().addListener((o, ov, sc) -> {
             if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
         });
+    }
+
+    /**
+     * Sort policy shared by the default listing and header clicks: reads the first column in the
+     * table's sort order (its {@link FileOrder.SortKey} and ascending/descending) and reorders the
+     * items with {@link FileOrder#by}, which keeps ".." first and directories before files. When no
+     * column is selected it defaults to a case-insensitive name sort.
+     */
+    private static boolean applyCommanderSort(TableView<FileItem> tv) {
+        FileOrder.SortKey key = FileOrder.SortKey.NAME;
+        boolean ascending = true;
+        if (!tv.getSortOrder().isEmpty()) {
+            TableColumn<FileItem, ?> col = tv.getSortOrder().get(0);
+            if (col.getUserData() instanceof FileOrder.SortKey k) key = k;
+            ascending = col.getSortType() != TableColumn.SortType.DESCENDING;
+        }
+        FXCollections.sort(tv.getItems(), FileOrder.by(key, ascending));
+        return true;
     }
 
     // ---- background-task plumbing ----
