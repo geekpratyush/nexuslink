@@ -286,6 +286,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `timings`, `startedDateTime`, `time`); pure + dependency-free (hand-rolled RFC 8259 JSON with `\uXXXX`
       escaping, matching the module's existing style); single-entry + list overloads; unmeasured phases as -1.
       6 tests. _(UI Export-as-HAR button + multi-request session capture TODO.)_
+- [x] **Media-type / Content-Type parser** — pure `MediaType` (RFC 7231 §3.1.1.1): `type/subtype` +
+      case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
+      `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting
+      `toString()` round-trip; `MediaTypeParseException` on malformed input. 23 tests.
 - [ ] Request history sidebar integration
 - [ ] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s)
 
@@ -546,10 +550,23 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
 ### 7.3 Object Storage
-- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play.** _Upload / presigned URLs / versioning TODO._
+- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` vs LocalStack. _Upload / presigned URLs / versioning TODO._
+- [x] **S3 URI parser** — pure `S3Uri.parse(...)` → `{bucket, key, region, endpoint, style}` for `s3://`,
+      virtual-hosted (`bucket.s3[.-]region.amazonaws.com`) and path-style (`s3.region.amazonaws.com/bucket/key`
+      + custom endpoints like LocalStack `localhost:4566/bucket/key`) URLs; URL-decodes the key (keeps literal
+      `+`), `toS3Uri()` canonicalization, `S3UriException` on malformed input. 25 tests.
 - [x] `S3Explorer` + `S3View` — bucket → object tree with size/modified/etag details (reuses `ResourceExplorerView`); wired into the shell (new `nexuslink-protocol-s3` module, S3 sample opens prefilled)
 - [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. **Live E2E verified** via `AzureLiveIT` against the local Azurite emulator. _SAS tokens / tiering / upload TODO._
+- [x] **Azure connection-string parser** — pure driver-free `AzureConnectionString.parse(...)` of `Key=Value;`
+      pairs (case-insensitive): protocol/account/key/endpointSuffix/SAS + explicit `BlobEndpoint` overrides,
+      the `UseDevelopmentStorage=true` Azurite shortcut (`isDevelopment()`), computed
+      `blobEndpoint()`/`queueEndpoint()`/`tableEndpoint()`/`fileEndpoint()`, and a `redacted()` masking the key/SAS;
+      `MalformedConnectionStringException` on bad input. 18 tests.
 - [-] `GcsService` — Google Cloud Storage client (project + service-account JSON / ADC); connect, listBuckets, listObjects. **Now emulator-aware** (honours `STORAGE_EMULATOR_HOST` with anonymous creds) and **live E2E verified** via `GcsLiveIT` against fake-gcs-server. `GcsExplorer` + `GcsView`. _Signed URLs / upload TODO._
+- [x] **GCS URI parser** — pure `GcsUri.parse(...)` for `gs://bucket/object`, path-style
+      (`storage.googleapis.com`/`storage.cloud.google.com/bucket/object`) and virtual-hosted
+      (`bucket.storage.googleapis.com/object`) URLs → `{bucket, object}`, URL-decoding the object;
+      `toGsUri()` canonical form; `GcsUriException` on malformed input. 8 tests.
 - [x] Shared bucket/container browser view — **S3 + Azure Blob + GCS** all use the same `ResourceExplorerView` BUCKET→OBJECT pattern
 
 ---
