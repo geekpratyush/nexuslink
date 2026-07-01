@@ -43,6 +43,8 @@ public final class FileBrowserPane extends VBox {
     private String currentPath = "/";
     // The full listing (including the ".." row) as last loaded; the table shows a filtered view of it.
     private List<FileItem> listing = List.of();
+    // The item-count status shown when nothing is selected; a selection temporarily replaces it.
+    private String baseStatus = "";
 
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
@@ -148,6 +150,9 @@ public final class FileBrowserPane extends VBox {
         // only picks the key + direction. A single sort policy backs both the default and user sorts.
         table.setSortPolicy(FileBrowserPane::applyCommanderSort);
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        // Reflect the current selection (count + total size) in the status line.
+        table.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener<FileItem>) c -> updateSelectionStatus());
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("Empty"));
         table.setRowFactory(tv -> {
@@ -277,9 +282,26 @@ public final class FileBrowserPane extends VBox {
         table.sort();
         long total = listing.stream().filter(f -> !f.parent()).count();
         long visible = shown.stream().filter(f -> !f.parent()).count();
-        statusLabel.setText(visible == total
+        baseStatus = visible == total
                 ? total + " item(s)"
-                : "showing " + visible + " of " + total + " item(s)");
+                : "showing " + visible + " of " + total + " item(s)";
+        statusLabel.setText(baseStatus);
+    }
+
+    /**
+     * Shows the current selection's count and combined file size in the status line (a commander
+     * convention), falling back to the plain item-count text ({@link #baseStatus}) when nothing —
+     * other than the ".." row — is selected.
+     */
+    private void updateSelectionStatus() {
+        List<FileItem> sel = table.getSelectionModel().getSelectedItems().stream()
+                .filter(f -> f != null && !f.parent()).toList();
+        if (sel.isEmpty()) {
+            statusLabel.setText(baseStatus);
+            return;
+        }
+        long bytes = sel.stream().filter(f -> !f.directory()).mapToLong(FileItem::size).sum();
+        statusLabel.setText(sel.size() + " selected · " + FileItem.humanSize(bytes));
     }
 
     public void refresh() { navigateTo(currentPath); }

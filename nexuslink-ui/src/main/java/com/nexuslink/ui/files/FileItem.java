@@ -19,10 +19,14 @@ public record FileItem(String name, String path, boolean directory, long size,
 
     /** A human-readable size (blank for directories). */
     public String sizeText() {
-        if (directory) return "";
-        if (size < 1024) return size + " B";
+        return directory ? "" : humanSize(size);
+    }
+
+    /** Formats a byte count as a human-readable size (e.g. {@code 1.5 MB}). Pure and reusable. */
+    public static String humanSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
         String[] units = {"KB", "MB", "GB", "TB"};
-        double s = size / 1024.0;
+        double s = bytes / 1024.0;
         int u = 0;
         while (s >= 1024 && u < units.length - 1) { s /= 1024; u++; }
         return String.format("%.1f %s", s, units[u]);
