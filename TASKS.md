@@ -290,6 +290,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
       `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting
       `toString()` round-trip; `MediaTypeParseException` on malformed input. 23 tests.
+- [x] **JWT decoder (inspection-only)** — pure `JwtDecoder.decode(String)` → `DecodedJwt`: Base64URL-decodes
+      header/payload (dependency-free JSON reader), exposes `alg`/`typ`/`kid` + standard claims
+      (iss/sub/aud/exp/iat/nbf/jti) and `claim(name)`, with `exp`/`iat`/`nbf`→`Instant` and
+      `isExpired`/`isNotYetValid`; **never verifies the signature** (documented; for the bearer-token inspector
+      UX). `JwtDecodeException` on malformed input. 22 tests.
 - [x] **URI Template (RFC 6570) expander** — pure `UriTemplate.expand(template, vars)` (Levels 1-3): `{var}`,
       reserved `{+var}`, fragment `{#var}`, multi `{x,y}`, label `{.x}`, path `{/x}`, path-param `{;x}`,
       query `{?x,y}`/`{&x}`, plus prefix `{var:3}` and explode `{var*}` over String/List/Map values, with
@@ -409,6 +414,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `MqttView` — broker URL, client ID, auth, QoS selector, topic subscribe/publish, live
       message log; wired into the shell (File menu + sidebar + HiveMQ public sample)
 - [ ] v5 properties: user properties, message expiry, content type, correlation data
+- [x] **Broker URI parser** — pure `MqttBrokerUri` parses `tcp`/`mqtt` (1883), `ssl`/`tls`/`mqtts` (8883),
+      `ws` (80), `wss` (443) with scheme-default ports, `tls`/`websocket` flags, WS path (default `/mqtt`),
+      percent-decoded userinfo, IPv6 hosts, round-tripping `normalized()`/`toString()` + `redacted()`;
+      `MqttBrokerUriException` on malformed input. 25 tests.
 - [x] **Topic-filter matching + validation** — pure `MqttTopicFilter` (spec §4.7): `compile(String)`
       returns a reusable immutable matcher (`+`/`#` wildcards, single/multi-level, parent-level match,
       `$`-topic exclusion, empty levels), plus `isValidFilter`/`isValidTopicName` per §4.7.3 (whole-level
@@ -419,7 +428,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 5.5 RabbitMQ
 - [-] `RabbitMqService` — AMQP 0.9.1 client (official `amqp-client`): connect (URI/host[:port] +
       credentials), declare exchange/queue/binding, publish (persistent), consume w/ auto-ack
-      (`nexuslink-protocol-rabbitmq`, **7/7 tests** on the pure `factoryFor` seam); _Management REST API TODO_
+      (`nexuslink-protocol-rabbitmq`, **7/7 tests** on the pure `factoryFor` seam); **Live E2E verified** via
+      `RabbitMqLiveIT` (publish→consume) against the local broker. _Management REST API TODO_
+- [x] **AMQP URI parser** — pure `AmqpUri` (AMQP 0-9-1 / RabbitMQ URI spec): `amqp`(5672)/`amqps`(5671, tls),
+      percent-decoded userinfo + vhost, the absent-vs-empty vhost rule (`amqp://host`→`/`, `amqp://host/`→``),
+      `%2f` in vhost, query options (`heartbeat`/`connection_timeout`/`channel_max`), IPv6 hosts, `redacted()`;
+      `AmqpUriException` on malformed input. 29 tests.
 - [x] `RabbitMqView` — declare exchange/queue/binding, publish to exchange+routing-key, consume a
       queue into a live message log; `${VAR}` resolved in every field; **File ▸ New RabbitMQ Client**
 - [-] DLX config viewer, publisher confirms, manual ack/nack/requeue, message properties editor
@@ -554,7 +568,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
 ### 7.3 Object Storage
-- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText. **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` vs LocalStack. _Upload / presigned URLs / versioning TODO._
+- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText, **putObject/putText + deleteObject** (upload). **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` (list/get **and upload→get→delete**) vs LocalStack. _Presigned URLs / versioning / multipart TODO._
 - [x] **S3 URI parser** — pure `S3Uri.parse(...)` → `{bucket, key, region, endpoint, style}` for `s3://`,
       virtual-hosted (`bucket.s3[.-]region.amazonaws.com`) and path-style (`s3.region.amazonaws.com/bucket/key`
       + custom endpoints like LocalStack `localhost:4566/bucket/key`) URLs; URL-decodes the key (keeps literal
