@@ -57,7 +57,7 @@ public final class RestClientView extends BorderPane {
     private Label statusLabel;
     private Label timingLabel;
     private Label sizeLabel;
-    private TextArea responseBody;
+    private org.fxmisc.richtext.CodeArea responseBody;
     private ComboBox<BodyFormatter.Mode> bodyViewMode;
     private RestResponse lastResponse;
     private TextArea responseHeaders;
@@ -764,9 +764,7 @@ public final class RestClientView extends BorderPane {
         meta.setAlignment(Pos.CENTER_LEFT);
         meta.setPadding(new Insets(8, 10, 8, 10));
 
-        responseBody = new TextArea();
-        responseBody.setEditable(false);
-        responseBody.getStyleClass().add("code-area");
+        responseBody = com.nexuslink.ui.util.JsonView.plainArea(false);
 
         bodyViewMode = new ComboBox<>(FXCollections.observableArrayList(BodyFormatter.Mode.values()));
         bodyViewMode.setValue(BodyFormatter.Mode.PRETTY);
@@ -776,8 +774,10 @@ public final class RestClientView extends BorderPane {
         HBox bodyBar = new HBox(8, viewLabel, bodyViewMode);
         bodyBar.setAlignment(Pos.CENTER_LEFT);
         bodyBar.setPadding(new Insets(6, 6, 0, 6));
-        VBox bodyBox = new VBox(4, bodyBar, responseBody);
-        VBox.setVgrow(responseBody, Priority.ALWAYS);
+        org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> responseScroll =
+                new org.fxmisc.flowless.VirtualizedScrollPane<>(responseBody);
+        VBox bodyBox = new VBox(4, bodyBar, responseScroll);
+        VBox.setVgrow(responseScroll, Priority.ALWAYS);
 
         responseHeaders = new TextArea();
         responseHeaders.setEditable(false);
@@ -917,7 +917,7 @@ public final class RestClientView extends BorderPane {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("✖ " + resp.errorMessage());
             timingLabel.setText(resp.timing().totalMs() + " ms");
-            responseBody.setText("Request failed:\n\n" + resp.errorMessage()
+            com.nexuslink.ui.util.JsonView.setSmart(responseBody, "Request failed:\n\n" + resp.errorMessage()
                     + "\n\nPress F1 → Troubleshooting for common fixes.");
             responseHeaders.clear();
             logger.accept("FAILED — " + resp.errorMessage());
@@ -1094,7 +1094,7 @@ public final class RestClientView extends BorderPane {
     /** Renders the last successful response body in the selected view mode. */
     private void renderBody() {
         if (lastResponse == null || lastResponse.failed()) return;
-        responseBody.setText(BodyFormatter.render(
+        com.nexuslink.ui.util.JsonView.setSmart(responseBody, BodyFormatter.render(
                 lastResponse.body(), contentTypeOf(lastResponse.headers()), bodyViewMode.getValue()));
     }
 

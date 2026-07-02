@@ -42,6 +42,38 @@ public final class JsonView {
         area.requestFollowCaret();
     }
 
+    /**
+     * A CodeArea styled for JSON but WITHOUT the auto-highlight listener — the caller decides when
+     * (and whether) to highlight, via {@link #setSmart}. Use this where the same area also shows
+     * non-JSON content (XML, hex dumps, plain text).
+     */
+    public static CodeArea plainArea(boolean editable) {
+        CodeArea area = new CodeArea();
+        area.getStyleClass().addAll("code-area", "code-json");
+        area.setEditable(editable);
+        return area;
+    }
+
+    /**
+     * Sets the text and highlights it as JSON only when it looks like JSON (first non-space char is
+     * {@code &#123;} or {@code [}); otherwise renders it as plain text. Safe for a viewer that also
+     * shows XML / hex / error messages.
+     */
+    public static void setSmart(CodeArea area, String text) {
+        String t = text == null ? "" : text;
+        area.replaceText(t);
+        area.moveTo(0);
+        area.requestFollowCaret();
+        String head = t.stripLeading();
+        if (!head.isEmpty() && (head.charAt(0) == '{' || head.charAt(0) == '[')) {
+            area.setStyleSpans(0, computeHighlighting(t));
+        } else {
+            StyleSpansBuilder<Collection<String>> plain = new StyleSpansBuilder<>();
+            plain.add(Collections.emptyList(), t.length());
+            area.setStyleSpans(0, plain.create());
+        }
+    }
+
     static StyleSpans<Collection<String>> computeHighlighting(String text) {
         StyleSpansBuilder<Collection<String>> spans = new StyleSpansBuilder<>();
         if (text == null || text.isEmpty()) {

@@ -270,7 +270,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       — **multipart backend done:** pure RFC 7578 `MultipartFormData` encoder (text + file parts, default
       `application/octet-stream`, collision-free lazy boundary exposed via `getBoundary()`/`getContentType()`,
       binary-safe `ByteArrayOutputStream` assembly, WHATWG percent-escaped names); 10 tests. _(BodyTab UI wiring TODO.)_
-  - [x] Body text editor with JSON format button _(RichTextFX syntax highlight TODO)_
+  - [x] Body text editor with JSON format button
+  - [x] **Response body JSON syntax highlighting** — `ui.util.JsonView` (RichTextFX `CodeArea`) colours keys/strings/numbers/bool/null in the REST response body (Pretty/Raw modes; content-aware so XML/hex/errors stay plain). Same viewer reused in the **gRPC** and **GraphQL** response panes.
   - [ ] Form-Data table with file picker per row
 - [ ] `PreRequestTab` — JavaScript/Groovy script editor
 - [x] `SettingsTab` — UI tab wiring connect/read timeouts + follow-redirects to the request (honored per-call by `RestExecutionService`) _(TLS/cert selection TODO)_
@@ -890,6 +891,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-07-02: **JSON highlighting across API testers.** Extended `ui.util.JsonView` with a content-aware
+  `plainArea`/`setSmart` (highlights only when the text starts with `{`/`[`, so XML/hex/error bodies stay
+  plain) and wired it into the **REST response body** (all view modes), **gRPC** response, and **GraphQL**
+  response panes — each now a themed RichTextFX `CodeArea` in a `VirtualizedScrollPane`. Closes the REST
+  "RichTextFX syntax highlight TODO". +2 JsonView tests (5 total). Full `mvn test` BUILD SUCCESS.
 - 2026-07-02: **UX polish pass — professional look.** (1) **Coloured HTTP verbs** everywhere via new
   `ui.util.HttpMethods` (green/amber/blue/violet/red `.method-*` classes, previously dead): REST method
   combo (button + dropdown cells) and History rows (leading verb → coloured pill). (2) **JSON syntax

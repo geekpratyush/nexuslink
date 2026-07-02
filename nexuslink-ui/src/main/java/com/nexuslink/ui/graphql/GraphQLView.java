@@ -22,7 +22,7 @@ public final class GraphQLView extends BorderPane {
     private final TextField endpointField = new TextField("https://countries.trevorblades.com/");
     private final TextArea queryEditor = new TextArea();
     private final TextArea variablesEditor = new TextArea();
-    private final TextArea responseArea = new TextArea();
+    private final org.fxmisc.richtext.CodeArea responseArea = com.nexuslink.ui.util.JsonView.plainArea(false);
     private final Label statusLabel = new Label("Ready");
 
     private Consumer<String> logger = s -> {};
@@ -92,13 +92,12 @@ public final class GraphQLView extends BorderPane {
         left.setPadding(new Insets(8));
         VBox.setVgrow(queryEditor, Priority.ALWAYS);
 
-        responseArea.getStyleClass().add("code-area");
-        responseArea.setEditable(false);
-        responseArea.setPromptText("Response appears here…");
         Label rLbl = sectionLabel("RESPONSE");
-        VBox right = new VBox(4, rLbl, responseArea);
+        org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> responseScroll =
+                new org.fxmisc.flowless.VirtualizedScrollPane<>(responseArea);
+        VBox right = new VBox(4, rLbl, responseScroll);
         right.setPadding(new Insets(8));
-        VBox.setVgrow(responseArea, Priority.ALWAYS);
+        VBox.setVgrow(responseScroll, Priority.ALWAYS);
 
         SplitPane sp = new SplitPane(left, right);
         sp.setOrientation(Orientation.HORIZONTAL);
@@ -133,12 +132,12 @@ public final class GraphQLView extends BorderPane {
             if (r.failed()) {
                 statusLabel.getStyleClass().setAll("status-err");
                 statusLabel.setText("✖ " + r.error());
-                responseArea.setText("Error: " + r.error());
+                com.nexuslink.ui.util.JsonView.setSmart(responseArea, "Error: " + r.error());
                 return;
             }
             statusLabel.getStyleClass().setAll(r.status() / 100 == 2 ? "status-2xx" : "status-4xx");
             statusLabel.setText("HTTP " + r.status() + " · " + r.durationMs() + " ms");
-            responseArea.setText(r.body());
+            com.nexuslink.ui.util.JsonView.setSmart(responseArea, r.body());
             logger.accept("GraphQL ok — HTTP " + r.status() + " (" + r.durationMs() + " ms)");
         });
         task.setOnFailed(e -> {

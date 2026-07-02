@@ -38,7 +38,7 @@ public final class GrpcView extends BorderPane {
     private final ComboBox<String> serviceCombo = new ComboBox<>();
     private final ComboBox<GrpcService.MethodInfo> methodCombo = new ComboBox<>();
     private final TextArea requestEditor = new TextArea();
-    private final TextArea responseArea = new TextArea();
+    private final org.fxmisc.richtext.CodeArea responseArea = com.nexuslink.ui.util.JsonView.plainArea(false);
     private final Label callStatus = new Label();
 
     private Consumer<String> logger = s -> {};
@@ -166,12 +166,11 @@ public final class GrpcView extends BorderPane {
         requestEditor.setPromptText("{ }");
         VBox.setVgrow(requestEditor, Priority.ALWAYS);
 
-        responseArea.getStyleClass().add("code-area");
-        responseArea.setEditable(false);
-        responseArea.setPromptText("Response appears here…");
-        VBox right = new VBox(6, section("RESPONSE"), responseArea);
+        org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> responseScroll =
+                new org.fxmisc.flowless.VirtualizedScrollPane<>(responseArea);
+        VBox right = new VBox(6, section("RESPONSE"), responseScroll);
         right.setPadding(new Insets(8));
-        VBox.setVgrow(responseArea, Priority.ALWAYS);
+        VBox.setVgrow(responseScroll, Priority.ALWAYS);
 
         SplitPane sp = new SplitPane(left, right);
         sp.setOrientation(Orientation.HORIZONTAL);
@@ -244,7 +243,7 @@ public final class GrpcView extends BorderPane {
             @Override protected String call() throws Exception { return service.invokeUnary(svc, method.name(), json); }
         };
         task.setOnSucceeded(e -> {
-            responseArea.setText(task.getValue());
+            com.nexuslink.ui.util.JsonView.setSmart(responseArea, task.getValue());
             callStatus.getStyleClass().setAll("status-2xx");
             callStatus.setText("OK");
             logger.accept("gRPC " + svc + "/" + method.name() + " ok");
@@ -252,7 +251,7 @@ public final class GrpcView extends BorderPane {
         task.setOnFailed(e -> {
             callStatus.getStyleClass().setAll("status-err");
             callStatus.setText("✖ " + task.getException().getMessage());
-            responseArea.setText("Error: " + task.getException().getMessage());
+            com.nexuslink.ui.util.JsonView.setSmart(responseArea, "Error: " + task.getException().getMessage());
         });
         runBg(task);
     }

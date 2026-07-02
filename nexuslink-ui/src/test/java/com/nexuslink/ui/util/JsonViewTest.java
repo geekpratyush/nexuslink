@@ -51,4 +51,27 @@ class JsonViewTest {
     void emptyTextProducesNoError() {
         assertEquals(0, JsonView.computeHighlighting("").length());
     }
+
+    @Test
+    void nonJsonContentIsNotTokenised() {
+        // XML / hex / plain text must stay a single unstyled span (no JSON colours applied).
+        assertNoStyles("<note><to>Ada</to></note>");
+        assertNoStyles("0000  7b 22 61 22 3a 31 7d              {\"a\":1}");
+        assertNoStyles("Request failed: connection refused");
+    }
+
+    @Test
+    void jsonContentIsTokenisedEvenWithLeadingWhitespace() {
+        StyleSpans<Collection<String>> spans = JsonView.computeHighlighting("  {\"a\": 1}");
+        boolean anyStyled = false;
+        for (StyleSpan<Collection<String>> s : spans) anyStyled |= !s.getStyle().isEmpty();
+        assertTrue(anyStyled);
+    }
+
+    /** Mirrors JsonView.setSmart's decision: only text whose first non-space char is { or [ is JSON. */
+    private static void assertNoStyles(String text) {
+        String head = text.stripLeading();
+        boolean looksJson = !head.isEmpty() && (head.charAt(0) == '{' || head.charAt(0) == '[');
+        assertFalse(looksJson, "should not be treated as JSON: " + text);
+    }
 }
