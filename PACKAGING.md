@@ -7,8 +7,17 @@ normal `mvn install` / `mvn test` builds are unaffected.
 
 | Option | Artifact | Java needed on target? | One file for all OSes? |
 |--------|----------|------------------------|------------------------|
-| **Fat JAR** (`fatjar`) | `nexuslink.jar` (~277 MB) | **Yes — Java 21+** | **Yes** |
+| **Fat JAR — host-only** (`fatjar`) | `nexuslink.jar` (~212 MB) | **Yes — Java 21+** | No — runs on the build OS |
+| **Fat JAR — all platforms** (`fatjar,fatjar-all-platforms`) | `nexuslink.jar` (~278 MB) | **Yes — Java 21+** | **Yes** |
 | **Native app-image** (`jpackage`) | `dist/NexusLink/` (~430 MB) | **No (bundles a JRE)** | No — build per OS |
+
+> **Size note.** The fat JAR defaults to **host-only** — it bundles only the build machine's JavaFX
+> natives (~212 MB). Bundling all three desktop platforms (Windows + macOS Intel + macOS ARM) adds
+> `fatjar-all-platforms` and pushes it to ~278 MB, because JavaFX's **WebKit** native library (used by
+> the Mermaid diagram + Markdown help views) is ~80–104 MB *per platform*. Even host-only, that single
+> WebKit `.so`/`.dll`/`.dylib` (~104 MB) plus the many protocol SDKs (Anthropic, gRPC, Google, Kafka,
+> AWS, …) set the practical floor. Going materially below ~150 MB means dropping WebView or making the
+> heavy SDKs load on demand.
 
 > **Why not "any Java version"?** The app is compiled to **Java 21** bytecode, so a JAR needs a
 > **Java 21 or newer** runtime present. The only way to need *no* Java at all is the `jpackage`
@@ -18,13 +27,18 @@ normal `mvn install` / `mvn test` builds are unaffected.
 
 ## 1. Double-clickable fat JAR — one file, every desktop OS
 
-Builds a single uber-JAR containing every dependency, the JavaFX classes, **and** the native
-libraries for Windows, macOS (Intel + Apple Silicon) and Linux. The same file runs anywhere a
-**Java 21+** runtime is installed.
+Builds a single uber-JAR containing every dependency and the JavaFX classes. By default it bundles
+only the **build machine's** native libraries (host-only, ~212 MB) — the resulting jar runs on that
+OS with a **Java 21+** runtime installed.
 
 ```bash
+# Host-only (smaller, runs on the OS you build it on):
 mvn -Pfatjar -pl nexuslink-app -am clean package
-# →  nexuslink-app/target/nexuslink.jar
+# →  nexuslink-app/target/nexuslink.jar   (~212 MB)
+
+# All desktop platforms in one file (Windows + macOS Intel/ARM + Linux):
+mvn -Pfatjar,fatjar-all-platforms -pl nexuslink-app -am clean package
+# →  nexuslink-app/target/nexuslink.jar   (~278 MB)
 ```
 
 Run it:
@@ -41,9 +55,10 @@ launcher.
 1. The `Main-Class` is `com.nexuslink.app.Main`, a plain class that simply calls the real JavaFX
    `NexusLinkLauncher`. If `Main-Class` itself extended `javafx.application.Application`, the JVM would
    abort with *"JavaFX runtime components are missing"*.
-2. The `fatjar` profile adds the `win` / `mac` / `mac-aarch64` JavaFX native classifiers (the host's
-   own classifier comes in transitively), and `maven-shade-plugin`'s `ServicesResourceTransformer`
-   merges `META-INF/services` so the `ProtocolConnector` and JDBC-driver SPIs keep working after shading.
+2. The host's own JavaFX native classifier comes in transitively; the optional `fatjar-all-platforms`
+   profile adds the `win` / `mac` / `mac-aarch64` classifiers for a cross-platform jar. `maven-shade-plugin`'s
+   `ServicesResourceTransformer` merges `META-INF/services` so the `ProtocolConnector` and JDBC-driver
+   SPIs keep working after shading.
 
 ---
 
