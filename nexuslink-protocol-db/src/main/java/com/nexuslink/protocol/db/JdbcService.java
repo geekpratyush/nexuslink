@@ -99,6 +99,15 @@ public final class JdbcService implements AutoCloseable {
      * (with PK/FK markers) and foreign-key relationships. Render it with a Mermaid viewer.
      */
     public String erDiagramMermaid() throws SQLException {
+        return erDiagramMermaid(null);
+    }
+
+    /**
+     * Same as {@link #erDiagramMermaid()} but limited to the given table names. A {@code null} or
+     * empty selection means "all tables". Relationships to tables outside the selection are omitted
+     * so the diagram never references an entity that isn't drawn.
+     */
+    public String erDiagramMermaid(java.util.Collection<String> onlyTables) throws SQLException {
         DatabaseMetaData md = connection.getMetaData();
         StringBuilder sb = new StringBuilder("erDiagram\n");
 
@@ -106,15 +115,22 @@ public final class JdbcService implements AutoCloseable {
         try (ResultSet rs = md.getTables(null, null, "%", new String[]{"TABLE"})) {
             while (rs.next()) tables.add(rs.getString("TABLE_NAME"));
         }
+        if (onlyTables != null && !onlyTables.isEmpty()) {
+            java.util.Set<String> keep = new java.util.HashSet<>(onlyTables);
+            tables.removeIf(t -> !keep.contains(t));
+        }
         if (tables.isEmpty()) return sb.append("  %% no tables found\n").toString();
+        java.util.Set<String> drawn = new java.util.HashSet<>(tables);
 
-        // Relationships (deduped): parent ||--o{ child
+        // Relationships (deduped): parent ||--o{ child — only between tables we actually draw.
         java.util.LinkedHashSet<String> rels = new java.util.LinkedHashSet<>();
         for (String t : tables) {
             try (ResultSet rs = md.getImportedKeys(null, null, t)) {
                 while (rs.next()) {
                     String parent = rs.getString("PKTABLE_NAME");
-                    if (parent != null) rels.add(safe(parent) + " ||--o{ " + safe(t) + " : has");
+                    if (parent != null && drawn.contains(parent)) {
+                        rels.add(safe(parent) + " ||--o{ " + safe(t) + " : has");
+                    }
                 }
             }
         }

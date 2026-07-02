@@ -422,9 +422,62 @@ public final class SqlClientView extends BorderPane {
 
     private void showErDiagram() {
         if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        statusLabel.setText("Loading tables…");
+        Task<List<String>> listTask = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                List<String> out = new ArrayList<>();
+                for (String t : service.listTables()) {
+                    if (!t.trim().endsWith("(view)")) out.add(t.trim());
+                }
+                return out;
+            }
+        };
+        listTask.setOnSucceeded(e -> {
+            List<String> tables = listTask.getValue();
+            if (tables.isEmpty()) { statusLabel.setText("No tables to diagram"); return; }
+            List<String> selected = pickErTables(tables);
+            if (selected == null) { statusLabel.setText("ER diagram cancelled"); return; }
+            if (selected.isEmpty()) { statusLabel.setText("Pick at least one table"); return; }
+            buildErDiagram(selected);
+        });
+        listTask.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not list tables: " + listTask.getException().getMessage());
+        });
+        runBg(listTask);
+    }
+
+    /** Checkbox picker for which tables go into the ER diagram. Returns null if cancelled. */
+    private List<String> pickErTables(List<String> tables) {
+        Dialog<ButtonType> d = themedDialog("ER Diagram", "Select tables to include");
+        List<CheckBox> boxes = new ArrayList<>();
+        VBox list = new VBox(4);
+        list.setPadding(new Insets(4));
+        for (String t : tables) {
+            CheckBox cb = new CheckBox(t);
+            cb.setSelected(true);
+            boxes.add(cb);
+            list.getChildren().add(cb);
+        }
+        CheckBox all = new CheckBox("Select all");
+        all.setSelected(true);
+        all.setOnAction(ev -> boxes.forEach(b -> b.setSelected(all.isSelected())));
+        ScrollPane sp = new ScrollPane(list);
+        sp.setFitToWidth(true);
+        sp.setPrefViewportHeight(Math.min(420, 30 + tables.size() * 26));
+        VBox content = new VBox(8, all, new Separator(), sp);
+        content.setPadding(new Insets(4));
+        d.getDialogPane().setContent(content);
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return null;
+        List<String> out = new ArrayList<>();
+        for (CheckBox cb : boxes) if (cb.isSelected()) out.add(cb.getText());
+        return out;
+    }
+
+    private void buildErDiagram(List<String> tables) {
         statusLabel.setText("Building ER diagram…");
         Task<String> task = new Task<>() {
-            @Override protected String call() throws Exception { return service.erDiagramMermaid(); }
+            @Override protected String call() throws Exception { return service.erDiagramMermaid(tables); }
         };
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("meta-label");

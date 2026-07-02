@@ -36,7 +36,9 @@ public final class MongoClientView extends BorderPane {
     private final ComboBox<String> modeCombo = new ComboBox<>();
     private final TextField limitField = new TextField("100");
     private final TextArea queryEditor = new TextArea();
-    private final TextArea resultArea = new TextArea();
+    private final org.fxmisc.richtext.CodeArea resultArea = com.nexuslink.ui.util.JsonView.area(false);
+    private final org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> resultScroll =
+            new org.fxmisc.flowless.VirtualizedScrollPane<>(resultArea);
     private final Label resultStatus = new Label();
 
     // Compass-like result views
@@ -86,10 +88,13 @@ public final class MongoClientView extends BorderPane {
         d.setHeaderText("Edit and save (matched by _id) in '" + lastCollection + "'");
         d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
-        TextArea editor = new TextArea(doc.toJson(org.bson.json.JsonWriterSettings.builder().indent(true).build()));
-        editor.getStyleClass().add("code-area");
-        editor.setPrefSize(560, 360);
-        d.getDialogPane().setContent(editor);
+        org.fxmisc.richtext.CodeArea editor = com.nexuslink.ui.util.JsonView.area(true);
+        com.nexuslink.ui.util.JsonView.setText(editor,
+                doc.toJson(org.bson.json.JsonWriterSettings.builder().indent(true).build()));
+        org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> editorScroll =
+                new org.fxmisc.flowless.VirtualizedScrollPane<>(editor);
+        editorScroll.setPrefSize(560, 360);
+        d.getDialogPane().setContent(editorScroll);
         d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b ->
                 runMutation(() -> {
                     if (activeDb != null) service.useDatabase(activeDb);
@@ -426,9 +431,7 @@ public final class MongoClientView extends BorderPane {
         });
         updateEditorHint("find");
 
-        resultArea.getStyleClass().add("code-area");
-        resultArea.setEditable(false);
-        resultArea.setPromptText("Documents appear here…");
+        com.nexuslink.ui.util.JsonView.setText(resultArea, "");
         docTable.getStyleClass().add("details-table");
         docTable.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         docTable.setPlaceholder(new Label("Run a find/SQL query, then switch to Table view"));
@@ -448,7 +451,7 @@ public final class MongoClientView extends BorderPane {
         });
         buildSchemaTable();
 
-        StackPane resultStack = new StackPane(resultArea, docTable, schemaTable);
+        StackPane resultStack = new StackPane(resultScroll, docTable, schemaTable);
         docTable.setVisible(false);
         schemaTable.setVisible(false);
 
@@ -565,18 +568,18 @@ public final class MongoClientView extends BorderPane {
         lastCollection = "find".equals(mode) ? collection : null;   // edit/delete only on find results
         boolean docMode = mode.equals("find") || mode.equals("sql") || mode.equals("aggregate");
         task.setOnSucceeded(e -> {
-            resultArea.setText(task.getValue());
+            com.nexuslink.ui.util.JsonView.setText(resultArea, task.getValue());
             resultStatus.getStyleClass().setAll("meta-label");
             resultStatus.setText("ok");
             if (docMode) renderView();      // refresh Table/Schema/JSON for the new docs
-            else { lastDocs.clear(); showNode(resultArea); }
+            else { lastDocs.clear(); showNode(resultScroll); }
             if (docMode || mode.equals("explain")) rememberQuery(mode, body);
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
             resultStatus.setText("✖ " + task.getException().getMessage());
-            resultArea.setText("Error: " + task.getException().getMessage());
-            showNode(resultArea);
+            com.nexuslink.ui.util.JsonView.setText(resultArea, "Error: " + task.getException().getMessage());
+            showNode(resultScroll);
         });
         runBg(task);
     }
@@ -617,17 +620,19 @@ public final class MongoClientView extends BorderPane {
             case "Schema" -> { buildSchema(); showNode(schemaTable); }
             default -> {
                 if (!lastDocs.isEmpty()) {
+                    org.bson.json.JsonWriterSettings pretty =
+                            org.bson.json.JsonWriterSettings.builder().indent(true).build();
                     java.util.List<String> json = new java.util.ArrayList<>();
-                    for (org.bson.Document d : lastDocs) json.add(d.toJson());
-                    resultArea.setText(String.join("\n", json));
+                    for (org.bson.Document d : lastDocs) json.add(d.toJson(pretty));
+                    com.nexuslink.ui.util.JsonView.setText(resultArea, String.join("\n", json));
                 }
-                showNode(resultArea);
+                showNode(resultScroll);
             }
         }
     }
 
     private void showNode(javafx.scene.Node visible) {
-        resultArea.setVisible(visible == resultArea);
+        resultScroll.setVisible(visible == resultScroll);
         docTable.setVisible(visible == docTable);
         schemaTable.setVisible(visible == schemaTable);
     }

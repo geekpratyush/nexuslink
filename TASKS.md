@@ -636,7 +636,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
 - [x] Result grid: rendered, **sortable** (header click), **live filter** (`SortedList`→`FilteredList`, any-cell case-insensitive), and **Export JSON/CSV** of the displayed rows via FileChooser. `ResultGridExporter` (protocol-db, hand-rolled RFC 8259/4180, no deps) — 8 tests
 - [x] **4/4 unit tests pass** (in-memory SQLite)
-- [x] **ER diagram** — `JdbcService.erDiagramMermaid()` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button renders it in the `MarkdownView`. Unit test covers entities + relationship.
+- [x] **ER diagram** — `JdbcService.erDiagramMermaid()`/`erDiagramMermaid(tables)` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button opens a **table-picker** (choose which tables to include; dangling relationships to excluded tables are dropped) then renders it in `DiagramView` (zoom/pan + **Export SVG/PNG**). Unit tests cover entities + relationship + filtered selection.
 - [ ] Query history integration (reuse HistoryStore)
 - [ ] HikariCP connection pooling
 
@@ -699,7 +699,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `MongoClientView` UI — connection bar, database picker + collection list, operation selector (find/aggregate/insert/update/delete), Extended-JSON editor (Ctrl+Enter), result pane; wired into `MainWindow` (File menu + sidebar + tab opener)
 - [x] Document CRUD + **visual aggregation pipeline builder** (stage-by-stage, run or load into editor); in-grid edit/delete (matched by _id) from the Table view
 - [x] **SQL-like queries** (`executeSql`) beside the JSON filter — both options; **explain plan**; **export** results to JSON/CSV; **query history** (recall recent)
-- [x] **Schema diagram** (inferred ER from sampled docs) + **Compass-like views** (JSON / Table / Schema with field type %)
+- [x] **Schema diagram** (inferred ER from sampled docs) + **Compass-like views** (JSON / Table / Schema with field type %). JSON/document views now use a **themed syntax-highlighting `CodeArea`** (`JsonView`, RichTextFX) — keys/strings/numbers/bool/null coloured per theme, in both the read-only result pane and the editable document dialog.
 - [x] **Object explorer** (`MongoExplorer` + `ResourceExplorerView`): databases → collections → indexes tree with collStats + index definitions in the details panel
 - [-] Collection stats + index manager — stats + index listing surfaced in the explorer; _create/drop index UI TODO_
 - [-] Auth: SCRAM / x.509 / LDAP / Kerberos / TLS — supported via connection string (`mongodb+srv://`, TLS, SCRAM); _dedicated auth UI TODO_
@@ -890,6 +890,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-07-02: **UX polish pass — professional look.** (1) **Coloured HTTP verbs** everywhere via new
+  `ui.util.HttpMethods` (green/amber/blue/violet/red `.method-*` classes, previously dead): REST method
+  combo (button + dropdown cells) and History rows (leading verb → coloured pill). (2) **JSON syntax
+  highlighting** via new `ui.util.JsonView` (RichTextFX `CodeArea`, themed `.json-*` classes) — Mongo
+  result pane + editable document dialog now colour keys/strings/numbers/bool/null. (3) **ER-diagram table
+  picker** — `JdbcService.erDiagramMermaid(tables)` + checkbox dialog in `SqlClientView` (dangling FKs to
+  excluded tables dropped). (4) **Diagram Export SVG + PNG** buttons in `DiagramView` (SVG from the DOM,
+  PNG via `snapshot`). Added `javafx-swing` + `richtextfx` deps to nexuslink-ui. New tests: HttpMethods (3),
+  JsonView (3), ER filter (2). Full `mvn test` BUILD SUCCESS; fat-jar rebuilt (278 MB, richtextfx shaded,
+  launches clean).
 - 2026-06-29: **Session 41 — REST HMAC auth (REST depth, offline-testable signer).**
   - `HmacAuthenticator` (`nexuslink-protocol-http`): generic shared-secret request signer for the many
     bespoke "HMAC a canonical string" schemes APIs roll themselves. Builds a *string-to-sign* from a

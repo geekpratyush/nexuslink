@@ -160,10 +160,42 @@
 .combo-box-popup .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
 
 /* ---------- Method colours (REST) ---------- */
-.method-get    { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
-.method-post   { -fx-text-fill: -nl-warn;   -fx-font-weight: bold; }
-.method-put    { -fx-text-fill: -nl-info;   -fx-font-weight: bold; }
-.method-delete { -fx-text-fill: -nl-danger; -fx-font-weight: bold; }
+.method-get     { -fx-text-fill: -nl-ok;       -fx-font-weight: bold; }
+.method-post    { -fx-text-fill: -nl-warn;     -fx-font-weight: bold; }
+.method-put     { -fx-text-fill: -nl-info;     -fx-font-weight: bold; }
+.method-patch   { -fx-text-fill: -nl-accent-2; -fx-font-weight: bold; }
+.method-delete  { -fx-text-fill: -nl-danger;   -fx-font-weight: bold; }
+.method-head    { -fx-text-fill: -nl-text-muted; -fx-font-weight: bold; }
+.method-options { -fx-text-fill: -nl-text-muted; -fx-font-weight: bold; }
+
+/* Method pill/badge — a filled chip carrying the method colour as its border+text. */
+.method-badge {
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-weight: bold;
+    -fx-font-size: 11px;
+    -fx-padding: 2 8 2 8;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-background-color: -nl-surface-2;
+}
+
+/* ---------- JSON syntax highlighting (RichTextFX CodeArea) ---------- */
+.code-json {
+    -fx-background-color: -nl-bg;
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 12.5px;
+    -fx-padding: 6;
+}
+.code-json .text     { -fx-fill: -nl-text; }
+.code-json .caret    { -fx-stroke: -nl-accent; }
+.code-json .selection { -fx-fill: -nl-accent-soft; }
+.json-key    { -fx-fill: -nl-accent;   -fx-font-weight: bold; }
+.json-string { -fx-fill: -nl-ok; }
+.json-number { -fx-fill: -nl-warn; }
+.json-bool   { -fx-fill: -nl-accent-2; -fx-font-weight: bold; }
+.json-null   { -fx-fill: -nl-danger;   -fx-font-style: italic; }
+.json-punct  { -fx-fill: -nl-text-muted; }
 
 /* ---------- Status badges ---------- */
 .status-2xx { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }

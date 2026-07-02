@@ -270,6 +270,7 @@ public final class RestClientView extends BorderPane {
         methodCombo.setValue("GET");
         methodCombo.setId("restMethod");
         methodCombo.setPrefWidth(110);
+        com.nexuslink.ui.util.HttpMethods.styleCombo(methodCombo);
 
         urlField = new TextField();
         urlField.setId("urlBar");

@@ -105,7 +105,16 @@ public final class HistoryPanel extends BorderPane {
                     ? "status-err" : "status-" + (e.statusCode() / 100) + "xx");
             statusLbl.setMinWidth(38);
 
-            Label summary = new Label(fav + e.summary());
+            // Pull a leading HTTP verb (e.g. "GET https://…") into a coloured badge, if present.
+            String text = e.summary();
+            String[] parts = text.split("\\s+", 2);
+            Label methodBadge = null;
+            if (parts.length == 2 && com.nexuslink.ui.util.HttpMethods.isMethod(parts[0])) {
+                methodBadge = com.nexuslink.ui.util.HttpMethods.badge(parts[0]);
+                text = parts[1];
+            }
+
+            Label summary = new Label(fav + text);
             summary.getStyleClass().add("history-summary");
             HBox.setHgrow(summary, Priority.ALWAYS);
             summary.setMaxWidth(Double.MAX_VALUE);
@@ -114,7 +123,9 @@ public final class HistoryPanel extends BorderPane {
                     + "  " + e.durationMs() + "ms");
             time.getStyleClass().add("meta-label");
 
-            HBox row = new HBox(8, statusLbl, summary, time);
+            HBox row = methodBadge == null
+                    ? new HBox(8, statusLbl, summary, time)
+                    : new HBox(8, statusLbl, methodBadge, summary, time);
             row.setAlignment(Pos.CENTER_LEFT);
             setGraphic(row);
             setText(null);

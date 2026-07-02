@@ -37,6 +37,34 @@ class JdbcServiceTest {
     }
 
     @Test
+    void erDiagramLimitsToSelectedTablesAndDropsDanglingRelationships() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE customer (id INTEGER PRIMARY KEY, name TEXT)");
+            svc.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, "
+                    + "FOREIGN KEY(customer_id) REFERENCES customer(id))");
+
+            // Only 'orders' selected: its entity is drawn, but the relationship to the excluded
+            // 'customer' table must NOT appear (no reference to an entity we don't draw).
+            String mermaid = svc.erDiagramMermaid(java.util.List.of("orders"));
+            assertTrue(mermaid.contains("orders {"), mermaid);
+            assertFalse(mermaid.contains("customer {"), mermaid);
+            assertFalse(mermaid.contains("customer ||--o{ orders"), mermaid);
+        }
+    }
+
+    @Test
+    void erDiagramWithNullSelectionIncludesEverything() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE a (id INTEGER PRIMARY KEY)");
+            svc.execute("CREATE TABLE b (id INTEGER PRIMARY KEY)");
+            String mermaid = svc.erDiagramMermaid(null);
+            assertTrue(mermaid.contains("a {") && mermaid.contains("b {"), mermaid);
+        }
+    }
+
+    @Test
     void createsInsertsAndQueries() throws Exception {
         try (JdbcService svc = new JdbcService()) {
             svc.connect("jdbc:sqlite::memory:", null, null);
