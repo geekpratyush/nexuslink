@@ -47,6 +47,22 @@ class TransferQueueTest {
     }
 
     @Test
+    void pauseAndThrottleControlsDelegateToGovernor() {
+        TransferQueue q = queue(null, null);
+        assertFalse(q.isPaused());
+        q.pause();
+        assertTrue(q.isPaused());
+        q.resume();
+        assertFalse(q.isPaused());
+
+        assertEquals(0, q.maxBytesPerSecond());       // unlimited by default
+        q.setMaxBytesPerSecond(1_048_576);
+        assertEquals(1_048_576, q.maxBytesPerSecond());
+        q.setMaxBytesPerSecond(-5);                   // clamped to unlimited
+        assertEquals(0, q.maxBytesPerSecond());
+    }
+
+    @Test
     void uploadMovesThroughQueuedActiveDone(@TempDir Path local, @TempDir Path remote) throws Exception {
         Path src = Files.writeString(local.resolve("a.txt"), "hello world");
         TransferQueue q = queue(local, remote);

@@ -502,7 +502,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 7.1 SFTP / SCP
 - [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list/read + **upload/download (progress), mkdir, rename, delete (recursive), chmod**. **Verified live vs. test.rebex.net.**
 - [x] `SftpView` — **WinSCP/MobaXterm-style two-pane commander** (local↔remote) via reusable `com.nexuslink.ui.files` (`FileBrowserPane`/`DualPaneBrowser`); upload/download, **cross-pane drag-and-drop**, Ctrl/Shift multi-select, New-Folder/Rename(F2)/Delete(Del), context menus.
-- [ ] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle _(progress bar done; queue panel TODO)_
+- [x] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle (queue panel with Pause/Resume + Limit combo; `TransferGovernor` governs the in-flight copy)
 - [ ] `SyncService` — bidirectional sync with conflict resolution (hash compare)
 - [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
@@ -556,7 +556,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       **cancel** (QUEUED→CANCELLED, worker skips it) + **retry** (FAILED/CANCELLED→QUEUED via
       `retry`/`retryAllFailed`) + **reorder** (`move` a QUEUED item up/down without displacing
       active/terminal ones) with a row context menu + "Retry failed" button (20 tests).
-      **TODO:** pause/resume of an in-flight transfer, bandwidth throttle
+      **pause/resume of an in-flight transfer + bandwidth throttle** now done via `TransferGovernor`
+      (JavaFX-free; blocks/sleeps inside the cumulative-bytes progress callback, so no SFTP/FTP/local
+      code changes) — `queue.pause()/resume()/setMaxBytesPerSecond()`; panel gets a Pause/Resume button
+      + a Limit combo (Unlimited/512 KB/1/5/10 MB/s). Injectable clock+sleeper → 4 governor tests +
+      1 queue-delegation test.
 - [x] **Recursive directory transfers** — `TransferQueue.enqueueRecursive` walks a selected folder
       (via the source `FileSystem`), recreates the tree on the destination side (`mkdir`), and enqueues
       every contained file into the normal sequential worker; `DualPaneBrowser` no longer filters out
@@ -891,6 +895,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-07-02: **File Commander — pause/resume + bandwidth throttle.** New JavaFX-free `TransferGovernor`
+  governs the in-flight transfer at the one shared choke point (the cumulative-bytes progress callback,
+  called per 64 KB chunk): it blocks the transfer thread while paused and sleeps to cap the average rate —
+  so no SFTP/FTP/local copy code changed. `TransferQueue` exposes `pause`/`resume`/`isPaused`/
+  `setMaxBytesPerSecond`; `stopWorker` resumes so a paused transfer can wind down. `TransferQueuePanel`
+  footer gains a Pause/Resume button + a Limit combo (Unlimited/512 KB/1/5/10 MB/s). Injectable clock +
+  sleeper → deterministic throttle tests; real-thread pause test. +5 tests. Full `mvn test` BUILD SUCCESS.
 - 2026-07-02: **JSON highlighting across API testers.** Extended `ui.util.JsonView` with a content-aware
   `plainArea`/`setSmart` (highlights only when the text starts with `{`/`[`, so XML/hex/error bodies stay
   plain) and wired it into the **REST response body** (all view modes), **gRPC** response, and **GraphQL**

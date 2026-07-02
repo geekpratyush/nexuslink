@@ -7,6 +7,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableCell;
@@ -53,6 +54,20 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         counts.getStyleClass().add("meta-label");
         counts.setMinWidth(260);
 
+        Button pauseBtn = new Button("Pause");
+        pauseBtn.getStyleClass().add("btn-secondary");
+        pauseBtn.setOnAction(e -> {
+            if (queue.isPaused()) { queue.resume(); pauseBtn.setText("Pause"); }
+            else { queue.pause(); pauseBtn.setText("Resume"); }
+        });
+
+        Label limitLbl = new Label("Limit:");
+        limitLbl.getStyleClass().add("meta-label");
+        ComboBox<String> throttle = new ComboBox<>(FXCollections.observableArrayList(
+                "Unlimited", "512 KB/s", "1 MB/s", "5 MB/s", "10 MB/s"));
+        throttle.setValue("Unlimited");
+        throttle.setOnAction(e -> queue.setMaxBytesPerSecond(bytesForPreset(throttle.getValue())));
+
         Button retryFailed = new Button("Retry failed");
         retryFailed.getStyleClass().add("btn-secondary");
         retryFailed.setOnAction(e -> queue.retryAllFailed());
@@ -61,7 +76,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> queue.clearCompleted());
 
-        HBox footer = new HBox(10, counts, overall, retryFailed, clear);
+        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 
@@ -169,6 +184,18 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         String rate = TransferItem.formatRate(queue.activeBytesPerSecond(System.nanoTime()));
         counts.setText(rate.isEmpty() ? base : base + "  —  " + rate);
         if (queue.hasPending() && !isExpanded()) setExpanded(true);
+    }
+
+    /** Maps a throttle preset label to a bytes/second ceiling ({@code 0} = unlimited). */
+    static long bytesForPreset(String preset) {
+        if (preset == null) return 0;
+        return switch (preset) {
+            case "512 KB/s" -> 512L * 1024;
+            case "1 MB/s"   -> 1024L * 1024;
+            case "5 MB/s"   -> 5L * 1024 * 1024;
+            case "10 MB/s"  -> 10L * 1024 * 1024;
+            default          -> 0;   // "Unlimited"
+        };
     }
 
     /** Per-row speed · ETA text, shown only while a transfer is active. */

@@ -34,6 +34,7 @@ public final class TransferQueue {
     private final Object lock = new Object();
 
     private Consumer<TransferItem> onItemFinished = i -> {};
+    private final TransferGovernor governor = new TransferGovernor();
     private volatile boolean workerRunning;
     private Thread worker;
 
@@ -268,8 +269,24 @@ public final class TransferQueue {
     /** Stops the background worker (already-running transfers complete first). */
     public synchronized void stopWorker() {
         workerRunning = false;
+        governor.resume();   // release any paused in-flight transfer so it can wind down
         synchronized (lock) { lock.notifyAll(); }
     }
+
+    // ---- pause / resume + bandwidth throttle (applied to the in-flight transfer) ----
+
+    /** Pauses the queue: the active transfer blocks between chunks and no new item starts. */
+    public void pause() { governor.pause(); }
+
+    /** Resumes a paused queue. */
+    public void resume() { governor.resume(); }
+
+    public boolean isPaused() { return governor.isPaused(); }
+
+    /** Caps overall throughput to {@code bytesPerSecond} ({@code <= 0} = unlimited). */
+    public void setMaxBytesPerSecond(long bytesPerSecond) { governor.setMaxBytesPerSecond(bytesPerSecond); }
+
+    public long maxBytesPerSecond() { return governor.maxBytesPerSecond(); }
 
     private void workerLoop() {
         while (workerRunning) {
@@ -330,13 +347,16 @@ public final class TransferQueue {
     }
 
     private void execute(TransferItem item) throws Exception {
+        governor.startTransfer();
         if (item.direction() == TransferItem.Direction.UPLOAD) {
             transfer.upload(Path.of(item.source().path()), item.destDir(), sent -> {
+                governor.tick(sent);
                 item.setTransferredBytes(sent);
                 fireProgress(item);
             });
         } else {
             transfer.download(item.source(), Path.of(item.destDir()), read -> {
+                governor.tick(read);
                 item.setTransferredBytes(read);
                 fireProgress(item);
             });
