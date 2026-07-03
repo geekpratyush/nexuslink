@@ -11,7 +11,10 @@ import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.util.List;
@@ -43,6 +46,9 @@ public final class DualPaneBrowser extends BorderPane {
     private String lastLocalPath = "";
     private String lastRemotePath = "";
 
+    // The pane the Norton-Commander function keys act on — whichever last held keyboard focus.
+    private FileBrowserPane activePane;
+
     public DualPaneBrowser(FileSystem local, FileSystem remote, FileTransfer transfer) {
         this.localPane = new FileBrowserPane(local, "Local — " + local.name());
         this.remotePane = new FileBrowserPane(remote, "Remote — " + remote.name());
@@ -61,6 +67,12 @@ public final class DualPaneBrowser extends BorderPane {
         // Synchronized browsing: when one pane navigates, mirror the relative move onto the other.
         localPane.setOnChanged(() -> onPaneNavigated(true));
         remotePane.setOnChanged(() -> onPaneNavigated(false));
+
+        // Track which pane the Norton-Commander function keys should act on (last focused).
+        this.activePane = localPane;
+        localPane.setOnFocused(() -> activePane = localPane);
+        remotePane.setOnFocused(() -> activePane = remotePane);
+        addEventFilter(KeyEvent.KEY_PRESSED, this::onCommanderKey);
 
         // Refresh the destination pane each time a transfer completes.
         queue.setOnItemFinished(item -> {
@@ -169,9 +181,62 @@ public final class DualPaneBrowser extends BorderPane {
         }
     }
 
+    /**
+     * Norton-Commander function keys, handled for the whole commander: F5 copy the active pane's
+     * selection to the other pane, F6 rename, F7 new folder, F8 delete, and Tab to switch panes.
+     */
+    private void onCommanderKey(KeyEvent e) {
+        // Don't hijack Tab / function keys while the user is editing the address or filter field.
+        if (getScene() != null
+                && getScene().getFocusOwner() instanceof javafx.scene.control.TextInputControl) {
+            return;
+        }
+        switch (e.getCode()) {
+            case F5 -> copyActiveToOther();
+            case F6 -> activePane.renameSelected();
+            case F7 -> activePane.newFolder();
+            case F8 -> activePane.deleteSelected();
+            case TAB -> switchPane();
+            default -> { return; }                       // leave every other key to the focused control
+        }
+        e.consume();
+    }
+
+    /** Copies the active pane's current selection to the opposite pane's directory. */
+    private void copyActiveToOther() {
+        if (activePane == remotePane) download(remotePane.selected());
+        else upload(localPane.selected());
+    }
+
+    /** Moves keyboard focus (and the active-pane marker) to the opposite pane. */
+    private void switchPane() {
+        FileBrowserPane target = activePane == localPane ? remotePane : localPane;
+        activePane = target;
+        target.focusTable();
+    }
+
+    private HBox buildFunctionBar() {
+        HBox bar = new HBox(6,
+                fnKey("F5 Copy", this::copyActiveToOther),
+                fnKey("F6 Rename", () -> activePane.renameSelected()),
+                fnKey("F7 MkDir", () -> activePane.newFolder()),
+                fnKey("F8 Delete", () -> activePane.deleteSelected()),
+                fnKey("Tab Switch", this::switchPane));
+        bar.setAlignment(Pos.CENTER_LEFT);
+        return bar;
+    }
+
+    private Button fnKey(String label, Runnable action) {
+        Button b = new Button(label);
+        b.getStyleClass().add("btn-secondary");
+        b.setFocusTraversable(false);                    // keep focus on the file table so the key acts there
+        b.setOnAction(e -> action.run());
+        return b;
+    }
+
     private VBox buildBottom() {
         messageLabel.getStyleClass().add("meta-label");
-        VBox box = new VBox(4, messageLabel, queuePanel);
+        VBox box = new VBox(4, buildFunctionBar(), messageLabel, queuePanel);
         box.setPadding(new Insets(6, 8, 6, 8));
         return box;
     }

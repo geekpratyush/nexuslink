@@ -586,14 +586,17 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [ ] Drag-over highlight / drop-target affordance for the above _(cross-pane highlight already done)_
 
 **File operations**
-- [ ] Batch/multi-file rename; duplicate; copy-path
+- [-] Batch/multi-file rename; duplicate; **copy-path** — copy-path done (context menu + Ctrl+Shift+C copies
+      the full path(s) of the selection to the clipboard); batch rename / duplicate still TODO
 - [ ] Properties dialog (size, permissions, owner, timestamps)
 - [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
 - [ ] Compare directories (highlight new/changed/missing) — feeds `SyncService` (7.1)
 
 **Sessions & integration**
 - [ ] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session
-- [ ] Norton-Commander keyboard shortcuts (F5 copy · F6 move/rename · F7 mkdir · F8 delete · Tab switches panes)
+- [x] Norton-Commander keyboard shortcuts (F5 copy · F6 rename · F7 mkdir · F8 delete · Tab switches panes) —
+      handled at the `DualPaneBrowser` level over the active (last-focused) pane, with a matching clickable
+      function-key bar along the bottom; text-field edits are not hijacked. _(F6 is rename; true move TODO.)_
 - [ ] Embedded SSH terminal alongside SFTP ("Open terminal here") — depends on 8.5 SSH Terminal
 - [ ] SCP transfer mode in addition to SFTP
 - [ ] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) once their upload/put lands (7.3)

@@ -7,6 +7,7 @@ import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.DataFormat;
 import javafx.scene.input.Dragboard;
@@ -50,6 +51,7 @@ public final class FileBrowserPane extends VBox {
     private Consumer<FileItem> onActivateFile = f -> {};
     private Runnable onChanged = () -> {};
     private Consumer<List<FileItem>> onDropFromOther = items -> {};
+    private Runnable onFocused = () -> {};
 
     public FileBrowserPane(FileSystem fs, String title) {
         this.fs = fs;
@@ -78,6 +80,12 @@ public final class FileBrowserPane extends VBox {
     public void setOnDropFromOther(Consumer<List<FileItem>> handler) {
         this.onDropFromOther = handler == null ? items -> {} : handler;
     }
+
+    /** Notified when this pane's table gains keyboard focus, so a container can track the active pane. */
+    public void setOnFocused(Runnable handler) { this.onFocused = handler == null ? () -> {} : handler; }
+
+    /** Moves keyboard focus to this pane's file table (used when switching panes with Tab). */
+    public void focusTable() { table.requestFocus(); }
 
     public String currentPath() { return currentPath; }
 
@@ -181,11 +189,13 @@ public final class FileBrowserPane extends VBox {
             return row;
         });
         wireDropTarget();
+        table.focusedProperty().addListener((o, was, now) -> { if (now) onFocused.run(); });
         table.setOnKeyPressed(e -> {
             FileItem sel = table.getSelectionModel().getSelectedItem();
             if (e.getCode() == KeyCode.ENTER && sel != null) activate(sel);
             else if (e.getCode() == KeyCode.DELETE && sel != null) deleteSelected();
             else if (e.getCode() == KeyCode.F2 && sel != null) renameSelected();
+            else if (e.getCode() == KeyCode.C && e.isShortcutDown() && e.isShiftDown()) copyPathSelected();
         });
         table.setContextMenu(buildContextMenu());
         return table;
@@ -198,11 +208,13 @@ public final class FileBrowserPane extends VBox {
         rename.setOnAction(e -> renameSelected());
         MenuItem delete = new MenuItem("Delete  (Del)");
         delete.setOnAction(e -> deleteSelected());
+        MenuItem copyPath = new MenuItem("Copy path  (Ctrl+Shift+C)");
+        copyPath.setOnAction(e -> copyPathSelected());
         MenuItem mkdir = new MenuItem("New Folder…");
         mkdir.setOnAction(e -> newFolder());
         MenuItem refresh = new MenuItem("Refresh");
         refresh.setOnAction(e -> refresh());
-        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, delete, mkdir, new SeparatorMenuItem(), refresh);
+        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, delete, copyPath, mkdir, new SeparatorMenuItem(), refresh);
         if (fs.supportsChmod()) {
             MenuItem chmod = new MenuItem("Permissions (chmod)…");
             chmod.setOnAction(e -> chmodSelected());
@@ -340,7 +352,19 @@ public final class FileBrowserPane extends VBox {
         statusLabel.setText(message);
     }
 
-    private void newFolder() {
+    /** Copies the full path(s) of the current selection (excluding "..") to the system clipboard. */
+    public void copyPathSelected() {
+        List<FileItem> sel = selected();
+        sel.removeIf(FileItem::parent);
+        if (sel.isEmpty()) return;
+        String joined = sel.stream().map(FileItem::path).collect(java.util.stream.Collectors.joining("\n"));
+        ClipboardContent content = new ClipboardContent();
+        content.putString(joined);
+        Clipboard.getSystemClipboard().setContent(content);
+        statusLabel.setText("Copied " + sel.size() + " path(s) to clipboard");
+    }
+
+    public void newFolder() {
         TextInputDialog d = themedInput("new-folder", "New Folder", "Folder name:");
         d.showAndWait().ifPresent(nameRaw -> {
             String nm = nameRaw.trim();
@@ -349,7 +373,7 @@ public final class FileBrowserPane extends VBox {
         });
     }
 
-    private void renameSelected() {
+    public void renameSelected() {
         FileItem sel = table.getSelectionModel().getSelectedItem();
         if (sel == null || sel.parent()) return;
         TextInputDialog d = themedInput(sel.name(), "Rename", "New name:");
@@ -360,7 +384,7 @@ public final class FileBrowserPane extends VBox {
         });
     }
 
-    private void deleteSelected() {
+    public void deleteSelected() {
         List<FileItem> sel = selected();
         sel.removeIf(FileItem::parent);
         if (sel.isEmpty()) return;
