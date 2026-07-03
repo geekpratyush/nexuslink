@@ -212,6 +212,51 @@ class S3PresignedUrlTest {
                 () -> S3PresignedUrl.get(AK, SK, REGION, BUCKET, "test.txt", 604800, T));
     }
 
+    @Test
+    void customEndpointHttpsHostUsedInsteadOfAws() {
+        String url = S3PresignedUrl.presign(S3PresignedUrl.Request.builder()
+                .accessKey(AK).secretKey(SK).region(REGION).bucket(BUCKET).objectKey("test.txt")
+                .endpoint("https://play.min.io").pathStyle(true).expirySeconds(900).build(), T);
+        assertTrue(url.startsWith("https://play.min.io/" + BUCKET + "/test.txt?"), url);
+        assertFalse(url.contains("amazonaws.com"));
+        assertTrue(url.contains("X-Amz-Signature="));
+    }
+
+    @Test
+    void customEndpointHonoursSchemeAndPort() {
+        String url = S3PresignedUrl.presign(S3PresignedUrl.Request.builder()
+                .accessKey(AK).secretKey(SK).region(REGION).bucket(BUCKET).objectKey("k.txt")
+                .endpoint("http://localhost:4566").pathStyle(true).expirySeconds(900).build(), T);
+        assertTrue(url.startsWith("http://localhost:4566/" + BUCKET + "/k.txt?"), url);
+    }
+
+    @Test
+    void customEndpointChangesSignatureVersusAws() {
+        var b = S3PresignedUrl.Request.builder()
+                .accessKey(AK).secretKey(SK).region(REGION).bucket(BUCKET).objectKey("test.txt")
+                .pathStyle(true).expirySeconds(900);
+        String aws = S3PresignedUrl.presign(b.build(), T);
+        String minio = S3PresignedUrl.presign(b.endpoint("https://play.min.io").build(), T);
+        // The signed host header differs, so the signature must differ too.
+        assertNotEquals(signature(aws), signature(minio));
+    }
+
+    @Test
+    void blankEndpointFallsBackToAws() {
+        String url = S3PresignedUrl.presign(S3PresignedUrl.Request.builder()
+                .accessKey(AK).secretKey(SK).region(REGION).bucket(BUCKET).objectKey("test.txt")
+                .endpoint("  ").pathStyle(true).expirySeconds(900).build(), T);
+        assertTrue(url.contains("s3." + REGION + ".amazonaws.com"), url);
+    }
+
+    @Test
+    void customEndpointVirtualHostedPrefixesBucket() {
+        String url = S3PresignedUrl.presign(S3PresignedUrl.Request.builder()
+                .accessKey(AK).secretKey(SK).region(REGION).bucket(BUCKET).objectKey("test.txt")
+                .endpoint("https://minio.example.com").pathStyle(false).expirySeconds(900).build(), T);
+        assertTrue(url.startsWith("https://" + BUCKET + ".minio.example.com/test.txt?"), url);
+    }
+
     /** Extracts the hex signature value from a presigned URL. */
     private static String signature(String url) {
         return url.substring(url.indexOf("X-Amz-Signature=") + "X-Amz-Signature=".length());

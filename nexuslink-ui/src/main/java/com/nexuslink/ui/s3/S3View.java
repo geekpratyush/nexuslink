@@ -1,6 +1,8 @@
 package com.nexuslink.ui.s3;
 
+import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.s3.S3Explorer;
+import com.nexuslink.protocol.s3.S3PresignedUrl;
 import com.nexuslink.protocol.s3.S3Service;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
@@ -8,6 +10,8 @@ import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.*;
 
 import java.util.function.Consumer;
@@ -30,12 +34,57 @@ public final class S3View extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
+    private final ComboBox<PresignExpiry> presignExpiry = new ComboBox<>();
+    private final Button presignBtn = new Button("Copy presigned link");
+    // The currently selected object (bucket + key), or null when a bucket/nothing is selected.
+    private String selectedBucket;
+    private String selectedKey;
+
+    // Connection parameters captured (already ${VAR}-resolved) at connect time so a presigned URL
+    // is signed with exactly the credentials/endpoint the browser is connected with.
+    private String connEndpoint;
+    private String connAccessKey;
+    private String connSecretKey;
+    private String connRegion;
+    private boolean connPathStyle;
+
     private Consumer<String> logger = s -> {};
+
+    /** Preset lifetimes offered for a presigned URL. */
+    private enum PresignExpiry {
+        FIFTEEN_MIN("15 minutes", 900), ONE_HOUR("1 hour", 3600),
+        ONE_DAY("24 hours", 86_400), SEVEN_DAYS("7 days", 604_800);
+        final String label; final int seconds;
+        PresignExpiry(String label, int seconds) { this.label = label; this.seconds = seconds; }
+        @Override public String toString() { return label; }
+    }
 
     public S3View() {
         getStyleClass().add("s3-view");
+        presignExpiry.getItems().setAll(PresignExpiry.values());
+        presignExpiry.getSelectionModel().select(PresignExpiry.ONE_HOUR);
+        presignBtn.setDisable(true);
+        presignBtn.setOnAction(e -> copyPresignedUrl());
         setTop(buildBar());
+        explorer.setOnSelect(this::onNodeSelected);
         setCenter(explorer);
+    }
+
+    /** Remembers the selected object so a presigned link can be generated for it. */
+    private void onNodeSelected(ResourceNode node) {
+        if (node != null && node.kind() == ResourceNode.Kind.OBJECT && node.id().startsWith("obj:")) {
+            String rest = node.id().substring("obj:".length());
+            int slash = rest.indexOf('/');
+            if (slash > 0) {
+                selectedBucket = rest.substring(0, slash);
+                selectedKey = rest.substring(slash + 1);
+                presignBtn.setDisable(false);
+                return;
+            }
+        }
+        selectedBucket = null;
+        selectedKey = null;
+        presignBtn.setDisable(true);
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -80,7 +129,14 @@ public final class S3View extends BorderPane {
         row2.setPadding(new Insets(0, 10, 6, 10));
 
         statusLabel.getStyleClass().add("meta-label");
-        HBox statusRow = new HBox(statusLabel);
+        presignBtn.getStyleClass().add("btn-secondary");
+        presignBtn.setTooltip(new Tooltip(
+                "Select an object, then copy a time-limited SigV4 presigned GET link to the clipboard."));
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox statusRow = new HBox(8, statusLabel, spacer,
+                label("Link expires:"), presignExpiry, presignBtn);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
         return new VBox(row1, row2, statusRow);
     }
@@ -112,6 +168,12 @@ public final class S3View extends BorderPane {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + task.getValue() + " bucket(s)");
             logger.accept("S3 connected — " + task.getValue() + " buckets");
+            // Remember the resolved connection params for presigning.
+            connEndpoint = endpoint;
+            connAccessKey = accessKey;
+            connSecretKey = secretKey;
+            connRegion = region.isBlank() ? "us-east-1" : region;
+            connPathStyle = pathStyle.isSelected();
             explorer.setExplorer(new S3Explorer(service));
             explorer.load();
             connectBtn.setDisable(false);
@@ -125,5 +187,35 @@ public final class S3View extends BorderPane {
         Thread t = new Thread(task, "s3-task");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** Signs a time-limited GET URL for the selected object and copies it to the clipboard. */
+    private void copyPresignedUrl() {
+        if (selectedBucket == null || selectedKey == null || connAccessKey == null) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Select an object first");
+            return;
+        }
+        PresignExpiry expiry = presignExpiry.getValue();
+        if (expiry == null) expiry = PresignExpiry.ONE_HOUR;
+        try {
+            String url = S3PresignedUrl.presign(S3PresignedUrl.Request.builder()
+                    .accessKey(connAccessKey).secretKey(connSecretKey).region(connRegion)
+                    .bucket(selectedBucket).objectKey(selectedKey)
+                    .method("GET").expirySeconds(expiry.seconds)
+                    .pathStyle(connPathStyle).endpoint(connEndpoint)
+                    .build());
+            ClipboardContent content = new ClipboardContent();
+            content.putString(url);
+            Clipboard.getSystemClipboard().setContent(content);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Presigned link copied (valid " + expiry.label + ")");
+            logger.accept("S3 presigned GET " + selectedBucket + "/" + selectedKey
+                    + " (" + expiry.label + ") copied to clipboard");
+        } catch (RuntimeException ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Presign failed: " + ex.getMessage());
+            logger.accept("S3 presign FAILED: " + ex.getMessage());
+        }
     }
 }
