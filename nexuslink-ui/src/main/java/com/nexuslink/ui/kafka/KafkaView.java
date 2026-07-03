@@ -7,6 +7,7 @@ import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaService;
 import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
+import com.nexuslink.protocol.kafka.SchemaRegistryClient;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.animation.Animation;
@@ -95,6 +96,17 @@ public final class KafkaView extends BorderPane {
     private Timeline lagTimeline;
     /** Guards against overlapping refreshes when a poll fires before the previous one finishes. */
     private boolean lagRefreshing = false;
+
+    // Schema Registry browser: connect to a Confluent/Apicurio-compatible registry over HTTP (its own
+    // URL + optional basic auth, independent of the broker), list subjects/versions, view + register schemas.
+    private final TextField registryUrl = new TextField("http://localhost:8081");
+    private final TextField registryUser = new TextField();
+    private final PasswordField registryPass = new PasswordField();
+    private final ObservableList<String> registrySubjects = FXCollections.observableArrayList();
+    private final ListView<String> registrySubjectList = new ListView<>(registrySubjects);
+    private final ComboBox<Integer> registryVersionCombo = new ComboBox<>();
+    private final Label registryStatus = new Label();
+    private org.fxmisc.richtext.CodeArea registrySchemaArea;
 
     /** Cap on retained consumed messages so a long-running stream stays bounded. */
     private static final int MAX_MESSAGES = 10_000;
@@ -195,7 +207,7 @@ public final class KafkaView extends BorderPane {
         tabs.getStyleClass().add("editor-tabs");
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabs.getTabs().addAll(new Tab("Produce", buildProduce()), new Tab("Consume", buildConsume()),
-                new Tab("Consumer Lag", buildLag()));
+                new Tab("Consumer Lag", buildLag()), new Tab("Schema Registry", buildSchemaRegistry()));
 
         SplitPane sp = new SplitPane(explorer, tabs);
         sp.setDividerPositions(0.28);
@@ -293,6 +305,178 @@ public final class KafkaView extends BorderPane {
         box.setPadding(new Insets(8));
         VBox.setVgrow(lagTable, Priority.ALWAYS);
         return box;
+    }
+
+    /**
+     * Confluent/Apicurio-compatible Schema Registry browser. Independent of the Kafka broker
+     * connection: point it at the registry's HTTP URL (optionally with basic auth), list subjects,
+     * pick a version to view its schema, or register a new one. Every call runs off the FX thread
+     * against a fresh {@link SchemaRegistryClient} built from the current fields.
+     */
+    private VBox buildSchemaRegistry() {
+        for (TextField f : new TextField[]{registryUrl, registryUser, registryPass}) f.getStyleClass().add("nl-field");
+        registryUrl.setPromptText("http://localhost:8081");
+        registryUrl.setPrefWidth(240);
+        registryUser.setPromptText("user (optional)");
+        registryUser.setPrefWidth(120);
+        registryPass.setPromptText("password");
+        registryPass.setPrefWidth(120);
+        registryStatus.getStyleClass().add("meta-label");
+
+        Button loadBtn = new Button("Load subjects");
+        loadBtn.getStyleClass().add("btn-primary");
+        loadBtn.setOnAction(e -> loadSubjects());
+
+        Button registerBtn = new Button("Register…");
+        registerBtn.getStyleClass().add("btn-secondary");
+        registerBtn.setOnAction(e -> registerSchema());
+
+        registrySubjectList.getSelectionModel().selectedItemProperty().addListener(
+                (o, a, subject) -> { if (subject != null) loadVersions(subject); });
+        registryVersionCombo.setPromptText("version");
+        registryVersionCombo.valueProperty().addListener((o, a, v) -> {
+            String subject = registrySubjectList.getSelectionModel().getSelectedItem();
+            if (subject != null && v != null) loadSchema(subject, v);
+        });
+
+        registrySchemaArea = com.nexuslink.ui.util.JsonView.plainArea(false);
+        org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> schemaScroll =
+                new org.fxmisc.flowless.VirtualizedScrollPane<>(registrySchemaArea);
+
+        HBox top = new HBox(8, label("Registry:"), registryUrl, label("User:"), registryUser,
+                registryPass, loadBtn, registerBtn, registryStatus);
+        top.setAlignment(Pos.CENTER_LEFT);
+
+        VBox versionBox = new VBox(6, label("Version:"), registryVersionCombo, schemaScroll);
+        versionBox.setPadding(new Insets(0, 0, 0, 8));
+        VBox.setVgrow(schemaScroll, Priority.ALWAYS);
+        SplitPane sp = new SplitPane(registrySubjectList, versionBox);
+        sp.setDividerPositions(0.30);
+
+        VBox box = new VBox(8, top, sp);
+        box.setPadding(new Insets(8));
+        VBox.setVgrow(sp, Priority.ALWAYS);
+        return box;
+    }
+
+    /** A client built from the current registry URL plus optional basic-auth fields. */
+    private SchemaRegistryClient registryClient() {
+        String url = registryUrl.getText().trim();
+        String user = registryUser.getText();
+        return user != null && !user.isBlank()
+                ? new SchemaRegistryClient(url, user, registryPass.getText())
+                : new SchemaRegistryClient(url);
+    }
+
+    private void loadSubjects() {
+        if (registryUrl.getText() == null || registryUrl.getText().isBlank()) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Enter a registry URL");
+            return;
+        }
+        registryStatus.getStyleClass().setAll("meta-label");
+        registryStatus.setText("Loading subjects…");
+        SchemaRegistryClient client = registryClient();
+        Task<List<String>> task = new Task<>() {
+            @Override protected List<String> call() throws Exception { return client.listSubjects(); }
+        };
+        task.setOnSucceeded(e -> {
+            registrySubjects.setAll(task.getValue());
+            registryVersionCombo.getItems().clear();
+            registrySchemaArea.clear();
+            registryStatus.getStyleClass().setAll("meta-label");
+            registryStatus.setText(task.getValue().size() + " subject(s)");
+            logger.accept("Schema Registry: loaded " + task.getValue().size() + " subject(s)");
+        });
+        task.setOnFailed(e -> registryFail("load subjects", task.getException()));
+        runBg(task, "schema-subjects");
+    }
+
+    private void loadVersions(String subject) {
+        SchemaRegistryClient client = registryClient();
+        Task<List<Integer>> task = new Task<>() {
+            @Override protected List<Integer> call() throws Exception { return client.listVersions(subject); }
+        };
+        task.setOnSucceeded(e -> {
+            List<Integer> versions = task.getValue();
+            registryVersionCombo.getItems().setAll(versions);
+            // Select the latest version, which loads its schema via the value listener.
+            if (!versions.isEmpty()) registryVersionCombo.setValue(versions.get(versions.size() - 1));
+        });
+        task.setOnFailed(e -> registryFail("load versions", task.getException()));
+        runBg(task, "schema-versions");
+    }
+
+    private void loadSchema(String subject, int version) {
+        SchemaRegistryClient client = registryClient();
+        Task<SchemaRegistryClient.Schema> task = new Task<>() {
+            @Override protected SchemaRegistryClient.Schema call() throws Exception {
+                return client.getSchema(subject, version);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            SchemaRegistryClient.Schema s = task.getValue();
+            com.nexuslink.ui.util.JsonView.setSmart(registrySchemaArea, s.schema());
+            registryStatus.getStyleClass().setAll("meta-label");
+            registryStatus.setText(subject + " v" + s.version() + " (id " + s.id() + ")");
+        });
+        task.setOnFailed(e -> registryFail("load schema", task.getException()));
+        runBg(task, "schema-get");
+    }
+
+    /** Prompts for a subject + schema and registers it, refreshing the subject list on success. */
+    private void registerSchema() {
+        if (registryUrl.getText() == null || registryUrl.getText().isBlank()) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Enter a registry URL");
+            return;
+        }
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Register schema");
+        dialog.setHeaderText("Register a new schema version under a subject");
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        TextField subjectField = new TextField(registrySubjectList.getSelectionModel().getSelectedItem());
+        subjectField.setPromptText("subject");
+        TextArea schemaField = new TextArea();
+        schemaField.getStyleClass().add("code-area");
+        schemaField.setPromptText("{\"type\":\"record\",\"name\":\"...\",\"fields\":[...]}");
+        schemaField.setPrefRowCount(10);
+        schemaField.setPrefColumnCount(50);
+        VBox content = new VBox(8, label("Subject:"), subjectField, label("Schema:"), schemaField);
+        VBox.setVgrow(schemaField, Priority.ALWAYS);
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        String subject = subjectField.getText() == null ? "" : subjectField.getText().trim();
+        String schema = schemaField.getText();
+        if (subject.isBlank() || schema == null || schema.isBlank()) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Subject and schema are required");
+            return;
+        }
+        registryStatus.getStyleClass().setAll("meta-label");
+        registryStatus.setText("Registering…");
+        SchemaRegistryClient client = registryClient();
+        Task<Integer> task = new Task<>() {
+            @Override protected Integer call() throws Exception { return client.register(subject, schema); }
+        };
+        task.setOnSucceeded(e -> {
+            registryStatus.setText("Registered " + subject + " → id " + task.getValue());
+            logger.accept("Schema Registry: registered " + subject + " (id " + task.getValue() + ")");
+            loadSubjects();
+        });
+        task.setOnFailed(e -> registryFail("register", task.getException()));
+        runBg(task, "schema-register");
+    }
+
+    private void registryFail(String what, Throwable ex) {
+        registryStatus.getStyleClass().setAll("status-err");
+        registryStatus.setText("✖ " + ex.getMessage());
+        logger.accept("Schema Registry: " + what + " FAILED: " + ex.getMessage());
     }
 
     private void buildLagTable() {

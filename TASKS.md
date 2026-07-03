@@ -392,8 +392,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       subject+version or by global id, register a version; optional HTTP basic auth) over `java.net.http`.
       Responses parsed by a dependency-free `SchemaRegistryJson` reader/writer (full string-escape +
       `\uXXXX`), so the module stays JSON-lib-free like `KafkaMessageExporter`. 12 tests (7 parser incl.
-      embedded escaped schema + round-trip, 5 loopback-server client). _(Caffeine cache + UI panel TODO)_
-- [ ] Subject list, version history, schema viewer (Avro/Protobuf/JSON Schema)
+      embedded escaped schema + round-trip, 5 loopback-server client). **Wired into `KafkaView`** as a
+      **Schema Registry** tab (registry URL + optional basic auth, independent of the broker connection).
+      _(Caffeine cache TODO.)_
+- [x] Subject list, version history, schema viewer (Avro/Protobuf/JSON Schema) — `KafkaView` Schema Registry
+      tab: **Load subjects** → subjects `ListView`; selecting a subject loads its versions into a combo;
+      picking a version shows the schema (JSON-highlighted, latest selected by default); **Register…** dialog
+      posts a new schema version and refreshes. All calls run off the FX thread via `runBg`.
 - [ ] Compatibility mode display + change dialog
 - [ ] Schema evolution diff (side-by-side version compare)
 
