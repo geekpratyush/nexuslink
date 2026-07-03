@@ -403,7 +403,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Schema evolution diff (side-by-side version compare) — pure `SchemaDiff.between(old, new)`: parses each
       Avro record schema via the module's `SchemaRegistryJson`, canonicalizes field types (unions → `union[a,b]`),
       and returns name-ordered `FieldChange`s (`ADDED`/`REMOVED`/`TYPE_CHANGED`, nullability shows as a type
-      change), an `unchanged` count, and an `isCompatible()` (additive-only) flag. 17 tests. _(UI compare view TODO.)_
+      change), an `unchanged` count, and an `isCompatible()` (additive-only) flag. 17 tests. **Wired into the
+      Schema Registry tab** as a "Compare versions…" button → pick two versions → field-change table + compatibility verdict.
 
 ### 4.8 Kafka Metrics
 - [ ] `KafkaMetricsService` — polls JMX or AdminClient metrics on 10s interval
@@ -608,7 +609,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
 ### 7.3 Object Storage
-- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText, **putObject/putText + deleteObject** (upload). **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` (list/get **and upload→get→delete**) vs LocalStack. **Presigned URLs** done: pure `S3PresignedUrl` — AWS SigV4 query-string presigner for GET/PUT (virtual-hosted + path-style, optional session token, `UNSIGNED-PAYLOAD`, `javax.crypto` only, no SDK / cross-module dep); 22 tests incl. a known-answer signature. _Versioning / multipart + UI "copy presigned link" TODO._
+- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText, **putObject/putText + deleteObject** (upload). **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` (list/get **and upload→get→delete**) vs LocalStack. **Presigned URLs** done: pure `S3PresignedUrl` — AWS SigV4 query-string presigner for GET/PUT (virtual-hosted + path-style, optional session token, `UNSIGNED-PAYLOAD`, `javax.crypto` only, no SDK / cross-module dep); 22 tests incl. a known-answer signature. **Custom `endpoint(...)` added** (MinIO/LocalStack/Wasabi: signs the endpoint host) + **wired into `S3View`**: select an object → "Copy presigned link" with a lifetime combo (15m/1h/24h/7d) → clipboard. _Versioning / multipart TODO._
 - [x] **S3 URI parser** — pure `S3Uri.parse(...)` → `{bucket, key, region, endpoint, style}` for `s3://`,
       virtual-hosted (`bucket.s3[.-]region.amazonaws.com`) and path-style (`s3.region.amazonaws.com/bucket/key`
       + custom endpoints like LocalStack `localhost:4566/bucket/key`) URLs; URL-decodes the key (keeps literal
@@ -692,7 +693,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
 - [-] Command console — `RedisService.execute()` supports ~20 common commands; **auto-complete core done**:
       pure `RedisCommandCatalog` (58 commands with group/summary/syntax) + case-insensitive first-token prefix
-      `complete()`, `find()`, `inGroup()`; 12 tests. _(Wire into the console editor as a completion popup TODO.)_
+      `complete()`, `find()`, `inGroup()`; 12 tests. **Wired into the console** as a completion popup: typing the
+      first token shows matching commands (name + summary); picking one inserts the command name + a space.
 - [x] **Glob matcher** — pure `RedisGlob.matches(pattern, key)` mirrors Redis `stringmatchlen` (`*`/`?`,
       `[..]` classes with ranges + `^` negation, `\` escapes; whole-string, case-sensitive) so `KEYS`/`SCAN MATCH`
       listings can be filtered client-side without a round-trip. 7 tests.
