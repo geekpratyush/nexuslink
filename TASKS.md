@@ -290,7 +290,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       1.2 log (version/creator/entries[] with request incl. query string + `postData`, response incl. `content`,
       `timings`, `startedDateTime`, `time`); pure + dependency-free (hand-rolled RFC 8259 JSON with `\uXXXX`
       escaping, matching the module's existing style); single-entry + list overloads; unmeasured phases as -1.
-      6 tests. _(UI Export-as-HAR button + multi-request session capture TODO.)_
+      6 tests. **Wired into `RestClientView`:** a **HAR** button in the URL bar exports every request/response
+      executed in the tab (multi-request session capture — each `send()` retains the interpolated exchange) to
+      a `.har` file via a save dialog.
 - [x] **Media-type / Content-Type parser** — pure `MediaType` (RFC 7231 §3.1.1.1): `type/subtype` +
       case-insensitive token/quoted parameters (order preserved), `charset()`/`boundary()`/`isMultipart()`/
       `isText()`/`essence()`, wildcard-aware `matches()` (`application/*`, `*/*` for Accept handling), quoting

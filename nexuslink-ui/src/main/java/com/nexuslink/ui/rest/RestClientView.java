@@ -11,6 +11,7 @@ import com.nexuslink.ui.env.Env;
 import com.nexuslink.protocol.http.rest.AssertionSpec;
 import com.nexuslink.protocol.http.rest.BodyFormatter;
 import com.nexuslink.protocol.http.rest.CurlImporter;
+import com.nexuslink.protocol.http.rest.HarExporter;
 import com.nexuslink.protocol.http.rest.ResponseAssertions;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
@@ -31,9 +32,14 @@ import javafx.scene.control.cell.ComboBoxTableCell;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.*;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 /**
  * The REST client tab content — method bar, request editor tabs, and response panel.
@@ -48,6 +54,9 @@ public final class RestClientView extends BorderPane {
     private final ObservableList<RestRequest.KeyValue> paramRows = FXCollections.observableArrayList();
     private final ObservableList<RestRequest.KeyValue> headerRows = FXCollections.observableArrayList();
     private final ObservableList<AssertionSpec> assertionRows = FXCollections.observableArrayList();
+
+    /** Every request/response executed in this tab, retained so the session can be exported as HAR. */
+    private final List<HarExporter.Entry> harEntries = new ArrayList<>();
 
     private ComboBox<String> methodCombo;
     private TextField urlField;
@@ -249,6 +258,28 @@ public final class RestClientView extends BorderPane {
         });
     }
 
+    /** Saves every request/response executed in this tab as an HTTP Archive (HAR 1.2) document. */
+    private void exportHar() {
+        if (harEntries.isEmpty()) {
+            logger.accept("Nothing to export — send a request first");
+            return;
+        }
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("Export HAR");
+        fc.setInitialFileName("nexuslink.har");
+        fc.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("HTTP Archive", "*.har"),
+                new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+        java.io.File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        try {
+            Files.writeString(file.toPath(), HarExporter.toHar(harEntries), StandardCharsets.UTF_8);
+            logger.accept("Exported " + harEntries.size() + " request(s) to " + file.getName());
+        } catch (java.io.IOException ex) {
+            logger.accept("HAR export failed: " + ex.getMessage());
+        }
+    }
+
     /** Pushes a parsed {@link RestRequest} into the editor's visible fields. */
     private void applyImported(RestRequest r) {
         methodCombo.setValue(r.getMethod());
@@ -301,11 +332,16 @@ public final class RestClientView extends BorderPane {
         curlBtn.setTooltip(new Tooltip("Paste a curl command to populate this request"));
         curlBtn.setOnAction(e -> importCurl());
 
+        Button harBtn = new Button("HAR");
+        harBtn.getStyleClass().add("btn-secondary");
+        harBtn.setTooltip(new Tooltip("Export the requests sent in this tab as an HTTP Archive (.har)"));
+        harBtn.setOnAction(e -> exportHar());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, helpBtn);
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, harBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 
@@ -833,7 +869,9 @@ public final class RestClientView extends BorderPane {
         // Resolve ${VAR} references against the active environment at send time. The on-screen request
         // stays templated (so history/replay re-resolve later); only this copy carries real values.
         EnvironmentService env = Env.service();
-        final RestRequest exec = env == null ? request : request.interpolated(env::interpolate);
+        // The request actually put on the wire (a deep copy either way, safe to retain for HAR export).
+        final RestRequest exec = request.interpolated(env == null ? UnaryOperator.identity() : env::interpolate);
+        final Instant startedAt = Instant.now();
         String loggedUrl = exec.effectiveUrl();
         if (env != null) loggedUrl = env.masker().scrub(loggedUrl);   // never log resolved secrets
         logger.accept(exec.getMethod() + " " + loggedUrl);
@@ -843,7 +881,12 @@ public final class RestClientView extends BorderPane {
                 return executor.execute(exec);
             }
         };
-        task.setOnSucceeded(e -> { renderResponse(task.getValue()); finishSend(); });
+        task.setOnSucceeded(e -> {
+            RestResponse resp = task.getValue();
+            harEntries.add(new HarExporter.Entry(exec, resp, startedAt));
+            renderResponse(resp);
+            finishSend();
+        });
         task.setOnFailed(e -> {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("Error: " + task.getException());
