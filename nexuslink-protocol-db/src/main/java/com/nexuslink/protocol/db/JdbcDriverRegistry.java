@@ -51,7 +51,15 @@ public final class JdbcDriverRegistry {
                     "net.snowflake:snowflake-jdbc:3.16.1", false),
             new DriverInfo("clickhouse", "ClickHouse", "com.clickhouse.jdbc.ClickHouseDriver",
                     "jdbc:ch://localhost:8123/default", false,
-                    "com.clickhouse:clickhouse-jdbc:0.6.0", false)
+                    "com.clickhouse:clickhouse-jdbc:0.6.0", false),
+            // Amazon Redshift ships its own JDBC driver (Apache-2.0) — distinct from the pg wire driver.
+            new DriverInfo("redshift", "Amazon Redshift", "com.amazon.redshift.jdbc.Driver",
+                    "jdbc:redshift://examplecluster.abc123.us-east-1.redshift.amazonaws.com:5439/dev", false,
+                    "com.amazon.redshift:redshift-jdbc42:2.1.0.30", false),
+            // Google BigQuery via the Simba/Google JDBC driver (proprietary — needs a license ack).
+            new DriverInfo("bigquery", "Google BigQuery", "com.simba.googlebigquery.jdbc.Driver",
+                    "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;ProjectId=my-project;OAuthType=0;",
+                    false, "com.google.cloud:google-bigquery-simba-jdbc:1.5.4", true)
     );
 
     public static List<DriverInfo> all() {

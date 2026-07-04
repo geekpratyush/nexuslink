@@ -730,7 +730,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Catalogued: Oracle (`ojdbc11`, OTN license), SQL Server (`mssql-jdbc`),
       IBM DB2 (`jcc`, licensed), Snowflake, ClickHouse — all in `JdbcDriverRegistry`
 - [x] CockroachDB → uses the bundled PostgreSQL driver (wire-compatible)
-- [ ] Redshift, BigQuery → add to catalog when needed
+- [x] Redshift, BigQuery → add to catalog when needed — both added to `JdbcDriverRegistry` as on-demand cloud
+      warehouses: Amazon Redshift (`com.amazon.redshift.jdbc.Driver`, Apache-2.0, no license ack) and Google
+      BigQuery (Simba `com.simba.googlebigquery.jdbc.Driver`, proprietary → requires license ack). 1 added test.
 
 **Driver manager (the mechanism that makes on-demand work):**
 - [x] `JdbcDriverRegistry` — catalog (class name, Maven coords, sample URL, bundled flag,

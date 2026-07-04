@@ -33,6 +33,21 @@ class JdbcDriverRegistryTest {
     }
 
     @Test
+    void redshiftAndBigQueryAreOnDemandCloudWarehouses() {
+        DriverInfo redshift = JdbcDriverRegistry.byId("redshift").orElseThrow();
+        assertEquals("com.amazon.redshift.jdbc.Driver", redshift.driverClass());
+        assertFalse(redshift.bundled());
+        assertFalse(redshift.requiresLicenseAck(), "Redshift's JDBC driver is Apache-2.0");
+
+        DriverInfo bigquery = JdbcDriverRegistry.byId("bigquery").orElseThrow();
+        assertFalse(bigquery.bundled());
+        assertTrue(bigquery.requiresLicenseAck(), "Simba BigQuery driver is proprietary");
+        // Neither driver jar is on the classpath, so it must report unavailable until loaded.
+        assertFalse(JdbcDriverRegistry.isAvailable(redshift));
+        assertFalse(JdbcDriverRegistry.isAvailable(bigquery));
+    }
+
+    @Test
     void cockroachReusesPostgresDriver() {
         DriverInfo cockroach = JdbcDriverRegistry.byId("cockroachdb").orElseThrow();
         assertEquals("org.postgresql.Driver", cockroach.driverClass());
