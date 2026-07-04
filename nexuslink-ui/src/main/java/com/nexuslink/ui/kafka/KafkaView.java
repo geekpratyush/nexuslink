@@ -25,6 +25,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
+import javafx.stage.Window;
 import javafx.util.Duration;
 
 import java.io.File;
@@ -292,13 +293,18 @@ public final class KafkaView extends BorderPane {
         refresh.getStyleClass().add("btn-primary");
         refresh.setOnAction(e -> refreshLag());
 
+        Button reset = new Button("Reset offsets…");
+        reset.getStyleClass().add("btn-secondary");
+        reset.setTooltip(new Tooltip("Reset this group's committed offsets (earliest/latest/specific/timestamp/shift)"));
+        reset.setOnAction(e -> resetOffsets());
+
         lagAutoRefresh.setOnAction(e -> toggleLagAutoRefresh());
         lagTotal.getStyleClass().add("meta-label");
         lagStatus.getStyleClass().add("meta-label");
 
         buildLagTable();
 
-        HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh,
+        HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh, reset,
                 lagAutoRefresh, lagTotal, lagStatus);
         top.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8, top, lagTable);
@@ -578,6 +584,25 @@ public final class KafkaView extends BorderPane {
             if (lagAutoRefresh.isSelected()) { lagAutoRefresh.setSelected(false); stopLagTimeline(); }
         });
         runBg(task, "kafka-lag-refresh");
+    }
+
+    /**
+     * Opens the {@link OffsetResetDialog} for the current group. The dialog previews via
+     * {@link com.nexuslink.protocol.kafka.KafkaService#previewOffsetReset} and commits via
+     * {@code applyOffsetReset}, both off the FX thread; on success it refreshes the lag table.
+     */
+    private void resetOffsets() {
+        String group = currentLagGroup();
+        if (group.isEmpty()) {
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("Enter a consumer group");
+            return;
+        }
+        Window owner = getScene() == null ? null : getScene().getWindow();
+        new OffsetResetDialog(owner, group,
+                (strategy, arg, ts) -> service.previewOffsetReset(group, strategy, arg, ts),
+                rows -> service.applyOffsetReset(group, rows),
+                this::refreshLag).show();
     }
 
     /** Starts or stops the 5-second auto-refresh poll based on the checkbox state. */

@@ -134,6 +134,68 @@ public final class KafkaService implements AutoCloseable {
         return ConsumerLagCalculator.compute(group, committed, endOffsets);
     }
 
+    /**
+     * Builds an offset-reset plan for {@code group} over the partitions it has committed: fetches
+     * committed + begin + end offsets (and, for {@link OffsetResetPlanner.Strategy#TIMESTAMP}, the
+     * offsets at/after {@code timestampMillis}) and delegates the actual target computation to the pure
+     * {@link OffsetResetPlanner}. {@code arg} is the specific offset for SPECIFIC_OFFSET or the signed
+     * delta for SHIFT_BY. Nothing is applied — call {@link #applyOffsetReset} with the returned rows.
+     * Needs a live broker.
+     */
+    public List<OffsetResetPlanner.ResetRow> previewOffsetReset(String group,
+            OffsetResetPlanner.Strategy strategy, long arg, long timestampMillis) throws Exception {
+        Map<TopicPartition, OffsetAndMetadata> committedRaw = admin.listConsumerGroupOffsets(group)
+                .partitionsToOffsetAndMetadata().get(12, TimeUnit.SECONDS);
+        var partitions = committedRaw.keySet();
+
+        Map<TopicPartition, OffsetSpec> earliestSpecs = new HashMap<>();
+        Map<TopicPartition, OffsetSpec> latestSpecs = new HashMap<>();
+        for (TopicPartition tp : partitions) {
+            earliestSpecs.put(tp, OffsetSpec.earliest());
+            latestSpecs.put(tp, OffsetSpec.latest());
+        }
+        Map<TopicPartition, ListOffsetsResultInfo> beginRaw = admin.listOffsets(earliestSpecs).all().get(15, TimeUnit.SECONDS);
+        Map<TopicPartition, ListOffsetsResultInfo> endRaw = admin.listOffsets(latestSpecs).all().get(15, TimeUnit.SECONDS);
+
+        Map<TopicPartitionKey, Long> committed = new HashMap<>();
+        committedRaw.forEach((tp, om) -> committed.put(key(tp), om.offset()));
+        Map<TopicPartitionKey, Long> begin = new HashMap<>();
+        beginRaw.forEach((tp, info) -> begin.put(key(tp), info.offset()));
+        Map<TopicPartitionKey, Long> end = new HashMap<>();
+        endRaw.forEach((tp, info) -> end.put(key(tp), info.offset()));
+
+        Map<TopicPartitionKey, Long> tsOffsets = null;
+        if (strategy == OffsetResetPlanner.Strategy.TIMESTAMP) {
+            Map<TopicPartition, OffsetSpec> tsSpecs = new HashMap<>();
+            for (TopicPartition tp : partitions) tsSpecs.put(tp, OffsetSpec.forTimestamp(timestampMillis));
+            Map<TopicPartition, ListOffsetsResultInfo> tsRaw = admin.listOffsets(tsSpecs).all().get(15, TimeUnit.SECONDS);
+            tsOffsets = new HashMap<>();
+            for (var e : tsRaw.entrySet()) {
+                if (e.getValue().offset() >= 0) tsOffsets.put(key(e.getKey()), e.getValue().offset());
+                // offset < 0 → no message at/after the timestamp; leave absent so the planner falls back to end
+            }
+        }
+        return OffsetResetPlanner.plan(strategy, arg, committed, begin, end, tsOffsets);
+    }
+
+    /**
+     * Commits the planned target offsets for {@code group} via {@code alterConsumerGroupOffsets}. The
+     * broker only allows this while the group has no active members (an empty/inactive group), so a
+     * live group must be stopped first — otherwise the call fails and the error is surfaced to the UI.
+     * Needs a live broker.
+     */
+    public void applyOffsetReset(String group, List<OffsetResetPlanner.ResetRow> rows) throws Exception {
+        Map<TopicPartition, OffsetAndMetadata> targets = new HashMap<>();
+        for (OffsetResetPlanner.ResetRow r : rows) {
+            targets.put(new TopicPartition(r.topic(), r.partition()), new OffsetAndMetadata(r.target()));
+        }
+        admin.alterConsumerGroupOffsets(group, targets).all().get(15, TimeUnit.SECONDS);
+    }
+
+    private static TopicPartitionKey key(TopicPartition tp) {
+        return new TopicPartitionKey(tp.topic(), tp.partition());
+    }
+
     /** Sends one record (synchronously) and returns where it landed. */
     public SendResult send(String topic, String key, String value) throws Exception {
         RecordMetadata md = producer().send(new ProducerRecord<>(topic,

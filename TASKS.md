@@ -390,7 +390,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       begin/end/committed maps it computes a target-offset plan for EARLIEST / LATEST / SPECIFIC_OFFSET /
       TIMESTAMP (broker-resolved, LATEST fallback) / SHIFT_BY, every target clamped to `[begin, end]`;
       `ResetRow` carries current → target + signed `delta()`, plus `affectedPartitions()`. Rows sorted
-      topic→partition; partitions lacking an end offset skipped. 12 tests. _(UI dialog + apply-via-AdminClient TODO.)_
+      topic→partition; partitions lacking an end offset skipped. 12 tests. **UI wired:** a **Reset offsets…**
+      button on the Consumer Lag tab opens `OffsetResetDialog` (strategy combo + value/timestamp fields) →
+      **Preview** shows a Topic/Partition/Current/Target/Δ table, **Apply** commits it. `KafkaService.
+      previewOffsetReset` fetches committed+begin+end (+timestamp) offsets via AdminClient and runs the
+      planner; `applyOffsetReset` commits via `alterConsumerGroupOffsets` (needs an inactive group). Both off the FX thread.
 
 ### 4.7 Schema Registry
 - [x] `SchemaRegistryClient` — Confluent-style REST client (list subjects, list versions, get schema by
