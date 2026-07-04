@@ -92,12 +92,17 @@ public final class SftpView extends BorderPane {
             if (f != null) keyField.setText(f.getAbsolutePath());
         });
 
+        Button diagnoseBtn = new Button("Diagnose");
+        diagnoseBtn.getStyleClass().add("btn-secondary");
+        diagnoseBtn.setTooltip(new Tooltip("Check reachability of the server (DNS → TCP)"));
+        diagnoseBtn.setOnAction(e -> diagnose());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
         HBox row = new HBox(8, lbl("Host:"), hostField, lbl("Port:"), portField, lbl("User:"), userField,
-                passField, connectBtn, disconnectBtn, helpBtn);
+                passField, connectBtn, disconnectBtn, diagnoseBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10, 10, 4, 10));
 
@@ -112,6 +117,15 @@ public final class SftpView extends BorderPane {
     }
 
     private Label lbl(String t) { Label l = new Label(t); l.getStyleClass().add("meta-label"); return l; }
+
+    /** Runs a DNS→TCP reachability check against the configured host/port. */
+    private void diagnose() {
+        String host = Env.resolve(hostField.getText().trim());
+        if (host.isEmpty()) { statusLabel.setText("Enter a host first"); return; }
+        javafx.stage.Window owner = getScene() == null ? null : getScene().getWindow();
+        com.nexuslink.ui.diagnostics.DiagnosticsDialog.run(owner, "SFTP " + host + ":" + parsePort(),
+                com.nexuslink.core.diagnostics.NetworkProbes.basicSteps(host, parsePort(), false, 3000));
+    }
 
     private void connect() {
         connectBtn.setDisable(true);
