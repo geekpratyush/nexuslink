@@ -223,11 +223,13 @@ public final class FileBrowserPane extends VBox {
         delete.setOnAction(e -> deleteSelected());
         MenuItem copyPath = new MenuItem("Copy path  (Ctrl+Shift+C)");
         copyPath.setOnAction(e -> copyPathSelected());
+        MenuItem properties = new MenuItem("Properties…");
+        properties.setOnAction(e -> showProperties());
         MenuItem mkdir = new MenuItem("New Folder…");
         mkdir.setOnAction(e -> newFolder());
         MenuItem refresh = new MenuItem("Refresh");
         refresh.setOnAction(e -> refresh());
-        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), refresh);
+        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), properties, refresh);
         if (fs.supportsChmod()) {
             MenuItem chmod = new MenuItem("Permissions (chmod)…");
             chmod.setOnAction(e -> chmodSelected());
@@ -413,6 +415,35 @@ public final class FileBrowserPane extends VBox {
     private java.nio.file.Path bookmarkFile() {
         String safe = fs.name().replaceAll("[^A-Za-z0-9_.-]", "_");
         return java.nio.file.Path.of(System.getProperty("user.home"), ".nexuslink", "bookmarks-" + safe + ".txt");
+    }
+
+    /** Shows a read-only Properties dialog (name/type/path/size/modified/permissions) for the selection. */
+    public void showProperties() {
+        FileItem sel = table.getSelectionModel().getSelectedItem();
+        if (sel == null || sel.parent()) return;
+        javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
+        grid.setHgap(12);
+        grid.setVgap(6);
+        grid.setPadding(new Insets(12));
+        int row = 0;
+        for (FileDetails.Row r : FileDetails.of(sel)) {
+            Label label = new Label(r.label() + ":");
+            label.getStyleClass().add("meta-label");
+            Label value = new Label(r.value());
+            value.setWrapText(true);
+            value.setMaxWidth(360);
+            grid.add(label, 0, row);
+            grid.add(value, 1, row);
+            row++;
+        }
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Properties");
+        dialog.setHeaderText(sel.name());
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        register(dialog.getDialogPane());
+        dialog.showAndWait();
     }
 
     public void newFolder() {

@@ -627,7 +627,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (find/replace + Regex, prefix/suffix, Add-number spinners, Case combo) with a live before → after preview
       that colours colliding rows red and disables OK until the plan is unambiguous and non-empty; accepting
       renames the changed rows sequentially off the FX thread via `FileSystem.rename`. _(Duplicate still TODO.)_
-- [ ] Properties dialog (size, permissions, owner, timestamps)
+- [x] Properties dialog (size, permissions, owner, timestamps) — a **Properties…** context-menu item opens a
+      read-only name/type/path/size/modified/permissions grid built from the pure `FileDetails.of(FileItem)`;
+      includes symbolic→octal permission conversion (`permissionsOctal`, handles the type prefix + setuid/sticky). 6 tests.
 - [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
 - [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
       compare of two listings, matching by name (case-sensitive by default, optional case-insensitive for
