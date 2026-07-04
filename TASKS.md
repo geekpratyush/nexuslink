@@ -524,7 +524,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 6.2 GraphQL Client
 - [-] `GraphQLService` — HTTP POST ({query, variables}) done, pretty JSON response. **Verified live vs. Countries GraphQL.** _WebSocket subscriptions TODO._
 - [x] Schema introspection — one-click `Introspect` button (built-in introspection query)
-- [-] Query/mutation editor — plain editor + variables JSON; _schema-aware auto-complete TODO_
+- [-] Query/mutation editor — plain editor + variables JSON; schema-aware assist done: pure `GraphQLSchema`
+      parses the (widened) introspection response — root operation types + every type's fields with unwrapped
+      NON_NULL/LIST type names and arg names (8 tests) — wired behind a **Schema…** button that opens a
+      type→fields explorer (Query root preselected); double-click a field inserts it at the query caret.
+      _(inline caret-context completion popup still TODO.)_
 - [x] Variables JSON editor
 - [ ] Subscription live stream panel
 - [x] `GraphQLView` wired into the shell (File menu + sidebar + GraphQL samples)

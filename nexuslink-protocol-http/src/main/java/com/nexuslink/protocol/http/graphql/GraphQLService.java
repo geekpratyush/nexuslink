@@ -26,10 +26,15 @@ public final class GraphQLService {
         public boolean failed() { return error != null; }
     }
 
-    /** Introspection query that lists the schema's types and root operations. */
+    /**
+     * Introspection query listing the schema's root operations and every type with its fields (each
+     * field's args and unwrapped type), enough to drive {@link GraphQLSchema} and schema-aware
+     * completion. The nested {@code ofType} chain unwraps NON_NULL/LIST wrappers to the named type.
+     */
     public static final String INTROSPECTION_QUERY =
             "{ __schema { queryType { name } mutationType { name } subscriptionType { name } "
-          + "types { name kind } } }";
+          + "types { name kind fields { name args { name } "
+          + "type { name kind ofType { name kind ofType { name kind ofType { name } } } } } } } }";
 
     public Result execute(String endpoint, String query, String variablesJson, Map<String, String> headers) {
         long start = System.nanoTime();
