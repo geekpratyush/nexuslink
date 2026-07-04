@@ -592,7 +592,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       skip-all** stickiness across a batch (`OverwriteResolver`). **TODO:** overwrite-if-newer / rename
 - [ ] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors
 - [ ] Parallel/background transfers (configurable concurrency)
-- [ ] Post-transfer integrity check (size/mtime, optional hash/checksum)
+- [-] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
+      verifier done: compares source vs landed destination — byte count always, plus a checksum when the
+      caller can hash both sides (case-insensitive, whitespace-trimmed) — returning a `Report` with a
+      precise `Issue` list (DESTINATION_MISSING / SIZE_MISMATCH / CHECKSUM_MISMATCH). 8 tests.
+      _(TransferQueue wiring + hash computation TODO.)_
 
 **Drag & drop**
 - [ ] **External DnD** — drag files in from the OS file manager (upload) and out to the desktop (download)
