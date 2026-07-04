@@ -2,12 +2,20 @@ package com.nexuslink.ui.connection;
 
 import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.connection.ConnectionStore;
+import com.nexuslink.core.connection.ProfileImportExport;
 import com.nexuslink.core.connection.SampleCatalog;
 import com.nexuslink.ui.icons.Icons;
+import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -34,8 +42,97 @@ public final class ConnectionsPanel extends VBox {
             }
         });
         VBox.setVgrow(tree, Priority.ALWAYS);
-        getChildren().add(tree);
+        getChildren().addAll(buildToolbar(), tree);
         refresh();
+    }
+
+    /** A small Export/Import bar for sharing the Saved connections as an encrypted bundle. */
+    private HBox buildToolbar() {
+        Button export = new Button("Export…");
+        export.getStyleClass().add("btn-secondary");
+        export.setTooltip(new Tooltip("Export saved connections to a passphrase-encrypted bundle"));
+        export.setOnAction(e -> exportConnections());
+        Button importBtn = new Button("Import…");
+        importBtn.getStyleClass().add("btn-secondary");
+        importBtn.setTooltip(new Tooltip("Import connections from an encrypted bundle"));
+        importBtn.setOnAction(e -> importConnections());
+        HBox bar = new HBox(6, export, importBtn);
+        bar.setPadding(new Insets(4, 4, 6, 4));
+        return bar;
+    }
+
+    private void exportConnections() {
+        List<ConnectionProfile> profiles = store.saved();
+        if (profiles.isEmpty()) { info("Nothing to export", "There are no saved connections yet."); return; }
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Export connections");
+        fc.setInitialFileName("nexuslink-connections.json");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Encrypted bundle (*.json)", "*.json"));
+        java.io.File file = fc.showSaveDialog(window());
+        if (file == null) return;
+        Optional<char[]> pass = passphrasePrompt("Export connections", "Set a passphrase to encrypt " + profiles.size() + " connection(s):");
+        if (pass.isEmpty()) return;
+        try {
+            String bundle = new ProfileImportExport().export(profiles, pass.get());
+            Files.writeString(file.toPath(), bundle);
+            info("Export complete", "Encrypted " + profiles.size() + " connection(s) to\n" + file.getName());
+        } catch (Exception ex) {
+            error("Export failed", ex.getMessage());
+        }
+    }
+
+    private void importConnections() {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Import connections");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Encrypted bundle (*.json)", "*.json"));
+        java.io.File file = fc.showOpenDialog(window());
+        if (file == null) return;
+        Optional<char[]> pass = passphrasePrompt("Import connections", "Enter the bundle's passphrase:");
+        if (pass.isEmpty()) return;
+        try {
+            String bundle = Files.readString(Path.of(file.getPath()));
+            List<ConnectionProfile> imported = new ProfileImportExport().importBundle(bundle, pass.get());
+            for (ConnectionProfile p : imported) { p.sample = false; store.save(p); }
+            refresh();
+            info("Import complete", "Imported " + imported.size() + " connection(s).");
+        } catch (Exception ex) {
+            error("Import failed", ex.getMessage());
+        }
+    }
+
+    /** A passphrase prompt backed by a masked field; returns the entered characters, or empty if cancelled. */
+    private Optional<char[]> passphrasePrompt(String title, String header) {
+        Dialog<char[]> dialog = new Dialog<>();
+        dialog.setTitle(title);
+        dialog.setHeaderText(header);
+        if (window() != null) dialog.initOwner(window());
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        PasswordField pf = new PasswordField();
+        pf.setPromptText("passphrase");
+        VBox box = new VBox(pf);
+        box.setPadding(new Insets(8));
+        dialog.getDialogPane().setContent(box);
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        javafx.application.Platform.runLater(pf::requestFocus);
+        dialog.setResultConverter(bt -> bt == ButtonType.OK && !pf.getText().isEmpty() ? pf.getText().toCharArray() : null);
+        return dialog.showAndWait();
+    }
+
+    private javafx.stage.Window window() { return getScene() == null ? null : getScene().getWindow(); }
+
+    private void info(String header, String content) { alert(Alert.AlertType.INFORMATION, header, content); }
+    private void error(String header, String content) { alert(Alert.AlertType.ERROR, header, content); }
+
+    private void alert(Alert.AlertType type, String header, String content) {
+        Alert a = new Alert(type, content, ButtonType.OK);
+        a.setHeaderText(header);
+        if (window() != null) a.initOwner(window());
+        a.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        a.showAndWait();
     }
 
     public void setOnOpen(Consumer<ConnectionProfile> onOpen) {

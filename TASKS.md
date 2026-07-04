@@ -161,7 +161,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       serialises a `List<ConnectionProfile>` to JSON and encrypts it with AES-256-GCM under a PBKDF2 (200k,
       SHA-256) key from a passphrase (fresh random salt+IV per export); `importBundle` verifies format/version
       then GCM-decrypts, so a wrong passphrase or any tampering throws `ProfileBundleException` rather than
-      yielding partial data. Self-contained (`javax.crypto` + Jackson). 8 tests. _(UI export/import action + team share-link TODO.)_
+      yielding partial data. Self-contained (`javax.crypto` + Jackson). 8 tests. **UI wired:** Export…/Import…
+      buttons on the `ConnectionsPanel` (FileChooser + masked passphrase dialog) export the Saved connections
+      and merge imported ones back via `ConnectionStore`. _(team share-link TODO.)_
 - [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide; _folders, tags, color dots, drag-to-reorder TODO_
 - [x] **Bundled public sample catalog** (`SampleCatalog`) — deletable/hideable public test endpoints (REST/WS/SQL/Mongo/MCP/LLM + SFTP/Kafka placeholders)
 - [ ] `ProfileEditorDialog` — generic fields + protocol-specific section (pluggable)
