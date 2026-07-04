@@ -385,7 +385,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `Timeline` (overlap-guarded, stopped on toggle-off/empty/failure). _(live methods need a broker for E2E.)_
 - [x] Lag table data: group, topic, partition, committed offset, end offset, lag — produced by `ConsumerLagCalculator`, shown in the Consumer Lag tab
 - [ ] Lag chart: real-time line chart per partition over time
-- [ ] Offset reset dialog: earliest/latest/specific timestamp/specific offset
+- [-] Offset reset dialog: earliest/latest/specific timestamp/specific offset — pure `OffsetResetPlanner`
+      done (Kafka-type-free, reuses `ConsumerLagCalculator.TopicPartitionKey`): given per-partition
+      begin/end/committed maps it computes a target-offset plan for EARLIEST / LATEST / SPECIFIC_OFFSET /
+      TIMESTAMP (broker-resolved, LATEST fallback) / SHIFT_BY, every target clamped to `[begin, end]`;
+      `ResetRow` carries current → target + signed `delta()`, plus `affectedPartitions()`. Rows sorted
+      topic→partition; partitions lacking an end offset skipped. 12 tests. _(UI dialog + apply-via-AdminClient TODO.)_
 
 ### 4.7 Schema Registry
 - [x] `SchemaRegistryClient` — Confluent-style REST client (list subjects, list versions, get schema by
