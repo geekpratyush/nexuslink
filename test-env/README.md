@@ -39,6 +39,7 @@ docker compose -f test-env/docker-compose.yml down -v         # stop + wipe volu
 | protocol-sftp | SFTP | atmoz/sftp (MIT) | `sftp://localhost:2222` | nexus / nexus |
 | protocol-ftp | FTP | delfer/alpine-ftp-server (MIT) | `ftp://localhost:21` (passive) | nexus / nexus123 |
 | protocol-s3 | S3 | localstack:3 (Apache-2.0) | `http://localhost:4566` (path-style) | test / test |
+| protocol-sqs | SQS + SNS | localstack:3 (Apache-2.0) | `http://localhost:4566` | test / test |
 | protocol-azure | Azure Blob | azurite (MIT) | `http://localhost:10000` | devstoreaccount1 (well-known) |
 | protocol-gcs | GCS | fake-gcs-server (BSD) | `http://localhost:4443` | anonymous (emulator) |
 | protocol-http | REST target | mccutchen/go-httpbin (MIT) | `http://localhost:8088` | — |

@@ -21,6 +21,7 @@
         <module>nexuslink-protocol-db</module>
         <module>nexuslink-protocol-mongo</module>
         <module>nexuslink-protocol-s3</module>
+        <module>nexuslink-protocol-sqs</module>
         <module>nexuslink-protocol-kafka</module>
         <module>nexuslink-protocol-mqtt</module>
         <module>nexuslink-protocol-rabbitmq</module>
@@ -320,6 +321,37 @@
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>url-connection-client</artifactId>
                 <version>${aws.sdk.version}</version>
+            </dependency>
+            <!-- AWS SDK v2 — SQS + SNS (cloud messaging); same netty/apache exclusions as S3 -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>sqs</artifactId>
+                <version>${aws.sdk.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>netty-nio-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>apache-client</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>sns</artifactId>
+                <version>${aws.sdk.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>netty-nio-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>apache-client</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- MongoDB driver -->

@@ -50,6 +50,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-ldap | `LdapLiveIT` | OpenLDAP (bind, naming contexts, search) |
 | protocol-snmp | `SnmpLiveIT` | net-snmp (GET + WALK) |
 | protocol-s3 | `S3LiveIT` | LocalStack S3 (list buckets/objects, get) |
+| protocol-sqs | `SqsSnsLiveIT` | LocalStack SQS+SNS (send/receive/delete, FIFO, publish) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -513,8 +514,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
         refresh); errors surfaced to status/log, never crash the UI. _(publisher confirms/ack UI still TODO)_
 
 ### 5.6 Cloud Messaging
-- [ ] AWS SQS: send/receive/delete, DLQ, FIFO support
-- [ ] AWS SNS: publish, subscription listing
+- [-] AWS SQS: send/receive/delete, DLQ, FIFO support — `SqsService` (new `nexuslink-protocol-sqs` module,
+      AWS SDK v2 + url-connection client, emulator-aware endpoint): list/create queues, send, long-poll
+      receive, delete, purge, approximate-count, FIFO send (`.fifo` → content-dedup). **Live-verified** via
+      `SqsSnsLiveIT` (send→receive→delete round-trip + FIFO order) against LocalStack. _(UI panel + DLQ redrive TODO.)_
+- [-] AWS SNS: publish, subscription listing — `SnsService` (same module): create/list topics, publish
+      (subject+message), list subscriptions, delete topic. **Live-verified** (create→publish→list) vs LocalStack.
+      _(UI panel + SNS→SQS subscription wiring TODO.)_
 - [ ] Azure Service Bus: queue/topic/subscription, sessions, DLQ
 - [ ] Google Pub/Sub: publish, pull subscription
 
