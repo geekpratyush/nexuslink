@@ -602,8 +602,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [-] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
       verifier done: compares source vs landed destination — byte count always, plus a checksum when the
       caller can hash both sides (case-insensitive, whitespace-trimmed) — returning a `Report` with a
-      precise `Issue` list (DESTINATION_MISSING / SIZE_MISMATCH / CHECKSUM_MISMATCH). 8 tests.
-      _(TransferQueue wiring + hash computation TODO.)_
+      precise `Issue` list (DESTINATION_MISSING / SIZE_MISMATCH / CHECKSUM_MISMATCH). 8 tests. **Wired into
+      `TransferQueue`:** a **Verify** toggle in the queue-panel footer (`setVerifyIntegrity`) size-checks each
+      completed file against the destination listing; a mismatch/missing marks it FAILED (retryable) with an
+      "integrity check failed: …" note. 4 added queue tests (24 in `TransferQueueTest`). _(Hash computation still TODO.)_
 
 **Drag & drop**
 - [ ] **External DnD** — drag files in from the OS file manager (upload) and out to the desktop (download)

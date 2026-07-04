@@ -36,6 +36,22 @@ class TransferQueueTest {
         }
     }
 
+    /** A {@link FileTransfer} that writes a truncated destination, to exercise integrity failure. */
+    private static final class TruncatingTransfer implements FileTransfer {
+        @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+            truncateCopy(localFile, Path.of(remoteDir).resolve(localFile.getFileName()), progress);
+        }
+        @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
+            Path src = Path.of(remoteFile.path());
+            truncateCopy(src, localDir.resolve(src.getFileName()), progress);
+        }
+        private void truncateCopy(Path src, Path dst, LongConsumer progress) throws Exception {
+            byte[] all = Files.readAllBytes(src);
+            Files.write(dst, java.util.Arrays.copyOf(all, Math.max(0, all.length - 1)));   // drop one byte
+            progress.accept(all.length);
+        }
+    }
+
     private static TransferQueue queue(Path localDir, Path remoteDir) {
         return new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CopyTransfer());
     }
@@ -85,6 +101,52 @@ class TransferQueueTest {
         assertFalse(q.hasPending());
         assertEquals("hello world", Files.readString(remote.resolve("a.txt")));
         assertEquals(1, q.count(TransferStatus.DONE));
+    }
+
+    @Test
+    void integrityVerifyPassesForAFaithfulCopy(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = queue(local, remote);
+        q.setVerifyIntegrity(true);
+        assertTrue(q.isVerifyIntegrity());
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+        assertNull(created.get(0).error());
+    }
+
+    @Test
+    void integrityVerifyFailsAndMarksTruncatedTransferFailed(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new TruncatingTransfer());
+        q.setVerifyIntegrity(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        TransferItem item = created.get(0);
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertNotNull(item.error());
+        assertTrue(item.error().contains("integrity"), item.error());
+        // Failed items are retryable, so the user can re-run the transfer.
+        assertTrue(item.status().retryable());
+    }
+
+    @Test
+    void integrityVerifyOffLeavesTruncatedTransferDone(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // Without verification the queue trusts the copy and reports DONE even if bytes were lost.
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new TruncatingTransfer());
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
     }
 
     @Test

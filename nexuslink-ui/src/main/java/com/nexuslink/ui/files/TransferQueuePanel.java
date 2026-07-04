@@ -14,6 +14,8 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TitledPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -68,6 +70,12 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         throttle.setValue("Unlimited");
         throttle.setOnAction(e -> queue.setMaxBytesPerSecond(bytesForPreset(throttle.getValue())));
 
+        ToggleButton verify = new ToggleButton("Verify");
+        verify.getStyleClass().add("btn-secondary");
+        verify.setTooltip(new Tooltip("Verify each completed file's size on the destination; a mismatch marks it Failed"));
+        verify.setSelected(queue.isVerifyIntegrity());
+        verify.setOnAction(e -> queue.setVerifyIntegrity(verify.isSelected()));
+
         Button retryFailed = new Button("Retry failed");
         retryFailed.getStyleClass().add("btn-secondary");
         retryFailed.setOnAction(e -> queue.retryAllFailed());
@@ -76,7 +84,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> queue.clearCompleted());
 
-        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, retryFailed, clear);
+        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, verify, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 

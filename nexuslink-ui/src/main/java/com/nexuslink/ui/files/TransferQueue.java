@@ -36,6 +36,7 @@ public final class TransferQueue {
     private Consumer<TransferItem> onItemFinished = i -> {};
     private final TransferGovernor governor = new TransferGovernor();
     private volatile boolean workerRunning;
+    private volatile boolean verifyIntegrity;   // when set, each completed file is size-checked on the destination
     private Thread worker;
 
     public TransferQueue(FileSystem local, FileSystem remote, FileTransfer transfer) {
@@ -288,6 +289,15 @@ public final class TransferQueue {
 
     public long maxBytesPerSecond() { return governor.maxBytesPerSecond(); }
 
+    /**
+     * When enabled, each completed file is verified with {@link TransferIntegrity} by comparing the
+     * destination's byte count against the source size; a mismatch (or a missing destination) marks the
+     * item FAILED so it can be retried. Off by default since it lists the destination directory per file.
+     */
+    public void setVerifyIntegrity(boolean verify) { this.verifyIntegrity = verify; }
+
+    public boolean isVerifyIntegrity() { return verifyIntegrity; }
+
     private void workerLoop() {
         while (workerRunning) {
             drain();
@@ -331,6 +341,16 @@ public final class TransferQueue {
             }
             execute(item);
             item.setTransferredBytes(item.totalBytes());
+            if (verifyIntegrity) {
+                TransferIntegrity.Report report = verifyTransfer(item);
+                if (!report.verified()) {
+                    item.setError("integrity check failed: " + describe(report));
+                    item.setStatus(TransferStatus.FAILED);
+                    item.markFinished(System.nanoTime());
+                    finish(item);
+                    return;
+                }
+            }
             item.setStatus(TransferStatus.DONE);
         } catch (Exception e) {
             item.setError(e.getMessage() == null ? e.toString() : e.getMessage());
@@ -361,6 +381,34 @@ public final class TransferQueue {
                 fireProgress(item);
             });
         }
+    }
+
+    /**
+     * Verifies a just-completed transfer by comparing the destination file's byte count against the
+     * source size ({@link TransferIntegrity}). The destination is on the opposite side to the source;
+     * its size is read by listing the destination directory (the {@link FileSystem} has no cheaper stat).
+     */
+    private TransferIntegrity.Report verifyTransfer(TransferItem item) throws Exception {
+        FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
+        Long actual = destSize(destFs, item.destDir(), item.name());
+        return TransferIntegrity.verify(item.totalBytes(), actual);
+    }
+
+    /** The size of {@code name} inside {@code dir}, or null when it is not present. */
+    private Long destSize(FileSystem fs, String dir, String name) throws Exception {
+        for (FileItem f : fs.list(dir)) {
+            if (!f.parent() && f.name().equals(name)) return f.size();
+        }
+        return null;
+    }
+
+    /** A short human summary of a failed integrity report for the item's error line. */
+    private static String describe(TransferIntegrity.Report r) {
+        if (r.issues().contains(TransferIntegrity.Issue.DESTINATION_MISSING)) return "destination file missing";
+        if (r.issues().contains(TransferIntegrity.Issue.SIZE_MISMATCH)) {
+            return "size " + r.actualSize() + " ≠ expected " + r.expectedSize();
+        }
+        return r.issues().toString();
     }
 
     private void finish(TransferItem item) {
