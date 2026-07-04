@@ -3,6 +3,7 @@ package com.nexuslink.protocol.kafka;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +42,24 @@ class KafkaLiveIT {
             assertNotNull(got.get());
             assertEquals("k1", got.get().key());
             assertEquals("hello-nexus", got.get().value());
+        }
+    }
+
+    @Test
+    void browseReadsWithoutConsumerGroupSideEffects() throws Exception {
+        String topic = "nexus-browse-" + System.currentTimeMillis();
+        try (KafkaService svc = new KafkaService()) {
+            svc.connect("localhost:9092", Map.of());
+            svc.send(topic, "a", "one");
+            svc.send(topic, "b", "two");
+
+            List<KafkaService.KafkaMessage> msgs = svc.browse(topic, 10, true);
+            assertEquals(2, msgs.size(), "both produced records should be browsed");
+            assertEquals("one", msgs.get(0).value());
+
+            // No group.id was used, so no consumer group should have been created by browsing.
+            assertFalse(svc.listConsumerGroups().stream().anyMatch(g -> g.startsWith("nexus-browse")),
+                    "browse must not create a consumer group");
         }
     }
 

@@ -18,6 +18,7 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 
@@ -215,6 +216,44 @@ public final class KafkaService implements AutoCloseable {
         RecordMetadata md = producer().send(new ProducerRecord<>(topic,
                 key == null || key.isBlank() ? null : key, value)).get(15, TimeUnit.SECONDS);
         return new SendResult(md.partition(), md.offset(), md.timestamp());
+    }
+
+    /**
+     * Browses up to {@code maxMessages} from {@code topic} with <em>no consumer-group side effects</em>:
+     * the consumer has no {@code group.id}, uses manual {@code assign} (never {@code subscribe}) and
+     * {@code enable.auto.commit=false}, and seeks to the beginning or end of every partition. So it never
+     * joins a group, never commits offsets and never rebalances anyone — a safe read-only peek. Returns
+     * once {@code maxMessages} are collected or a few polls come back empty. Blocking; call off the UI
+     * thread. Needs a live broker.
+     */
+    public List<KafkaMessage> browse(String topic, int maxMessages, boolean fromBeginning) {
+        Properties props = base();
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, STR_DE);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, STR_DE);
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");   // never commit
+        // Deliberately NO group.id → the consumer joins no group and triggers no rebalance.
+
+        List<KafkaMessage> out = new ArrayList<>();
+        try (KafkaConsumer<String, String> c = new KafkaConsumer<>(props)) {
+            List<PartitionInfo> parts = c.partitionsFor(topic, Duration.ofSeconds(10));
+            if (parts == null || parts.isEmpty()) return out;
+            List<TopicPartition> tps = new ArrayList<>();
+            for (PartitionInfo p : parts) tps.add(new TopicPartition(topic, p.partition()));
+            c.assign(tps);
+            if (fromBeginning) c.seekToBeginning(tps); else c.seekToEnd(tps);
+
+            int emptyPolls = 0;
+            while (out.size() < maxMessages && emptyPolls < 3) {
+                ConsumerRecords<String, String> records = c.poll(Duration.ofMillis(500));
+                if (records.isEmpty()) { emptyPolls++; continue; }
+                emptyPolls = 0;
+                for (ConsumerRecord<String, String> r : records) {
+                    out.add(new KafkaMessage(r.partition(), r.offset(), r.timestamp(), r.key(), r.value()));
+                    if (out.size() >= maxMessages) break;
+                }
+            }
+        }
+        return out;
     }
 
     /** Starts polling {@code topic} on a background thread; messages flow to {@code listener}. */

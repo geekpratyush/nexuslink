@@ -260,6 +260,11 @@ public final class KafkaView extends BorderPane {
         Button exportCsv = new Button("Export CSV…");
         exportCsv.getStyleClass().add("btn-secondary");
         exportCsv.setOnAction(e -> exportMessages(false));
+        Button browse = new Button("Browse 100");
+        browse.getStyleClass().add("btn-secondary");
+        browse.setTooltip(new Tooltip("Peek up to 100 messages with no consumer-group side effects (no commit/join)"));
+        browse.setOnAction(e -> browseTopic());
+
         Button clear = new Button("Clear");
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> { consumedMessages.clear(); consumeLog.clear(); });
@@ -270,7 +275,7 @@ public final class KafkaView extends BorderPane {
         formatCombo.valueProperty().addListener((o, a, b) -> messageTable.refresh());
 
         HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup,
-                fromBeginning, consumeToggle, label("Format:"), formatCombo, exportJson, exportCsv, clear);
+                fromBeginning, consumeToggle, browse, label("Format:"), formatCombo, exportJson, exportCsv, clear);
         top.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8, top, buildFilterBar(), messageTable, consumeLog);
         box.setPadding(new Insets(8));
@@ -958,6 +963,26 @@ public final class KafkaView extends BorderPane {
             produceStatus.setText("✖ " + task.getException().getMessage());
         });
         runBg(task, "kafka-produce");
+    }
+
+    /**
+     * Peeks up to 100 messages from the topic via {@link KafkaService#browse} — a read with no
+     * consumer-group side effects (no join, no commit) — replacing the table contents. Runs off the FX thread.
+     */
+    private void browseTopic() {
+        String topic = Env.resolve(consumeTopic.getText().trim());
+        if (topic.isEmpty()) { append("Enter a topic to browse"); return; }
+        boolean fromStart = fromBeginning.isSelected();
+        append("👁 browsing " + topic + " (no commit)…");
+        Task<List<KafkaService.KafkaMessage>> task = new Task<>() {
+            @Override protected List<KafkaService.KafkaMessage> call() { return service.browse(topic, 100, fromStart); }
+        };
+        task.setOnSucceeded(e -> {
+            consumedMessages.setAll(task.getValue());
+            append("👁 browsed " + task.getValue().size() + " message(s) from " + topic);
+        });
+        task.setOnFailed(e -> append("⚠ browse: " + task.getException().getMessage()));
+        runBg(task, "kafka-browse");
     }
 
     private void toggleConsume() {

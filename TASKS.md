@@ -367,7 +367,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       the key/value columns, raw values still exported). _Avro/Protobuf (need schema deps) TODO_
 
 ### 4.5 Message Browser
-- [ ] Poll-based browser (no consumer group side effects)
+- [x] Poll-based browser (no consumer group side effects) — `KafkaService.browse(topic, max, fromBeginning)`
+      reads with NO `group.id`, manual `assign` (never `subscribe`), `enable.auto.commit=false`, seeking to
+      begin/end — so it never joins a group, commits, or rebalances. Wired as a **Browse 100** button on the
+      Consume tab (fills the table off-FX). Verified by `KafkaLiveIT.browseReadsWithoutConsumerGroupSideEffects`
+      (produces 2 → browses 2 → asserts no consumer group was created).
 - [x] Filters: offset range, timestamp range, key contains, value contains, header filter — pure
       `MessageFilter` (protocol-kafka, immutable fluent builder over a Kafka-type-free `Record` view;
       AND-combined offset/timestamp/partition + key/value substring-or-regex w/ case flag + header
