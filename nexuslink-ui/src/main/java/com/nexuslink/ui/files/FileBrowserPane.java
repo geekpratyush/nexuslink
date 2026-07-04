@@ -92,6 +92,9 @@ public final class FileBrowserPane extends VBox {
 
     public List<FileItem> selected() { return List.copyOf(table.getSelectionModel().getSelectedItems()); }
 
+    /** The full current directory listing (including the synthetic ".." row) as last loaded. */
+    public List<FileItem> currentListing() { return List.copyOf(listing); }
+
     private Label buildHeader(String title) {
         Label l = new Label(title);
         l.getStyleClass().add("section-title");

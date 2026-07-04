@@ -16,6 +16,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import javafx.stage.Window;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -31,6 +32,8 @@ import java.util.function.Consumer;
  */
 public final class DualPaneBrowser extends BorderPane {
 
+    private final FileSystem local;
+    private final FileSystem remote;
     private final FileBrowserPane localPane;
     private final FileBrowserPane remotePane;
     private final TransferQueue queue;
@@ -50,6 +53,8 @@ public final class DualPaneBrowser extends BorderPane {
     private FileBrowserPane activePane;
 
     public DualPaneBrowser(FileSystem local, FileSystem remote, FileTransfer transfer) {
+        this.local = local;
+        this.remote = remote;
         this.localPane = new FileBrowserPane(local, "Local — " + local.name());
         this.remotePane = new FileBrowserPane(remote, "Remote — " + remote.name());
         this.queue = new TransferQueue(local, remote, transfer);
@@ -148,7 +153,12 @@ public final class DualPaneBrowser extends BorderPane {
             messageLabel.setText(now ? "Synchronized browsing on" : "Synchronized browsing off");
         });
 
-        VBox col = new VBox(12, upload, download, sync);
+        Button compare = new Button("⇋ Compare");
+        compare.getStyleClass().add("btn-secondary");
+        compare.setTooltip(new Tooltip("Compare both directories and optionally sync (copy/delete) the differences"));
+        compare.setOnAction(e -> compareDirectories());
+
+        VBox col = new VBox(12, upload, download, sync, compare);
         col.setAlignment(Pos.CENTER);
         col.setPadding(new Insets(40, 6, 6, 6));
         col.setMinWidth(120);
@@ -239,6 +249,73 @@ public final class DualPaneBrowser extends BorderPane {
         VBox box = new VBox(4, buildFunctionBar(), messageLabel, queuePanel);
         box.setPadding(new Insets(6, 8, 6, 8));
         return box;
+    }
+
+    /**
+     * Opens the {@link DirectoryCompareDialog} over both panes' current listings and, if the user runs a
+     * sync, executes the resulting {@link SyncPlanner} plan: copies flow through the transfer queue (with
+     * the usual overwrite prompt) and deletes are confirmed once, then applied off the FX thread.
+     */
+    private void compareDirectories() {
+        if (!remoteConnected) {
+            messageLabel.setText("Connect to a remote server before comparing directories");
+            return;
+        }
+        Window owner = getScene() == null ? null : getScene().getWindow();
+        DirectoryCompareDialog.open(owner, localPane.currentListing(), remotePane.currentListing(),
+                "Local — " + local.name(), "Remote — " + remote.name())
+                .ifPresent(this::runSyncPlan);
+    }
+
+    private void runSyncPlan(List<SyncPlanner.Action> plan) {
+        java.util.List<FileItem> uploads = new java.util.ArrayList<>();
+        java.util.List<FileItem> downloads = new java.util.ArrayList<>();
+        java.util.List<SyncPlanner.Action> deletes = new java.util.ArrayList<>();
+        for (SyncPlanner.Action a : plan) {
+            switch (a.op()) {
+                case COPY_LEFT_TO_RIGHT -> uploads.add(a.item());
+                case COPY_RIGHT_TO_LEFT -> downloads.add(a.item());
+                case DELETE_LEFT, DELETE_RIGHT -> deletes.add(a);
+            }
+        }
+        if (!uploads.isEmpty()) upload(uploads);
+        if (!downloads.isEmpty()) download(downloads);
+        if (!deletes.isEmpty()) confirmAndRunDeletes(deletes);
+    }
+
+    /** Confirms the delete count once, then deletes each victim on its own side off the FX thread. */
+    private void confirmAndRunDeletes(List<SyncPlanner.Action> deletes) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Sync will delete " + deletes.size() + " item(s) that don't exist on the other side. "
+                        + "This cannot be undone.", ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Confirm sync deletions");
+        if (getScene() != null) {
+            confirm.initOwner(getScene().getWindow());
+            confirm.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+                if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+            });
+        }
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        Thread t = new Thread(() -> {
+            int done = 0;
+            for (SyncPlanner.Action a : deletes) {
+                try {
+                    (a.op() == SyncPlanner.Op.DELETE_LEFT ? local : remote).delete(a.item());
+                    done++;
+                } catch (Exception ex) {
+                    logger.accept("Sync delete failed for " + a.name() + ": " + ex.getMessage());
+                }
+            }
+            int finalDone = done;
+            Platform.runLater(() -> {
+                messageLabel.setText("Sync deleted " + finalDone + " of " + deletes.size() + " item(s)");
+                localPane.refresh();
+                remotePane.refresh();
+            });
+        }, "sync-delete");
+        t.setDaemon(true);
+        t.start();
     }
 
     private void upload(List<FileItem> items) {

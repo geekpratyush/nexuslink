@@ -523,7 +523,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (MIRROR_TO_RIGHT / MIRROR_TO_LEFT / UPDATE_RIGHT / UPDATE_LEFT — the two UPDATE_* modes never
       delete); each action carries the source/victim `FileItem` + the diff status that justified it, plus
       a per-`Op` `summary()` for a preview. Copies dispatch to `TransferQueue`, deletes to `FileSystem`.
-      8 tests. _(UI preview + wiring, and hash-based change detection, still TODO.)_
+      8 tests. **UI wired:** the `DirectoryCompareDialog` has a mode combo (mirror →/← · update →/← ) with a
+      live "N copy → · M copy ← · D delete" plan preview; **Run sync** executes the plan through
+      `DualPaneBrowser` — copies flow via the transfer queue (overwrite prompt), deletes are confirmed once
+      then applied off the FX thread on the correct side. _(Hash-based change detection still TODO.)_
 - [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
 ### 7.2 FTP / FTPS
@@ -620,7 +623,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       compare of two listings, matching by name (case-sensitive by default, optional case-insensitive for
       Windows FS), classifying each entry LEFT_ONLY / RIGHT_ONLY / DIFFERENT (size, mtime, or file-vs-dir
       type) / SAME (same-name dirs match at this level); ignores the ".." row, returns a merged dirs-first
-      view + a per-status `summary()` count. Feeds `SyncService` (7.1). 9 tests. _(UI highlight overlay TODO.)_
+      view + a per-status `summary()` count. Feeds `SyncService` (7.1). 9 tests. **UI wired:** a **⇋ Compare**
+      button in the commander opens `DirectoryCompareDialog` — a status-tinted name·left·right·status table
+      (new-left/new-right/differs/identical, with a "show identical" toggle) + a header summary count.
 
 **Sessions & integration**
 - [ ] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session
