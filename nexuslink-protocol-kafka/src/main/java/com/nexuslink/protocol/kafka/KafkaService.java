@@ -196,6 +196,20 @@ public final class KafkaService implements AutoCloseable {
         return new TopicPartitionKey(tp.topic(), tp.partition());
     }
 
+    /**
+     * Flattens the AdminClient's client-level metrics to a plain {@code name → value} map (numeric
+     * metrics only), the Kafka-type-free input {@link KafkaMetricsSummary} curates for display. When a
+     * metric name appears under several node scopes the first numeric value wins. Needs a live broker.
+     */
+    public Map<String, Double> metricValues() {
+        Map<String, Double> out = new HashMap<>();
+        admin.metrics().forEach((name, metric) -> {
+            Object v = metric.metricValue();
+            if (v instanceof Number n) out.putIfAbsent(name.name(), n.doubleValue());
+        });
+        return out;
+    }
+
     /** Sends one record (synchronously) and returns where it landed. */
     public SendResult send(String topic, String key, String value) throws Exception {
         RecordMetadata md = producer().send(new ProducerRecord<>(topic,

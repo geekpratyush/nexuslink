@@ -419,7 +419,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       change), an `unchanged` count, and an `isCompatible()` (additive-only) flag. 17 tests. _(UI compare view TODO.)_
 
 ### 4.8 Kafka Metrics
-- [ ] `KafkaMetricsService` — polls JMX or AdminClient metrics on 10s interval
+- [-] `KafkaMetricsService` — polls JMX or AdminClient metrics on 10s interval — AdminClient path done:
+      pure `KafkaMetricsSummary` curates a Kafka-type-free `name→value` map into ordered, human-formatted
+      headline rows (connections, request/response rates, byte throughput, latency, I/O wait; 5 tests);
+      `KafkaService.metricValues()` flattens `admin.metrics()` to plain doubles. Wired as a **Metrics…**
+      button on the Consumer Lag tab (fetches off-FX → a metric/value table dialog). _(JMX + 10s polling still TODO.)_
 - [ ] Throughput chart (msgs/sec, bytes/sec), error rate, partition count
 - [ ] Consumer lag summary heatmap
 

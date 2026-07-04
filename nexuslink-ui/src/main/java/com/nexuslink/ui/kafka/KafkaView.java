@@ -4,6 +4,7 @@ import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.kafka.ConsumerLagCalculator;
 import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaMessageExporter;
+import com.nexuslink.protocol.kafka.KafkaMetricsSummary;
 import com.nexuslink.protocol.kafka.KafkaService;
 import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
@@ -301,13 +302,18 @@ public final class KafkaView extends BorderPane {
         reset.setTooltip(new Tooltip("Reset this group's committed offsets (earliest/latest/specific/timestamp/shift)"));
         reset.setOnAction(e -> resetOffsets());
 
+        Button metrics = new Button("Metrics…");
+        metrics.getStyleClass().add("btn-secondary");
+        metrics.setTooltip(new Tooltip("Show live AdminClient metrics (connections, request/response rates, throughput)"));
+        metrics.setOnAction(e -> showMetrics());
+
         lagAutoRefresh.setOnAction(e -> toggleLagAutoRefresh());
         lagTotal.getStyleClass().add("meta-label");
         lagStatus.getStyleClass().add("meta-label");
 
         buildLagTable();
 
-        HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh, reset,
+        HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh, reset, metrics,
                 lagAutoRefresh, lagTotal, lagStatus);
         top.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8, top, lagTable);
@@ -659,6 +665,47 @@ public final class KafkaView extends BorderPane {
                 (strategy, arg, ts) -> service.previewOffsetReset(group, strategy, arg, ts),
                 rows -> service.applyOffsetReset(group, rows),
                 this::refreshLag).show();
+    }
+
+    /**
+     * Fetches the broker client's AdminClient metrics off the FX thread and shows the curated
+     * {@link KafkaMetricsSummary} rows in a simple table dialog. Needs an active connection.
+     */
+    private void showMetrics() {
+        Task<List<KafkaMetricsSummary.Metric>> task = new Task<>() {
+            @Override protected List<KafkaMetricsSummary.Metric> call() {
+                return KafkaMetricsSummary.summarize(service.metricValues());
+            }
+        };
+        task.setOnSucceeded(e -> {
+            TableView<KafkaMetricsSummary.Metric> tv = new TableView<>(FXCollections.observableArrayList(task.getValue()));
+            tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+            tv.setPlaceholder(new Label("No metrics available"));
+            TableColumn<KafkaMetricsSummary.Metric, String> mName = new TableColumn<>("Metric");
+            mName.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().label()));
+            TableColumn<KafkaMetricsSummary.Metric, String> mVal = new TableColumn<>("Value");
+            mVal.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().value()));
+            mVal.setStyle("-fx-alignment: CENTER-RIGHT;");
+            tv.getColumns().add(mName);
+            tv.getColumns().add(mVal);
+            tv.setPrefSize(360, 280);
+
+            Dialog<Void> dialog = new Dialog<>();
+            dialog.setTitle("Kafka metrics");
+            dialog.setHeaderText("Live AdminClient metrics");
+            if (getScene() != null) dialog.initOwner(getScene().getWindow());
+            dialog.getDialogPane().setContent(tv);
+            dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+                if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+            });
+            dialog.showAndWait();
+        });
+        task.setOnFailed(e -> {
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("✖ metrics: " + task.getException().getMessage());
+        });
+        runBg(task, "kafka-metrics");
     }
 
     /** Starts or stops the 5-second auto-refresh poll based on the checkbox state. */
