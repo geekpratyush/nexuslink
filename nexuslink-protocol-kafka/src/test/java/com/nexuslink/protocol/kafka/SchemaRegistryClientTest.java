@@ -21,6 +21,7 @@ class SchemaRegistryClientTest {
     private HttpServer server;
     private SchemaRegistryClient client;
     private volatile String lastPostBody;
+    private volatile String lastPutBody;
 
     @BeforeEach
     void start() throws IOException {
@@ -33,6 +34,22 @@ class SchemaRegistryClientTest {
         server.createContext("/subjects/events-value/versions", exchange -> {
             lastPostBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             write(exchange, "{\"id\":42}");
+        });
+        // Global config: GET returns a level; PUT echoes what was set.
+        server.createContext("/config", exchange -> {
+            if (exchange.getRequestMethod().equals("PUT")) {
+                lastPutBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                write(exchange, "{\"compatibility\":\"FULL\"}");
+            } else {
+                write(exchange, "{\"compatibilityLevel\":\"BACKWARD\"}");
+            }
+        });
+        // Per-subject config: users-value has an override; orders-value 404s (inherits global).
+        respond("/config/users-value", "{\"compatibilityLevel\":\"FORWARD\"}");
+        server.createContext("/config/orders-value", exchange -> {
+            byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(404, body.length);
+            try (OutputStream os = exchange.getResponseBody()) { os.write(body); }
         });
         server.start();
         client = new SchemaRegistryClient("http://127.0.0.1:" + server.getAddress().getPort());
@@ -84,5 +101,26 @@ class SchemaRegistryClientTest {
         int id = client.register("events-value", "{\"type\":\"string\"}");
         assertEquals(42, id);
         assertEquals("{\"schema\":\"{\\\"type\\\":\\\"string\\\"}\"}", lastPostBody);
+    }
+
+    @Test
+    void readsGlobalCompatibility() throws IOException {
+        assertEquals("BACKWARD", client.getGlobalCompatibility());
+    }
+
+    @Test
+    void readsSubjectCompatibilityOverride() throws IOException {
+        assertEquals("FORWARD", client.getSubjectCompatibility("users-value"));
+    }
+
+    @Test
+    void subjectWithoutOverrideReturnsNull() throws IOException {
+        assertNull(client.getSubjectCompatibility("orders-value"), "404 → inherits global → null");
+    }
+
+    @Test
+    void setsGlobalCompatibilityAndSendsBody() throws IOException {
+        assertEquals("FULL", client.setGlobalCompatibility("FULL"));
+        assertEquals("{\"compatibility\":\"FULL\"}", lastPutBody);
     }
 }

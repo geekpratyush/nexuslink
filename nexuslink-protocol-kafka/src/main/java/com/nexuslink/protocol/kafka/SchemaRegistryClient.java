@@ -22,6 +22,11 @@ public final class SchemaRegistryClient {
     /** The Schema Registry content type for request bodies. */
     private static final String CONTENT_TYPE = "application/vnd.schemaregistry.v1+json";
 
+    /** The compatibility levels a registry accepts, for a UI picker. */
+    public static final List<String> COMPATIBILITY_LEVELS = List.of(
+            "BACKWARD", "BACKWARD_TRANSITIVE", "FORWARD", "FORWARD_TRANSITIVE",
+            "FULL", "FULL_TRANSITIVE", "NONE");
+
     /** A registered schema version. */
     public record Schema(String subject, int version, int id, String schema) {}
 
@@ -77,6 +82,45 @@ public final class SchemaRegistryClient {
         return intVal(m.get("id"));
     }
 
+    /** GET /config → the global (registry-wide) compatibility level. */
+    @SuppressWarnings("unchecked")
+    public String getGlobalCompatibility() throws IOException {
+        var m = (java.util.Map<String, Object>) SchemaRegistryJson.parse(get("/config"));
+        return str(m.get("compatibilityLevel"));
+    }
+
+    /**
+     * GET /config/{subject} → the subject's compatibility level, or {@code null} when the subject has
+     * no override set (a 404) and therefore inherits the global level.
+     */
+    @SuppressWarnings("unchecked")
+    public String getSubjectCompatibility(String subject) throws IOException {
+        String body = getAllowing404("/config/" + enc(subject));
+        if (body == null) return null;
+        var m = (java.util.Map<String, Object>) SchemaRegistryJson.parse(body);
+        return str(m.get("compatibilityLevel"));
+    }
+
+    /** PUT /config → sets the global compatibility level; returns the level the registry echoes back. */
+    public String setGlobalCompatibility(String level) throws IOException {
+        return applyCompatibility(put("/config", compatibilityBody(level)));
+    }
+
+    /** PUT /config/{subject} → sets a per-subject compatibility override; returns the echoed level. */
+    public String setSubjectCompatibility(String subject, String level) throws IOException {
+        return applyCompatibility(put("/config/" + enc(subject), compatibilityBody(level)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String applyCompatibility(String responseBody) {
+        var m = (java.util.Map<String, Object>) SchemaRegistryJson.parse(responseBody);
+        return str(m.get("compatibility"));
+    }
+
+    private static String compatibilityBody(String level) {
+        return "{\"compatibility\":" + SchemaRegistryJson.quote(level) + "}";
+    }
+
     // ---- transport ----
 
     private String get(String path) throws IOException {
@@ -96,6 +140,36 @@ public final class SchemaRegistryClient {
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
         if (basicAuth != null) b.header("Authorization", basicAuth);
         return send(b.build());
+    }
+
+    private String put(String path, String body) throws IOException {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", CONTENT_TYPE)
+                .header("Accept", CONTENT_TYPE)
+                .PUT(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+        if (basicAuth != null) b.header("Authorization", basicAuth);
+        return send(b.build());
+    }
+
+    /** Like {@link #get}, but returns {@code null} on a 404 instead of throwing (for optional config). */
+    private String getAllowing404(String path) throws IOException {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .timeout(Duration.ofSeconds(30))
+                .header("Accept", CONTENT_TYPE)
+                .GET();
+        if (basicAuth != null) b.header("Authorization", basicAuth);
+        try {
+            HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() == 404) return null;
+            if (resp.statusCode() / 100 != 2) {
+                throw new IOException("Schema Registry " + resp.statusCode() + ": " + resp.body());
+            }
+            return resp.body();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted calling Schema Registry", e);
+        }
     }
 
     private String send(HttpRequest req) throws IOException {

@@ -106,6 +106,9 @@ public final class KafkaView extends BorderPane {
     private final ObservableList<String> registrySubjects = FXCollections.observableArrayList();
     private final ListView<String> registrySubjectList = new ListView<>(registrySubjects);
     private final ComboBox<Integer> registryVersionCombo = new ComboBox<>();
+    private final ComboBox<String> registryCompatCombo =
+            new ComboBox<>(FXCollections.observableArrayList(SchemaRegistryClient.COMPATIBILITY_LEVELS));
+    private final Label registryCompatLabel = new Label();
     private final Label registryStatus = new Label();
     private org.fxmisc.richtext.CodeArea registrySchemaArea;
 
@@ -338,7 +341,7 @@ public final class KafkaView extends BorderPane {
         registerBtn.setOnAction(e -> registerSchema());
 
         registrySubjectList.getSelectionModel().selectedItemProperty().addListener(
-                (o, a, subject) -> { if (subject != null) loadVersions(subject); });
+                (o, a, subject) -> { if (subject != null) { loadVersions(subject); loadCompatibility(subject); } });
         registryVersionCombo.setPromptText("version");
         registryVersionCombo.valueProperty().addListener((o, a, v) -> {
             String subject = registrySubjectList.getSelectionModel().getSelectedItem();
@@ -353,7 +356,15 @@ public final class KafkaView extends BorderPane {
                 registryPass, loadBtn, registerBtn, registryStatus);
         top.setAlignment(Pos.CENTER_LEFT);
 
-        VBox versionBox = new VBox(6, label("Version:"), registryVersionCombo, schemaScroll);
+        registryCompatLabel.getStyleClass().add("meta-label");
+        Button setCompatBtn = new Button("Set");
+        setCompatBtn.getStyleClass().add("btn-secondary");
+        setCompatBtn.setTooltip(new Tooltip("Set this subject's compatibility level (an override on the global default)"));
+        setCompatBtn.setOnAction(e -> setCompatibility());
+        HBox compatRow = new HBox(8, label("Compatibility:"), registryCompatCombo, setCompatBtn, registryCompatLabel);
+        compatRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox versionBox = new VBox(6, label("Version:"), registryVersionCombo, compatRow, schemaScroll);
         versionBox.setPadding(new Insets(0, 0, 0, 8));
         VBox.setVgrow(schemaScroll, Priority.ALWAYS);
         SplitPane sp = new SplitPane(registrySubjectList, versionBox);
@@ -411,6 +422,51 @@ public final class KafkaView extends BorderPane {
         });
         task.setOnFailed(e -> registryFail("load versions", task.getException()));
         runBg(task, "schema-versions");
+    }
+
+    /**
+     * Loads {@code subject}'s effective compatibility level into the combo: its own override if set,
+     * otherwise the global default (shown as "inherited"). Runs off the FX thread.
+     */
+    private void loadCompatibility(String subject) {
+        SchemaRegistryClient client = registryClient();
+        registryCompatLabel.setText("");
+        Task<String[]> task = new Task<>() {
+            @Override protected String[] call() throws Exception {
+                String subjectLevel = client.getSubjectCompatibility(subject);
+                // {level, "override"|"inherited"} — fall back to the global default when unset.
+                return subjectLevel != null
+                        ? new String[]{subjectLevel, "override"}
+                        : new String[]{client.getGlobalCompatibility(), "inherited"};
+            }
+        };
+        task.setOnSucceeded(e -> {
+            String[] r = task.getValue();
+            registryCompatCombo.setValue(r[0]);
+            registryCompatLabel.setText("(" + r[1] + ")");
+        });
+        task.setOnFailed(e -> registryCompatLabel.setText("compatibility unavailable"));
+        runBg(task, "schema-compat");
+    }
+
+    /** Sets the selected subject's compatibility override to the combo value, off the FX thread. */
+    private void setCompatibility() {
+        String subject = registrySubjectList.getSelectionModel().getSelectedItem();
+        String level = registryCompatCombo.getValue();
+        if (subject == null || level == null) return;
+        SchemaRegistryClient client = registryClient();
+        registryStatus.getStyleClass().setAll("meta-label");
+        registryStatus.setText("Setting compatibility…");
+        Task<String> task = new Task<>() {
+            @Override protected String call() throws Exception { return client.setSubjectCompatibility(subject, level); }
+        };
+        task.setOnSucceeded(e -> {
+            registryCompatLabel.setText("(override)");
+            registryStatus.setText(subject + " compatibility → " + task.getValue());
+            logger.accept("Schema Registry: " + subject + " compatibility set to " + task.getValue());
+        });
+        task.setOnFailed(e -> registryFail("set compatibility", task.getException()));
+        runBg(task, "schema-set-compat");
     }
 
     private void loadSchema(String subject, int version) {

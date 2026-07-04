@@ -408,7 +408,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       tab: **Load subjects** → subjects `ListView`; selecting a subject loads its versions into a combo;
       picking a version shows the schema (JSON-highlighted, latest selected by default); **Register…** dialog
       posts a new schema version and refreshes. All calls run off the FX thread via `runBg`.
-- [ ] Compatibility mode display + change dialog
+- [x] Compatibility mode display + change dialog — `SchemaRegistryClient` gains `getGlobalCompatibility`,
+      `getSubjectCompatibility` (null → inherits global via a 404-tolerant GET), `setGlobalCompatibility`,
+      `setSubjectCompatibility` (PUT /config[/{subject}]) + a `COMPATIBILITY_LEVELS` list; 4 added loopback
+      tests (9 in `SchemaRegistryClientTest`). Wired into the Schema Registry tab: selecting a subject shows
+      its effective level in a combo tagged "(override)"/"(inherited)"; **Set** applies a per-subject override.
 - [x] Schema evolution diff (side-by-side version compare) — pure `SchemaDiff.between(old, new)`: parses each
       Avro record schema via the module's `SchemaRegistryJson`, canonicalizes field types (unions → `union[a,b]`),
       and returns name-ordered `FieldChange`s (`ADDED`/`REMOVED`/`TYPE_CHANGED`, nullability shows as a type
