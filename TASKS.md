@@ -348,11 +348,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 4.1 Connection
 - [-] `KafkaConnectionProfile` — bootstrap + security map (security.protocol / SASL mechanism+jaas / SSL) built in `KafkaView`; _saved-profile fields TODO_
 - [x] `KafkaConnectionService` — `KafkaService.connect()` creates an `Admin` client and verifies with a `listTopics` round-trip
-- [-] Connection wizard with per-step diagnostics (DNS → TCP → TLS → SASL → Admin API) — pure reusable
-      `ConnectionDiagnostics` runner done (nexuslink-core): runs an ordered list of named `Probe`s
-      sequentially, stops at the first failure and marks the rest SKIPPED, times each step, and fires a
-      per-step callback for live wizard updates; `allPassed()` summary. Protocol-agnostic (probes carry the
-      I/O). 7 tests. _(concrete DNS/TCP/TLS/SASL probes + the wizard dialog still TODO.)_
+- [x] Connection wizard with per-step diagnostics (DNS → TCP → TLS → SASL → Admin API) — pure reusable
+      `ConnectionDiagnostics` runner (ordered `Probe`s, stop-on-first-failure → rest SKIPPED, per-step timing +
+      live callback, `allPassed()`; 7 tests) + concrete `NetworkProbes` (DNS resolve, TCP connect, TLS
+      handshake, `basicSteps(host,port,tls)`; 6 tests vs a local socket). Wired via a reusable
+      `DiagnosticsDialog` (live Step/Status/Detail/Time table, off-FX) behind a **Diagnose** button on the
+      Kafka connect bar (DNS→TCP to the first broker). _(protocol-specific SASL/Admin probes can be appended by callers.)_
 
 ### 4.2 Topic Browser & Admin
 - [x] `TopicTreeView` — `KafkaExplorer` + `ResourceExplorerView`: topics (partition/replication counts) → partitions (leader/replicas/ISR)

@@ -153,11 +153,16 @@ public final class KafkaView extends BorderPane {
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> connect());
 
+        Button diagnoseBtn = new Button("Diagnose");
+        diagnoseBtn.getStyleClass().add("btn-secondary");
+        diagnoseBtn.setTooltip(new Tooltip("Check reachability of the first broker (DNS → TCP)"));
+        diagnoseBtn.setOnAction(e -> diagnose());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("kafka-client"));
 
-        HBox row1 = new HBox(8, label("Brokers:"), bootstrapField, connectBtn, helpBtn);
+        HBox row1 = new HBox(8, label("Brokers:"), bootstrapField, connectBtn, diagnoseBtn, helpBtn);
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(10, 10, 4, 10));
         HBox row2 = new HBox(8, label("Security:"), protocolCombo, label("SASL:"), saslMechCombo, saslUser, saslPass);
@@ -909,6 +914,20 @@ public final class KafkaView extends BorderPane {
     /** Kafka keystore type from a file extension ({@code .jks} → JKS, else PKCS12). */
     private static String storeType(String path) {
         return path.toLowerCase().endsWith(".jks") ? "JKS" : "PKCS12";
+    }
+
+    /** Runs a DNS→TCP reachability check against the first broker in the bootstrap list. */
+    private void diagnose() {
+        String bootstrap = Env.resolve(bootstrapField.getText().trim());
+        String first = bootstrap.split(",")[0].trim();
+        if (first.isEmpty()) { statusLabel.setText("Enter a broker host:port first"); return; }
+        int colon = first.lastIndexOf(':');
+        String host = colon > 0 ? first.substring(0, colon) : first;
+        int port = 9092;
+        if (colon > 0) { try { port = Integer.parseInt(first.substring(colon + 1)); } catch (NumberFormatException ignored) {} }
+        Window owner = getScene() == null ? null : getScene().getWindow();
+        com.nexuslink.ui.diagnostics.DiagnosticsDialog.run(owner, "Broker " + host + ":" + port,
+                com.nexuslink.core.diagnostics.NetworkProbes.basicSteps(host, port, false, 3000));
     }
 
     private void connect() {
