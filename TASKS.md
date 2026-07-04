@@ -348,7 +348,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 4.1 Connection
 - [-] `KafkaConnectionProfile` — bootstrap + security map (security.protocol / SASL mechanism+jaas / SSL) built in `KafkaView`; _saved-profile fields TODO_
 - [x] `KafkaConnectionService` — `KafkaService.connect()` creates an `Admin` client and verifies with a `listTopics` round-trip
-- [ ] Connection wizard with per-step diagnostics (DNS → TCP → TLS → SASL → Admin API)
+- [-] Connection wizard with per-step diagnostics (DNS → TCP → TLS → SASL → Admin API) — pure reusable
+      `ConnectionDiagnostics` runner done (nexuslink-core): runs an ordered list of named `Probe`s
+      sequentially, stops at the first failure and marks the rest SKIPPED, times each step, and fires a
+      per-step callback for live wizard updates; `allPassed()` summary. Protocol-agnostic (probes carry the
+      I/O). 7 tests. _(concrete DNS/TCP/TLS/SASL probes + the wizard dialog still TODO.)_
 
 ### 4.2 Topic Browser & Admin
 - [x] `TopicTreeView` — `KafkaExplorer` + `ResourceExplorerView`: topics (partition/replication counts) → partitions (leader/replicas/ISR)
