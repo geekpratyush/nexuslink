@@ -548,7 +548,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       dirs-first grouping are always preserved (only the key flips with direction); `FileOrder.by(SortKey,
       ascending)` is the pure, JavaFX-free seam both the policy and the default listing share, so a chosen
       sort persists across navigation. 9 `FileOrderTest` tests.
-- [ ] Hidden-files toggle; in-pane quick filter/search box
+- [x] Hidden-files toggle; in-pane quick filter/search box — a **• Hidden** toggle + a **Filter…** field
+      on each pane's bar, both routed through the pure JavaFX-free `FileFilter` (dotfile hide + case-insensitive
+      name substring; ".." always kept) that `FileBrowserPane.applyView()` composes with the sort policy. 6 tests.
 - [x] Synchronized browsing — a **⇄ Sync** toggle in the commander mirrors each pane's navigation onto
       the other by relative path (descend into the same sub-folder / climb the same number of levels); pure
       JavaFX-free `SyncBrowsing` path math (8 tests) with a suppression counter to break the mirror loop;
@@ -593,7 +595,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       the full path(s) of the selection to the clipboard); batch rename / duplicate still TODO
 - [ ] Properties dialog (size, permissions, owner, timestamps)
 - [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
-- [ ] Compare directories (highlight new/changed/missing) — feeds `SyncService` (7.1)
+- [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
+      compare of two listings, matching by name (case-sensitive by default, optional case-insensitive for
+      Windows FS), classifying each entry LEFT_ONLY / RIGHT_ONLY / DIFFERENT (size, mtime, or file-vs-dir
+      type) / SAME (same-name dirs match at this level); ignores the ".." row, returns a merged dirs-first
+      view + a per-status `summary()` count. Feeds `SyncService` (7.1). 9 tests. _(UI highlight overlay TODO.)_
 
 **Sessions & integration**
 - [ ] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session
