@@ -84,7 +84,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `PluginDescriptor` metadata record
 - [x] `ConnectionConfig` — protocol-agnostic config bag with vault refs
 - [x] `ValidationResult`, `ConnectionResult` records
-- [ ] `ExtensionRegistry` — discovers and loads plugins via ServiceLoader
+- [x] `ExtensionRegistry` — discovers and loads plugins via ServiceLoader — `ServiceLoader.load(ProtocolConnector)`
+      indexed by `protocolId` with `find`/`contains`/`all`/`descriptors`/`ids`; discovery split from indexing via
+      `fromProviders(Iterable)` (testable seam), skips null/blank ids, first-wins on duplicate id (collisions in
+      `duplicateIds()`). 7 tests (added JUnit test-dep to the plugin-api pom).
 
 ### 0.4 Base UI Module (`nexuslink.ui`)
 - [ ] `module-info.java` for `nexuslink.ui`
