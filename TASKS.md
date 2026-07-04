@@ -157,7 +157,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 1.3 Connection Profile Manager
 - [x] `ConnectionProfile` model — name, protocol, target, username, `AuthMethod` + auth/property maps, sample flag (`nexuslink-core/connection`)
 - [-] `ProfileRepository` — `ConnectionStore` persists saved profiles + hidden-sample ids to `~/.nexuslink/connections.json`, CRUD; _encryption / secret-vault refs TODO_
-- [ ] `ProfileImportExport` — encrypted JSON bundle, team share link
+- [-] `ProfileImportExport` — encrypted JSON bundle, team share link — encrypted bundle done: `ProfileImportExport`
+      serialises a `List<ConnectionProfile>` to JSON and encrypts it with AES-256-GCM under a PBKDF2 (200k,
+      SHA-256) key from a passphrase (fresh random salt+IV per export); `importBundle` verifies format/version
+      then GCM-decrypts, so a wrong passphrase or any tampering throws `ProfileBundleException` rather than
+      yielding partial data. Self-contained (`javax.crypto` + Jackson). 8 tests. _(UI export/import action + team share-link TODO.)_
 - [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide; _folders, tags, color dots, drag-to-reorder TODO_
 - [x] **Bundled public sample catalog** (`SampleCatalog`) — deletable/hideable public test endpoints (REST/WS/SQL/Mongo/MCP/LLM + SFTP/Kafka placeholders)
 - [ ] `ProfileEditorDialog` — generic fields + protocol-specific section (pluggable)
