@@ -513,7 +513,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list/read + **upload/download (progress), mkdir, rename, delete (recursive), chmod**. **Verified live vs. test.rebex.net.**
 - [x] `SftpView` — **WinSCP/MobaXterm-style two-pane commander** (local↔remote) via reusable `com.nexuslink.ui.files` (`FileBrowserPane`/`DualPaneBrowser`); upload/download, **cross-pane drag-and-drop**, Ctrl/Shift multi-select, New-Folder/Rename(F2)/Delete(Del), context menus.
 - [x] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle (queue panel with Pause/Resume + Limit combo; `TransferGovernor` governs the in-flight copy)
-- [ ] `SyncService` — bidirectional sync with conflict resolution (hash compare)
+- [-] `SyncService` — bidirectional sync with conflict resolution (hash compare) — pure planning core
+      done: `SyncPlanner` turns a `DirectoryDiff` into an ordered `Action` list for a chosen `Mode`
+      (MIRROR_TO_RIGHT / MIRROR_TO_LEFT / UPDATE_RIGHT / UPDATE_LEFT — the two UPDATE_* modes never
+      delete); each action carries the source/victim `FileItem` + the diff status that justified it, plus
+      a per-`Op` `summary()` for a preview. Copies dispatch to `TransferQueue`, deletes to `FileSystem`.
+      8 tests. _(UI preview + wiring, and hash-based change detection, still TODO.)_
 - [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
 ### 7.2 FTP / FTPS
