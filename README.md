@@ -26,10 +26,10 @@ workbench you use for REST and Kafka.
 ## Current Status
 
 NexusLink is under active development and **not yet feature-complete** against the full
-specification (`NexusLink_Specification.md`). As of the latest session, roughly **53% of the
-tracked tasks are done** (159 done · 34 in-progress · 107 not started), and **Phase 1 is
-complete**. `TASKS.md` is the live, phase-by-phase tracker and the source of truth; the table
-below summarizes it.
+specification (`NexusLink_Specification.md`). As of the latest session, roughly **65% of the
+tracked tasks are done** (196 done · 42 in-progress · 65 not started; ~72% weighting partial
+work), and **Phases 1 and (essentially) 4 are complete**. `TASKS.md` is the live, phase-by-phase
+tracker and the source of truth; the table below summarizes it.
 
 Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
@@ -43,7 +43,7 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Request history (SQLite + FTS5, replay) | ✅ Working |
 | Dark/light theming (palette variables, Ctrl+Shift+T) | ✅ Working (font bundling + system auto-detect TODO) |
 | Per-user protocol visibility (View ▸ Protocols…) | ✅ Working |
-| Connection profiles / saved connections | 🟡 Persisted + samples (folders/tags/import-export TODO) |
+| Connection profiles / saved connections | 🟡 Persisted + samples + **encrypted import/export bundle** (AES-256-GCM/PBKDF2); folders/tags TODO |
 | Certificate manager (generate, parse, PEM/DER/PKCS12 export, bundle import, CSR, **bundle builder**, expiry watchdog) | ✅ Working |
 | TLS / mTLS for connections (CA trust store + client key store) | ✅ Working in REST, WebSocket, gRPC, Kafka, **SQL/JDBC** (driver-specific SSL params) |
 | Environment-variable system (`${VAR}` envs, `.env`, secret masking) | ✅ Working (per-view send-path adoption TODO) |
@@ -55,13 +55,13 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **REST** (HTTP/2, auth: Basic/Bearer/API-key/OAuth2 client-creds + auth-code-PKCE/AWS-SigV4/Digest/**HMAC**, **cookie jar**, **response assertions**, **waterfall timeline**, viewers, code-gen in 11 languages) | ✅ Working (NTLM + pre-request scripts TODO) |
 | **WebSocket** | ✅ Working (text; binary/reconnect TODO) |
 | **SSE** | ✅ Working (verified live) |
-| **GraphQL** (query/variables/introspection) | ✅ Working (subscriptions TODO) |
-| **gRPC** (reflection-based, unary) | ✅ Working (verified live; streaming TODO) |
-| **JDBC SQL** (SQLite/H2/Postgres/MySQL/MariaDB bundled + on-demand driver mgr, ER diagram, TLS, sortable/filterable result grid + JSON/CSV export) | ✅ Working |
+| **GraphQL** (query/variables/introspection + **schema explorer** with field-insert) | ✅ Working (subscriptions TODO) |
+| **gRPC** (reflection-based, unary + pure `.proto` parser) | ✅ Working (verified live; streaming TODO) |
+| **JDBC SQL** (SQLite/H2/Postgres/MySQL/MariaDB bundled + on-demand driver mgr incl. Redshift/BigQuery, ER diagram, TLS, sortable/filterable result grid + JSON/CSV export) | ✅ Working |
 | **MongoDB** (find/SQL/aggregate/explain/CRUD, schema diagram, Compass views, export) | ✅ Working |
 | **Redis** (Lettuce; key browser, typed values, command console) | 🟡 Built (needs live server for E2E) |
-| **Kafka** (admin/produce/consume, topic explorer, consume table + payload formatter String/JSON/Hex/Base64 + JSON/CSV export) | 🟡 First cut (lag/schema-registry pending; needs a broker for E2E) |
-| **SFTP / FTP / FTPS** (WinSCP-style dual-pane commander, drag-and-drop, transfer queue + overwrite/skip prompts, mkdir/rename/delete/chmod) | ✅ Working (verified live; recursive dir transfers + speed/ETA TODO) |
+| **Kafka** (admin/produce/consume, topic explorer, consume table + payload formatter + JSON/CSV export, **consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics, connect diagnostics**) | ✅ Working (charts/JMX pending; needs a broker for E2E) |
+| **SFTP / FTP / FTPS** (WinSCP-style dual-pane commander: drag-drop, transfer queue w/ speed·ETA·pause·throttle·recursive·integrity-verify, move, batch-rename, dir-compare + sync, bookmarks, properties, mkdir/rename/delete/chmod) | ✅ Working (verified live; resume/parallel/external-DnD TODO) |
 | **S3 / Azure Blob / GCS** object storage (bucket→object browser) | 🟡 S3 verified live; Azure/GCS need creds for E2E |
 | **MCP Inspector** (tools/resources/prompts, Bearer-token auth) | ✅ Working (tested; OAuth/PKCE + vaulting TODO) |
 | **AI / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
@@ -83,13 +83,14 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Global code generation SPI (beyond REST) | ⏳ Not started |
 | Native packaging (`jlink` / `jpackage`, auto-update) | ⏳ Not started |
 
-> **Short answer to "is it done?": no.** The Phase-1 foundation (vault, certificate manager,
-> environment variables, history), the help infrastructure, and most protocols
-> (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/object-storage/MCP/LLM, plus first-cut Kafka, MQTT,
-> RabbitMQ with management dashboard, LDAP with LDIF/DIT, and an SNMP browser with trap receiver)
-> are built and many are verified live. Remaining: JMS/IBM-MQ/Solace/cloud messaging, SSH terminal,
-> Kafka depth (lag/schema-registry), distributed tracing, external vault integrations, and native
-> installers. See `TASKS.md` for the exact remaining items per phase.
+> **Short answer to "is it done?": no, but the offline-buildable core is largely there.** The Phase-1
+> foundation (vault, certificate manager, environment variables, history), the help infrastructure, and
+> most protocols (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/object-storage/MCP/LLM, a now-deep Kafka
+> client, MQTT, RabbitMQ with management dashboard, LDAP with LDIF/DIT, and an SNMP browser with trap
+> receiver) are built and many are verified live. Remaining work clusters into things that need external
+> systems or heavy new dependencies: JMS/IBM-MQ/Solace/cloud messaging, SSH terminal, chart/JMX
+> dashboards, distributed tracing, external secret-vault integrations, a JS pre-request engine, and
+> native installers. See `TASKS.md` for the exact remaining items per phase.
 
 ## Requirements
 

@@ -128,32 +128,35 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **1** | Foundation: vault, cert manager, profiles, env vars, history | ✅ **Complete** — vault (+UI/auto-lock), history, profiles + store + public samples + **`ProfileValidator`**, **certificate manager** (gen/parse/watchdog + **DER/PKCS12 export, PKCS12/JKS bundle import, CSR**), **environment-variable system** |
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | 🟡 REST (auth: Basic/Bearer/API-key/**OAuth2 client-creds+auth-code-PKCE**/**AWS SigV4**/**Digest**/**HMAC**, **cookie jar**, **response assertions**, **waterfall timeline**, code-gen 11 langs), WS, **SSE** done; REST depth (NTLM, pre-request scripts) pending |
-| **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | 🟡 First cut (admin/produce/consume + explorer + **consume table/payload formatter/export**) done; schema registry/metrics/lag pending — **needs a broker for E2E** |
+| **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | ✅ **Substantially complete** — admin/produce/consume + explorer + consume table/formatter/export, **consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics, connect diagnostics**; only live lag chart + JMX pending — **needs a broker for E2E** |
 | **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (verified live) + **RabbitMQ** (declare/publish/consume + **management dashboard** + DLX builder, first cut) done; RabbitMQ publisher-confirms/ack + JMS/IBM MQ/Solace/cloud pending |
-| **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary) + **GraphQL** (query/introspection) done; streaming/subscriptions pending |
-| **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style **dual-pane commander + drag-drop + transfer queue + overwrite/skip prompts**; recursive dir transfers + speed/ETA/resume pending |
+| **6** | Advanced HTTP (gRPC, GraphQL) | 🟡 **gRPC** (reflection, unary, **pure `.proto` parser**) + **GraphQL** (query/introspection + **schema explorer**) done; streaming/subscriptions pending |
+| **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·recursive·integrity-verify), move, batch-rename, dir-compare + sync, bookmarks, properties**; resume/parallel/external-DnD/SSH-terminal pending |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF import/export + DIT tree) + **SNMP** (v1/v2c GET/WALK + MIB names + v3/USM model + **trap receiver**) done; SSH + SNMPv3-on-the-wire pending |
 | **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (throughput/error-rate/P50-P95-P99 + live chart) done; tracing/external vaults/native pkg pending |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~55% of tracked tasks complete** (see `TASKS.md`). **Phase 1 is complete.** Full `mvn test`
-is **BUILD SUCCESS** across all 22 modules.
+**Overall: ~65% of tracked tasks complete** (196 done · 42 in-progress · 65 not started; ~72% weighting
+partial work — see `TASKS.md`). **Phases 1, 2, and (essentially) 4 are complete.** Full `mvn test` is
+**BUILD SUCCESS** across all 22 modules.
 
 ---
 
 ## 6. Highest-value next steps
 
-1. **Surface the new offline backends in their UIs** — most Session-39 work is backend + tests so far:
-   RabbitMQ **management dashboard** over `RabbitMqManagementClient` + DLX/confirms/ack UI; LDAP **LDIF
-   import/export + DIT tree** (`Ldif*`/`Dn` ready); REST **cookie jar** capture/inject in
-   `RestExecutionService` + **response-assertions tab** (`CookieJar`/`ResponseAssertions` ready).
-2. **File commander parity (SFTP/FTP)** — transfer queue panel, overwrite/resume prompts, recursive
-   directory transfers, remote↔remote, bookmarks/sessions, embedded SSH terminal (MobaXterm-level).
-3. **REST depth** — remaining auth (NTLM, custom-script); pre-request scripts.
-4. **SNMP depth** — trap receiver + real v3/USM on the wire (`OidRegistry` + `SnmpV3Config` model done).
-5. **Auth flows / Kafka depth** — end-to-end `AuthMethod`s (Kerberos, SASL/SCRAM, mTLS); Kafka schema
-   registry + consumer-lag monitor.
+The offline-buildable backlog is largely worked through; what remains needs external systems, heavy new
+dependencies, or chart/visualization UI with no headless test path:
+
+1. **Live-infra protocols** — JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub);
+   SSH terminal (VT100 emulator). Need licensed brokers / real servers to build and verify.
+2. **New-dependency features** — REST pre-request script engine (JS/Groovy); external secret vaults
+   (HashiCorp/AWS/Azure/CyberArk); Avro/Protobuf payload decode.
+3. **Chart / dashboard UI** — Kafka live lag chart + JMX metrics + lag heatmap; per-endpoint metrics
+   breakdown; distributed-tracing tree view. (Underlying pure summaries/models already exist.)
+4. **File-commander depth remaining** — resume interrupted transfers (offset), parallel transfers,
+   external-OS drag-and-drop, quick-view/edit-in-place, SCP mode, object-storage commander reuse.
+5. **Native packaging polish** — `jlink` runtime slimming; per-OS installers; auto-updater.
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
@@ -162,7 +165,8 @@ _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE ·
 ✅ **environment-variable system (+ `${VAR}` live in every protocol view)** · ✅ **`ProfileValidator`
 (Phase 1 complete)** · ✅ **MCP→Agent tool-calling loop** · ✅ **LDAP / Active Directory** · ✅ **OAuth2 authorization-code + PKCE** · ✅ **SNMP browser (v1/v2c)** ·
 ✅ **REST AWS SigV4 + Digest + HMAC auth** · ✅ **cert DER/PKCS12 export + bundle import + CSR** · ✅ **metrics dashboard (Phase 9.1)** · ✅ **cert bundle builder + TLS/mTLS connection material** ·
-✅ **SQL/JDBC driver-specific TLS** · ✅ **SFTP/FTP WinSCP-style two-pane file commander (+ cross-pane drag-and-drop, chmod)** · ✅ **REST code-gen: 6 more languages** · ✅ **REST cookie jar + response assertions (backend)** · ✅ **LDAP LDIF/DN model** · ✅ **RabbitMQ management API + DLX builder** · ✅ **SNMP MIB-name resolution + v3/USM model**.
+✅ **SQL/JDBC driver-specific TLS** · ✅ **SFTP/FTP WinSCP-style two-pane file commander (+ cross-pane drag-and-drop, chmod)** · ✅ **REST code-gen: 6 more languages** · ✅ **REST cookie jar + response assertions (backend)** · ✅ **LDAP LDIF/DN model** · ✅ **RabbitMQ management API + DLX builder** · ✅ **SNMP MIB-name resolution + v3/USM model** ·
+✅ **NTLM auth (wired)** · ✅ **SNMPv3/USM on the wire + trap/inform receiver** · ✅ **Kafka consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics** · ✅ **connection diagnostics (DNS/TCP/TLS probes + dialog)** · ✅ **file-commander depth: recursive transfers, speed/ETA, pause/resume/throttle, cancel/retry/reorder, move, batch-rename, dir-compare + sync plan, bookmarks, properties, integrity-verify, NC hotkeys, breadcrumb/sort/filter/sync-browse** · ✅ **gRPC `.proto` parser + status registry** · ✅ **GraphQL schema explorer** · ✅ **encrypted connection import/export** · ✅ **ExtensionRegistry (plugin SPI discovery)** · ✅ **Redshift/BigQuery driver catalog** · ✅ **S3 SigV4 presigned URLs** · ✅ **local Docker live-test harness (13 protocol families)**.
 _(Remaining theming: bundle Inter / JetBrains Mono fonts; system theme auto-detect.)_
 
 ---

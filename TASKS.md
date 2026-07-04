@@ -27,6 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
+| Progress | **~65%** — 196 done · 42 in-progress · 65 open of 303 (~72% weighted). Phases 1, 2 & (essentially) 4 complete; `mvn test` green across all 22 modules |
 
 ---
 
