@@ -514,7 +514,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`Code` enum, ordinal == wire number), `byNumber`/`findByNumber`/`byName`/`name`/`number`/`description`,
       a gRPC→HTTP status mapping (`httpStatus`), and an immutable `all()` for UI tables. 10 tests.
 - [x] `GrpcView` — host/port/TLS bar, service picker, method picker (streaming-flagged), request JSON editor, response panel; wired into the shell (gRPC sample = grpcb.in)
-- [ ] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection)
+- [-] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection) — pure dependency-free
+      proto3 parser done: strips comments, extracts syntax + package + message names, and brace-matches each
+      `service` to parse its `rpc`s (name, input/output types incl. fully-qualified `.pkg.Type`, client/server
+      streaming flags → `Method.isUnary()`). Returns a `ProtoFile(syntax, package, services, messages)`. 7 tests.
+      _(GrpcView "load .proto" wiring + request-template synthesis from message fields still TODO.)_
 - [ ] Streaming panel: live message list, send message (client/bidi), end stream
 
 ### 6.2 GraphQL Client
