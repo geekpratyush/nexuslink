@@ -27,9 +27,10 @@ workbench you use for REST and Kafka.
 
 NexusLink is under active development and **not yet feature-complete** against the full
 specification (`NexusLink_Specification.md`). As of the latest session, roughly **65% of the
-tracked tasks are done** (196 done · 42 in-progress · 65 not started; ~72% weighting partial
-work), and **Phases 1 and (essentially) 4 are complete**. `TASKS.md` is the live, phase-by-phase
-tracker and the source of truth; the table below summarizes it.
+tracked tasks are done** (197 done · 45 in-progress · 61 not started; ~73% weighting partial
+work), and **Phases 1, 2 and (essentially) 4 are complete**. A local Docker stack (`test-env/`)
+live-verifies 15 protocol families incl. Kafka, SQS/SNS, JMS, MQTT, SFTP/FTP and databases.
+`TASKS.md` is the live, phase-by-phase tracker and the source of truth; the table below summarizes it.
 
 Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 

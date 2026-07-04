@@ -27,7 +27,52 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~65%** — 196 done · 42 in-progress · 65 open of 303 (~72% weighted). Phases 1, 2 & (essentially) 4 complete; `mvn test` green across all 22 modules |
+| Progress | **~65%** — 197 done · 45 in-progress · 61 open of 303 (~73% weighted). Phases 1, 2 & (essentially) 4 complete; `mvn test` green across all 24 modules. Docker `test-env/` live-verifies 15 protocol families |
+
+---
+
+## ⏭ CLOSE-OUT PLAN — resume 2026-07-05 (read this first)
+
+**State at shutdown (2026-07-04):** clean tree, all pushed to `origin/main` @ `dc38b23`, `mvn test` green
+across 24 modules. Docker works here (v29 / compose v5). Two containers were left running (`artemis`,
+`localstack`) — a machine restart stops them; bring the stack back with
+`docker compose -f test-env/docker-compose.yml up -d`.
+
+**Can everything close in one day? Honestly: ~90% yes, 100% no.** ~106 items remain (61 open + 45 partial).
+The Docker-simulate pattern (proven this session for SQS/SNS + JMS) makes most of the "infra-gated" set
+buildable and live-verifiable in a focused day. A handful genuinely can't be *fully* closed offline and
+should be marked **won't-close-today** with the reason (see Wave E). Suggested one-day order:
+
+**Wave A — Docker-verified brokers (highest value; ~pattern = 20–30 min each):**
+1. **MQTT v5** (§5.4) — swap Paho v3→v5 client, add v5 props; Mosquitto already in stack.
+2. **HashiCorp Vault** (§9.4) — `hashicorp/vault` dev image; KV v2 read/write.
+3. **AWS Secrets Manager** (§9.4) — LocalStack (add `secretsmanager` to SERVICES); reuse AWS SDK v2.
+4. **Solace** (§5.3) — `solace/solace-pubsub-standard` + JCSMP client.
+5. **CyberArk Conjur** (§9.4) — `cyberark/conjur` OSS image (dockerable, unlike Key Vault).
+6. **IBM MQ** (§5.2) — `icr.io/ibm-messaging/mq` dev image (heavy ~2GB, needs `LICENSE=accept`).
+7. **SSH terminal service** (§8.5) — MINA SSHD client vs `linuxserver/openssh-server` (service+exec; the
+   VT100 *UI* is a separate big piece — do the service, defer the full terminal renderer).
+8. **Google Pub/Sub** (§5.6) — `gcr.io/google.com/cloudsdktool/...` pubsub emulator.
+
+**Wave B — offline pure/UI cores (fast, testable):** help-system components (`HelpButton`, tooltip-plus,
+`ErrorHelpLink`, empty-state, onboarding), `ProfileEditorDialog`, `PropertiesPanel`, connection-state
+panel, Redis Pub/Sub panel, HikariCP pooling, SCP mode, drop-onto-folder-row, module-info files,
+`.gitignore`/README skeleton, fonts.
+
+**Wave C — UI panels for the new backend modules:** SQS/SNS view, JMS view, Vault/Secrets view (services
+already done + live-verified this session — just wire the JavaFX panels + File-menu entries).
+
+**Wave D — charts (JavaFX `LineChart`/heatmap; no headless test — verify by launching):** Kafka lag chart,
+throughput chart, lag heatmap, per-endpoint metrics breakdown, distributed-trace tree view.
+
+**Wave E — WON'T fully close offline (mark + move on, don't fake):** Azure Key Vault (no local emulator —
+needs a real Azure account/managed identity); cloud sync + RBAC (§9.3, need a backend service); auto-updater
+(§9.6, needs a release server — can build the client check only); native per-OS installers (need per-OS
+tooling/signing). These are the realistic residual after a full close-out day.
+
+**How to work each item:** pure/JavaFX-free core + unit tests → thin UI wiring (gate on `mvn -pl nexuslink-ui
+-am compile` + full `mvn test`; no TestFX harness) → for a broker, a `*LiveIT` gated on `-Dnexuslink.it=true`
++ a compose service, run it, confirm PASS. Commit+push each; keep `origin/main` in sync; no AI attribution.
 
 ---
 
