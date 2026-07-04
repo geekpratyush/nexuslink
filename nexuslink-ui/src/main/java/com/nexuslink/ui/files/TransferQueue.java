@@ -65,11 +65,20 @@ public final class TransferQueue {
     /** Enqueues a batch sharing one {@link OverwriteResolver}, returning the created items. */
     public List<TransferItem> enqueue(TransferItem.Direction direction, List<FileItem> sources,
                                       String destDir, OverwriteResolver resolver) {
+        return enqueue(direction, sources, destDir, resolver, false);
+    }
+
+    /**
+     * Enqueues a batch. When {@code moveMode} is true each file is a move: its source is deleted once
+     * the copy completes successfully (a copy that is skipped or fails leaves the source untouched).
+     */
+    public List<TransferItem> enqueue(TransferItem.Direction direction, List<FileItem> sources,
+                                      String destDir, OverwriteResolver resolver, boolean moveMode) {
         List<TransferItem> created = new ArrayList<>();
         synchronized (lock) {
             for (FileItem f : sources) {
                 if (f.parent() || f.directory()) continue;
-                TransferItem item = new TransferItem(direction, f, destDir, resolver);
+                TransferItem item = new TransferItem(direction, f, destDir, resolver, moveMode);
                 items.add(item);
                 created.add(item);
             }
@@ -351,6 +360,7 @@ public final class TransferQueue {
                     return;
                 }
             }
+            if (item.isMove()) deleteSourceForMove(item);
             item.setStatus(TransferStatus.DONE);
         } catch (Exception e) {
             item.setError(e.getMessage() == null ? e.toString() : e.getMessage());
@@ -409,6 +419,20 @@ public final class TransferQueue {
             return "size " + r.actualSize() + " ≠ expected " + r.expectedSize();
         }
         return r.issues().toString();
+    }
+
+    /**
+     * Deletes the source file after a successful move. The source is on the side opposite the
+     * destination ({@code local} for an upload, {@code remote} for a download). A delete failure is
+     * recorded on the item but does not fail the transfer — the copy itself already succeeded.
+     */
+    private void deleteSourceForMove(TransferItem item) {
+        FileSystem sourceFs = item.direction() == TransferItem.Direction.UPLOAD ? local : remote;
+        try {
+            sourceFs.delete(item.source());
+        } catch (Exception e) {
+            item.setError("moved, but source delete failed: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+        }
     }
 
     private void finish(TransferItem item) {

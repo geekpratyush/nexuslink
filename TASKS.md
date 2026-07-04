@@ -632,7 +632,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 **Drag & drop**
 - [ ] **External DnD** — drag files in from the OS file manager (upload) and out to the desktop (download)
-- [ ] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local
+- [-] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local —
+      cross-pane **move** done: `TransferItem` carries a `moveMode` flag, `TransferQueue.enqueue(…, moveMode)`
+      deletes each source only after its copy succeeds (a skipped/failed copy leaves the source intact);
+      **Move →** / **← Move** buttons (confirmed) in `DualPaneBrowser`, both panes refresh after. 3 added
+      queue tests (27 in `TransferQueueTest`). _(modifier-key DnD + same-side/server-side move via rename still TODO.)_
 - [ ] Drop directly onto a **target folder row** (not only the pane's current directory)
 - [ ] Drag-over highlight / drop-target affordance for the above _(cross-pane highlight already done)_
 

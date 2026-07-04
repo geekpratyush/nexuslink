@@ -79,12 +79,17 @@ public final class DualPaneBrowser extends BorderPane {
         remotePane.setOnFocused(() -> activePane = remotePane);
         addEventFilter(KeyEvent.KEY_PRESSED, this::onCommanderKey);
 
-        // Refresh the destination pane each time a transfer completes.
+        // Refresh the destination pane each time a transfer completes; for a move, also refresh the
+        // source pane since the moved file was deleted there.
         queue.setOnItemFinished(item -> {
             if (item.status() != TransferStatus.DONE) return;
             Platform.runLater(() -> {
                 if (item.direction() == TransferItem.Direction.UPLOAD) remotePane.refresh();
                 else localPane.refresh();
+                if (item.isMove()) {
+                    if (item.direction() == TransferItem.Direction.UPLOAD) localPane.refresh();
+                    else remotePane.refresh();
+                }
             });
         });
         queue.startWorker();
@@ -153,12 +158,22 @@ public final class DualPaneBrowser extends BorderPane {
             messageLabel.setText(now ? "Synchronized browsing on" : "Synchronized browsing off");
         });
 
+        Button moveUp = new Button("Move →");
+        moveUp.getStyleClass().add("btn-secondary");
+        moveUp.setTooltip(new Tooltip("Move the selected local files to the remote directory (deletes the local originals)"));
+        moveUp.setOnAction(e -> move(localPane.selected(), TransferItem.Direction.UPLOAD));
+
+        Button moveDown = new Button("← Move");
+        moveDown.getStyleClass().add("btn-secondary");
+        moveDown.setTooltip(new Tooltip("Move the selected remote files to the local directory (deletes the remote originals)"));
+        moveDown.setOnAction(e -> move(remotePane.selected(), TransferItem.Direction.DOWNLOAD));
+
         Button compare = new Button("⇋ Compare");
         compare.getStyleClass().add("btn-secondary");
         compare.setTooltip(new Tooltip("Compare both directories and optionally sync (copy/delete) the differences"));
         compare.setOnAction(e -> compareDirectories());
 
-        VBox col = new VBox(12, upload, download, sync, compare);
+        VBox col = new VBox(12, upload, download, moveUp, moveDown, sync, compare);
         col.setAlignment(Pos.CENTER);
         col.setPadding(new Insets(40, 6, 6, 6));
         col.setMinWidth(120);
@@ -319,15 +334,44 @@ public final class DualPaneBrowser extends BorderPane {
     }
 
     private void upload(List<FileItem> items) {
-        enqueue(items, TransferItem.Direction.UPLOAD);
+        enqueue(items, TransferItem.Direction.UPLOAD, false);
     }
 
     private void download(List<FileItem> items) {
-        enqueue(items, TransferItem.Direction.DOWNLOAD);
+        enqueue(items, TransferItem.Direction.DOWNLOAD, false);
+    }
+
+    /**
+     * Moves the selection to the opposite pane: a normal transfer that deletes each source once its
+     * copy completes. Confirms first, since it removes the originals. Folders are not moved (only files);
+     * a folder in the selection is transferred as a copy by the recursive path.
+     */
+    private void move(List<FileItem> items, TransferItem.Direction direction) {
+        List<FileItem> files = items.stream().filter(f -> !f.parent() && !f.directory()).toList();
+        if (files.isEmpty()) {
+            messageLabel.setText("Select one or more files to move (folders are copied, not moved)");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Move " + files.size() + " file(s)? The source copies will be deleted after transfer.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText(null);
+        if (getScene() != null) {
+            confirm.initOwner(getScene().getWindow());
+            confirm.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+                if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+            });
+        }
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+        enqueue(files, direction, true);
+    }
+
+    private void enqueue(List<FileItem> items, TransferItem.Direction direction) {
+        enqueue(items, direction, false);
     }
 
     /** Enqueues the selection (files and whole folders) toward the opposite pane's directory. */
-    private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction) {
+    private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction, boolean moveMode) {
         if (!remoteConnected) {
             messageLabel.setText("Connect to a remote server before transferring files");
             return;
@@ -345,7 +389,7 @@ public final class DualPaneBrowser extends BorderPane {
 
         boolean hasFolder = items.stream().anyMatch(FileItem::directory);
         if (!hasFolder) {
-            reportQueued(queue.enqueue(direction, items, destDir, resolver).size(), direction);
+            reportQueued(queue.enqueue(direction, items, destDir, resolver, moveMode).size(), direction);
             return;
         }
         // Whole-folder transfer: walk the tree + create destination directories off the FX thread.

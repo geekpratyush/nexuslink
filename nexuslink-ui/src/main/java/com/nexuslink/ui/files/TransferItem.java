@@ -24,6 +24,7 @@ public final class TransferItem {
     private final String destDir;
     private final long totalBytes;
     private final OverwriteResolver resolver;
+    private final boolean moveMode;   // when true, the source is deleted after a successful copy (a move)
 
     private volatile TransferStatus status = TransferStatus.QUEUED;
     private volatile long transferredBytes;
@@ -32,11 +33,17 @@ public final class TransferItem {
     private volatile long endNanos = -1;      // set when it reaches a terminal state
 
     public TransferItem(Direction direction, FileItem source, String destDir, OverwriteResolver resolver) {
+        this(direction, source, destDir, resolver, false);
+    }
+
+    public TransferItem(Direction direction, FileItem source, String destDir, OverwriteResolver resolver,
+                        boolean moveMode) {
         this.direction = direction;
         this.source = source;
         this.destDir = destDir;
         this.totalBytes = Math.max(source.size(), 0);
         this.resolver = resolver == null ? OverwriteResolver.alwaysOverwrite() : resolver;
+        this.moveMode = moveMode;
     }
 
     public long id() { return id; }
@@ -46,6 +53,9 @@ public final class TransferItem {
     public String destDir() { return destDir; }
     public long totalBytes() { return totalBytes; }
     public OverwriteResolver resolver() { return resolver; }
+
+    /** True when this transfer is a move: the source is deleted once the copy completes successfully. */
+    public boolean isMove() { return moveMode; }
 
     public TransferStatus status() { return status; }
     void setStatus(TransferStatus status) { this.status = status; }

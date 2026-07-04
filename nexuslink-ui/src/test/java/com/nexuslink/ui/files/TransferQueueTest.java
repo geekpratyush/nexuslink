@@ -150,6 +150,44 @@ class TransferQueueTest {
     }
 
     @Test
+    void uploadMoveDeletesSourceAfterCopy(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "move me");
+        TransferQueue q = queue(local, remote);
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite(), true);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+        assertEquals("move me", Files.readString(remote.resolve("a.txt")), "copied to destination");
+        assertFalse(Files.exists(src), "source removed after a successful move");
+    }
+
+    @Test
+    void downloadMoveDeletesRemoteSource(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(remote.resolve("data.bin"), "payload");
+        TransferQueue q = queue(local, remote);
+        q.enqueue(TransferItem.Direction.DOWNLOAD,
+                List.of(fileItemFor(src)), local.toString(), OverwriteResolver.alwaysOverwrite(), true);
+        q.runPending();
+
+        assertEquals("payload", Files.readString(local.resolve("data.bin")));
+        assertFalse(Files.exists(src), "remote source removed after a successful download-move");
+    }
+
+    @Test
+    void skippedMoveLeavesSourceIntact(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "keep");
+        Files.writeString(remote.resolve("a.txt"), "existing");   // target exists → resolver will skip
+        TransferQueue q = queue(local, remote);
+        q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(src)), remote.toString(),
+                new OverwriteResolver(name -> OverwriteResolver.Choice.SKIP), true);
+        q.runPending();
+
+        assertTrue(Files.exists(src), "a skipped move must not delete the source");
+        assertEquals("existing", Files.readString(remote.resolve("a.txt")), "destination untouched");
+    }
+
+    @Test
     void downloadCopiesRemoteToLocal(@TempDir Path local, @TempDir Path remote) throws Exception {
         Path src = Files.writeString(remote.resolve("data.bin"), "payload");
         TransferQueue q = queue(local, remote);
