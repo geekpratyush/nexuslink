@@ -39,6 +39,8 @@ public final class FileBrowserPane extends VBox {
     private final TextField addressField = new TextField();
     private final TextField filterField = new TextField();
     private final ToggleButton showHidden = new ToggleButton("• Hidden");
+    private final MenuButton bookmarksButton = new MenuButton("★");
+    private final PathBookmarks bookmarks;
     private final javafx.scene.layout.FlowPane breadcrumbBar = new javafx.scene.layout.FlowPane();
     private final TableView<FileItem> table = new TableView<>();
     private final Label statusLabel = new Label();
@@ -56,6 +58,7 @@ public final class FileBrowserPane extends VBox {
 
     public FileBrowserPane(FileSystem fs, String title) {
         this.fs = fs;
+        this.bookmarks = PathBookmarks.load(bookmarkFile());
         getStyleClass().add("file-pane");
         setSpacing(6);
         setPadding(new Insets(6));
@@ -128,7 +131,11 @@ public final class FileBrowserPane extends VBox {
         showHidden.setTooltip(new Tooltip("Show hidden (dot) files"));
         showHidden.setOnAction(e -> applyView());
 
-        HBox bar = new HBox(6, up, refresh, addressField, filterField, showHidden, mkdir);
+        bookmarksButton.getStyleClass().add("btn-secondary");
+        bookmarksButton.setTooltip(new Tooltip("Bookmark folders and jump back to them"));
+        bookmarksButton.setOnShowing(e -> rebuildBookmarksMenu());
+
+        HBox bar = new HBox(6, up, refresh, addressField, filterField, showHidden, bookmarksButton, mkdir);
         bar.setAlignment(Pos.CENTER_LEFT);
         return bar;
     }
@@ -368,6 +375,44 @@ public final class FileBrowserPane extends VBox {
         content.putString(joined);
         Clipboard.getSystemClipboard().setContent(content);
         statusLabel.setText("Copied " + sel.size() + " path(s) to clipboard");
+    }
+
+    /**
+     * Rebuilds the bookmarks dropdown each time it opens: a toggle to bookmark (or un-bookmark) the
+     * current folder, then one entry per saved bookmark that navigates to it. Bookmarks persist per
+     * file-system name under {@code ~/.nexuslink}.
+     */
+    private void rebuildBookmarksMenu() {
+        bookmarksButton.getItems().clear();
+        boolean marked = bookmarks.contains(currentPath);
+        MenuItem toggle = new MenuItem(marked ? "★ Remove this bookmark" : "☆ Bookmark this folder");
+        toggle.setOnAction(e -> {
+            if (marked) bookmarks.remove(currentPath); else bookmarks.add(null, currentPath);
+            persistBookmarks();
+        });
+        bookmarksButton.getItems().add(toggle);
+        if (bookmarks.size() > 0) {
+            bookmarksButton.getItems().add(new SeparatorMenuItem());
+            for (PathBookmarks.Bookmark b : bookmarks.list()) {
+                MenuItem mi = new MenuItem(b.label() + "  —  " + b.path());
+                mi.setOnAction(e -> navigateTo(b.path()));
+                bookmarksButton.getItems().add(mi);
+            }
+        }
+    }
+
+    private void persistBookmarks() {
+        try {
+            bookmarks.save(bookmarkFile());
+        } catch (Exception ex) {
+            logger.accept(fs.name() + ": could not save bookmarks: " + ex.getMessage());
+        }
+    }
+
+    /** The per-file-system bookmarks file, e.g. {@code ~/.nexuslink/bookmarks-Local.txt}. */
+    private java.nio.file.Path bookmarkFile() {
+        String safe = fs.name().replaceAll("[^A-Za-z0-9_.-]", "_");
+        return java.nio.file.Path.of(System.getProperty("user.home"), ".nexuslink", "bookmarks-" + safe + ".txt");
     }
 
     public void newFolder() {
