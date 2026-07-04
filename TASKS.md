@@ -51,6 +51,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-snmp | `SnmpLiveIT` | net-snmp (GET + WALK) |
 | protocol-s3 | `S3LiveIT` | LocalStack S3 (list buckets/objects, get) |
 | protocol-sqs | `SqsSnsLiveIT` | LocalStack SQS+SNS (send/receive/delete, FIFO, publish) |
+| protocol-jms | `JmsLiveIT` | ActiveMQ Artemis (send/receive + non-consuming browse) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -453,8 +454,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 ### 5.1 JMS Generic Client
 - [ ] `JmsConnectionWizard` — provider dropdown, connection factory class, JNDI config, JAR upload
-- [ ] `JmsProducerService` + `JmsConsumerService`
-- [ ] Message type selector: Text/Bytes/Map/Object/Stream
+- [-] `JmsProducerService` + `JmsConsumerService` — `JmsService` (new `nexuslink-protocol-jms` module,
+      ActiveMQ Artemis Jakarta provider / `jakarta.jms`): connect to a broker URL, `sendText`, `receiveText`
+      (timed), and a non-consuming queue `browse` (JMS `QueueBrowser`). **Live-verified** via `JmsLiveIT`
+      (send→receive + browse-doesn't-consume) against Artemis 2.31.2 in `test-env`. _(generic-provider JAR
+      upload/JNDI + UI panel TODO.)_
+- [ ] Message type selector: Text/Bytes/Map/Object/Stream _(Text done in `JmsService`)_
 - [ ] Message properties editor (JMS standard + custom)
 
 ### 5.2 IBM MQ

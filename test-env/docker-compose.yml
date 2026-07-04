@@ -110,6 +110,19 @@ services:
       timeout: 10s
       retries: 20
 
+  # ---- PHASE 5: JMS (ActiveMQ Artemis) ----
+  artemis:                                     # Apache-2.0
+    image: apache/activemq-artemis:2.31.2
+    environment:
+      ARTEMIS_USER: nexus
+      ARTEMIS_PASSWORD: nexus123
+    ports: ["61616:61616", "8161:8161"]        # core/JMS wire + management console
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8161 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
   # ---- PHASE 5: MQTT ----
   mosquitto:                                   # EPL-2.0 / EDL-1.0
     image: eclipse-mosquitto:2
