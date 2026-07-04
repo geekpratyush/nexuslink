@@ -16,6 +16,7 @@ import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.Window;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -206,6 +207,8 @@ public final class FileBrowserPane extends VBox {
         open.setOnAction(e -> { FileItem s = table.getSelectionModel().getSelectedItem(); if (s != null) activate(s); });
         MenuItem rename = new MenuItem("Rename…  (F2)");
         rename.setOnAction(e -> renameSelected());
+        MenuItem batchRename = new MenuItem("Batch rename…");
+        batchRename.setOnAction(e -> batchRenameSelected());
         MenuItem delete = new MenuItem("Delete  (Del)");
         delete.setOnAction(e -> deleteSelected());
         MenuItem copyPath = new MenuItem("Copy path  (Ctrl+Shift+C)");
@@ -214,7 +217,7 @@ public final class FileBrowserPane extends VBox {
         mkdir.setOnAction(e -> newFolder());
         MenuItem refresh = new MenuItem("Refresh");
         refresh.setOnAction(e -> refresh());
-        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, delete, copyPath, mkdir, new SeparatorMenuItem(), refresh);
+        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), refresh);
         if (fs.supportsChmod()) {
             MenuItem chmod = new MenuItem("Permissions (chmod)…");
             chmod.setOnAction(e -> chmodSelected());
@@ -381,6 +384,36 @@ public final class FileBrowserPane extends VBox {
             String nm = nameRaw.trim();
             if (nm.isEmpty() || nm.equals(sel.name())) return;
             runBg("rename " + sel.name(), () -> { fs.rename(sel.path(), fs.join(currentPath, nm)); return null; }, r -> refresh());
+        });
+    }
+
+    /**
+     * Opens the {@link BatchRenameDialog} for the current multi-selection and applies the resulting
+     * renames sequentially in the background. Only rows whose name actually changed are renamed; the
+     * dialog already blocks committing a plan with colliding targets. Falls back to single-file
+     * {@link #renameSelected()} semantics when the user selects just one item and prefers a plain rename.
+     */
+    public void batchRenameSelected() {
+        List<FileItem> sel = selected();
+        sel.removeIf(FileItem::parent);
+        if (sel.isEmpty()) return;
+        List<String> names = sel.stream().map(FileItem::name).toList();
+        Window owner = getScene() == null ? null : getScene().getWindow();
+        BatchRenameDialog.open(owner, names).ifPresent(results -> {
+            // Map each source name to its full path so we can rename by absolute path.
+            var byName = new java.util.HashMap<String, FileItem>();
+            for (FileItem f : sel) byName.putIfAbsent(f.name(), f);
+            var renames = results.stream()
+                    .filter(r -> !r.from().equals(r.to()) && byName.containsKey(r.from()))
+                    .toList();
+            if (renames.isEmpty()) return;
+            runBg("batch rename " + renames.size(), () -> {
+                for (BulkRename.Result r : renames) {
+                    FileItem src = byName.get(r.from());
+                    fs.rename(src.path(), fs.join(currentPath, r.to()));
+                }
+                return null;
+            }, r -> refresh());
         });
     }
 

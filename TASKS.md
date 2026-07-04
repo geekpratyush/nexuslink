@@ -610,7 +610,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       previews before → after for a selection with find/replace (literal or `$1`-backref regex),
       prefix/suffix, `{n}` sequential numbering (start/step/zero-pad) and a case transform — all
       extension-aware (dotfiles/extensionless handled) — and flags colliding targets on every affected
-      row. 12 tests. _(UI dialog + duplicate still TODO.)_
+      row. 12 tests. **UI wired:** a **Batch rename…** context-menu item on each pane opens `BatchRenameDialog`
+      (find/replace + Regex, prefix/suffix, Add-number spinners, Case combo) with a live before → after preview
+      that colours colliding rows red and disables OK until the plan is unambiguous and non-empty; accepting
+      renames the changed rows sequentially off the FX thread via `FileSystem.rename`. _(Duplicate still TODO.)_
 - [ ] Properties dialog (size, permissions, owner, timestamps)
 - [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
 - [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
