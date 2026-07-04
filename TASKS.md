@@ -597,7 +597,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 **File operations**
 - [-] Batch/multi-file rename; duplicate; **copy-path** — copy-path done (context menu + Ctrl+Shift+C copies
-      the full path(s) of the selection to the clipboard); batch rename / duplicate still TODO
+      the full path(s) of the selection to the clipboard); **batch rename** engine done: pure `BulkRename`
+      previews before → after for a selection with find/replace (literal or `$1`-backref regex),
+      prefix/suffix, `{n}` sequential numbering (start/step/zero-pad) and a case transform — all
+      extension-aware (dotfiles/extensionless handled) — and flags colliding targets on every affected
+      row. 12 tests. _(UI dialog + duplicate still TODO.)_
 - [ ] Properties dialog (size, permissions, owner, timestamps)
 - [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
 - [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
