@@ -75,6 +75,7 @@ public final class SqlClientView extends BorderPane {
 
     private Consumer<String> logger = s -> {};
     private Consumer<ConnectionProfile> onSave = p -> {};
+    private Consumer<com.nexuslink.core.history.HistoryEntry> historyRecorder = e -> {};
 
     public SqlClientView() {
         getStyleClass().add("sql-view");
@@ -90,6 +91,24 @@ public final class SqlClientView extends BorderPane {
     /** Notified when the user saves the current connection as a profile. */
     public void setOnSave(Consumer<ConnectionProfile> onSave) {
         this.onSave = onSave == null ? p -> {} : onSave;
+    }
+
+    /** Records executed queries into the shared history store; set by the main window. */
+    public void setHistoryRecorder(Consumer<com.nexuslink.core.history.HistoryEntry> recorder) {
+        this.historyRecorder = recorder == null ? e -> {} : recorder;
+    }
+
+    /** Replays a query from a history detail JSON: restores the URL + statement, ready to run. */
+    public void loadQuery(String detailJson) {
+        try {
+            var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(detailJson);
+            String url = node.path("url").asText("");
+            String sql = node.path("sql").asText("");
+            if (!url.isBlank()) urlField.setText(url);
+            if (!sql.isBlank()) sqlEditor.setText(sql);
+        } catch (Exception ignored) {
+            // A malformed detail blob just leaves the editor as-is.
+        }
     }
 
     /** Pre-fills connection fields (used when opening a saved/sample connection). */
@@ -657,9 +676,24 @@ public final class SqlClientView extends BorderPane {
         Task<QueryResult> task = new Task<>() {
             @Override protected QueryResult call() { return service.execute(statement); }
         };
-        task.setOnSucceeded(e -> renderResult(task.getValue()));
+        task.setOnSucceeded(e -> { QueryResult r = task.getValue(); renderResult(r); recordQueryHistory(statement, r); });
         task.setOnFailed(e -> resultStatus.setText("Error: " + task.getException().getMessage()));
         runBg(task);
+    }
+
+    /** Records an executed statement into the shared history store (summary + replayable detail JSON). */
+    private void recordQueryHistory(String statement, QueryResult r) {
+        try {
+            String url = urlField.getText().trim();
+            String summary = truncate(statement) + " → " + r.summary();
+            var detail = new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode();
+            detail.put("url", url);
+            detail.put("sql", statement);
+            historyRecorder.accept(com.nexuslink.core.history.HistoryEntry.newSql(
+                    summary, r.durationMs(), detail.toString()));
+        } catch (Exception ignored) {
+            // History is best-effort; never let a recording error break the query flow.
+        }
     }
 
     private void renderResult(QueryResult r) {

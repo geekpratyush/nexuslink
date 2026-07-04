@@ -121,6 +121,7 @@ public final class MainWindow {
             openLlmTab();
             SqlClientView sql = new SqlClientView();
             sql.setLogger(this::log);
+            sql.setHistoryRecorder(this::recordHistory);
             Tab tab = new Tab("SQL " + (++newTabCounter), sql);
             tab.setClosable(true);
             workspace.getTabs().add(tab);
@@ -424,6 +425,7 @@ public final class MainWindow {
         SqlClientView view = new SqlClientView();
         view.setLogger(this::log);
         view.setOnSave(this::saveConnection);
+        view.setHistoryRecorder(this::recordHistory);
         addTab("SQL " + (++newTabCounter), view);
         return view;
     }
@@ -735,8 +737,12 @@ public final class MainWindow {
     }
 
     private void replayHistory(HistoryEntry entry) {
-        RestClientView view = openRestTab();
-        view.loadRequest(entry.detail());
+        if ("sql".equals(entry.protocol())) {
+            openSqlTab().loadQuery(entry.detail());
+        } else {
+            RestClientView view = openRestTab();
+            view.loadRequest(entry.detail());
+        }
         log("Replaying: " + entry.summary());
     }
 

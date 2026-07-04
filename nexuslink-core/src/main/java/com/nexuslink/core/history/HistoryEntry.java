@@ -19,4 +19,10 @@ public record HistoryEntry(
         return new HistoryEntry(0, "rest", System.currentTimeMillis(),
                 summary, statusCode, durationMs, false, detailJson);
     }
+
+    /** A SQL/JDBC history entry; {@code detailJson} carries the connection URL + statement for replay. */
+    public static HistoryEntry newSql(String summary, long durationMs, String detailJson) {
+        return new HistoryEntry(0, "sql", System.currentTimeMillis(),
+                summary, 0, durationMs, false, detailJson);
+    }
 }

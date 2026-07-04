@@ -738,7 +738,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Result grid: rendered, **sortable** (header click), **live filter** (`SortedList`→`FilteredList`, any-cell case-insensitive), and **Export JSON/CSV** of the displayed rows via FileChooser. `ResultGridExporter` (protocol-db, hand-rolled RFC 8259/4180, no deps) — 8 tests
 - [x] **4/4 unit tests pass** (in-memory SQLite)
 - [x] **ER diagram** — `JdbcService.erDiagramMermaid()`/`erDiagramMermaid(tables)` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button opens a **table-picker** (choose which tables to include; dangling relationships to excluded tables are dropped) then renders it in `DiagramView` (zoom/pan + **Export SVG/PNG**). Unit tests cover entities + relationship + filtered selection.
-- [ ] Query history integration (reuse HistoryStore)
+- [x] Query history integration (reuse HistoryStore) — `SqlClientView` records each executed statement via a
+      `setHistoryRecorder` hook (like REST): `HistoryEntry.newSql(summary, durationMs, detailJson)` with a
+      replayable `{url, sql}` detail blob; MainWindow wires it at both SQL tab sites and routes `sql`-protocol
+      replays back into a SQL tab (`loadQuery`) instead of a REST tab.
 - [ ] HikariCP connection pooling
 
 #### 8.1.1 JDBC Driver Strategy — **bundle the light ones, load the rest on demand**
