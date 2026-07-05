@@ -979,7 +979,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       version-`00` trailing data, reserved `ff`), `formatTraceparent`, `newRootTraceparent`, `childOf`/`child`,
       `injectInto`/`extract`; nested immutable `TraceState` (OWS trimming, whole-list drop on invalid/dup/>32,
       `with(k,v)` move-to-front + evict). `SecureRandom` ids. 44 tests. _(UI: auto-inject on REST requests TODO.)_
-- [ ] Jaeger/Zipkin span export
+- [-] Jaeger/Zipkin span export — **core done:** pure dependency-free `ZipkinSpanExporter` renders
+      captured `Span`s (traceId/id/parentId/name/kind/timestamp-µs/duration-µs/localEndpoint/tags) to
+      Zipkin v2 JSON (the format Jaeger's Zipkin collector also accepts); root vs child, kind/service/tags
+      omitted when absent, sorted tags for stable output, full string escaping. 8 tests.
+      _(capturing a span per REST call + an Export/POST action still TODO — pairs with wiring `TraceContext`
+      auto-inject.)_
 - [ ] Trace tree view in response panel
 
 ### 9.3 Team Collaboration
