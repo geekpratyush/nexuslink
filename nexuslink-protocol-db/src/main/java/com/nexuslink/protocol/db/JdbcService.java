@@ -2,6 +2,7 @@ package com.nexuslink.protocol.db;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -189,6 +190,72 @@ public final class JdbcService implements AutoCloseable {
             }
         }
         return cols;
+    }
+
+    /** Index descriptors for a table: {@code "name (col1, col2)[  UNIQUE]"}. */
+    public List<String> listIndexes(String table) throws SQLException {
+        DatabaseMetaData md = connection.getMetaData();
+        // index name → (unique flag, ordered columns)
+        java.util.Map<String, Boolean> unique = new LinkedHashMap<>();
+        java.util.Map<String, java.util.TreeMap<Short, String>> cols = new LinkedHashMap<>();
+        try (ResultSet rs = md.getIndexInfo(null, null, table, false, false)) {
+            while (rs.next()) {
+                String idx = rs.getString("INDEX_NAME");
+                String col = rs.getString("COLUMN_NAME");
+                if (idx == null || col == null) continue;
+                unique.putIfAbsent(idx, !rs.getBoolean("NON_UNIQUE"));
+                cols.computeIfAbsent(idx, k -> new java.util.TreeMap<>()).put(rs.getShort("ORDINAL_POSITION"), col);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (var e : cols.entrySet()) {
+            out.add(e.getKey() + " (" + String.join(", ", e.getValue().values()) + ")"
+                    + (Boolean.TRUE.equals(unique.get(e.getKey())) ? "  UNIQUE" : ""));
+        }
+        return out;
+    }
+
+    /** Foreign-key descriptors for a table: {@code "fkCol → parentTable(pkCol)"}. */
+    public List<String> listForeignKeys(String table) throws SQLException {
+        DatabaseMetaData md = connection.getMetaData();
+        List<String> out = new ArrayList<>();
+        try (ResultSet rs = md.getImportedKeys(null, null, table)) {
+            while (rs.next()) {
+                out.add(rs.getString("FKCOLUMN_NAME") + " → "
+                        + rs.getString("PKTABLE_NAME") + "(" + rs.getString("PKCOLUMN_NAME") + ")");
+            }
+        }
+        return out;
+    }
+
+    /** Stored-procedure names, best-effort (empty when the driver reports none). */
+    public List<String> listProcedures() {
+        return metadataNames(md -> md.getProcedures(null, null, "%"), "PROCEDURE_NAME");
+    }
+
+    /** User-function names, best-effort (empty when the driver reports none or lacks support). */
+    public List<String> listFunctions() {
+        return metadataNames(md -> md.getFunctions(null, null, "%"), "FUNCTION_NAME");
+    }
+
+    private interface MetaQuery { ResultSet run(DatabaseMetaData md) throws SQLException; }
+
+    private List<String> metadataNames(MetaQuery query, String column) {
+        List<String> out = new ArrayList<>();
+        try {
+            DatabaseMetaData md = connection.getMetaData();
+            try (ResultSet rs = query.run(md)) {
+                java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+                while (rs.next()) {
+                    String name = rs.getString(column);
+                    if (name != null && !name.isBlank()) seen.add(name.trim());
+                }
+                out.addAll(seen);
+            }
+        } catch (SQLException | AbstractMethodError e) {
+            // Not all drivers implement getProcedures/getFunctions — treat as "none".
+        }
+        return out;
     }
 
     private QueryResult readResultSet(ResultSet rs, long durationMs) throws SQLException {

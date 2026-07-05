@@ -400,7 +400,10 @@ public final class SqlClientView extends BorderPane {
         explorer.setMinWidth(200);
         explorer.setOnActivate(node -> {
             if (node.kind() == ResourceNode.Kind.TABLE) {
-                String table = node.id().substring("table:".length());
+                // Node ids are "table:NAME" or "view:NAME"; both are queryable with SELECT *.
+                String id = node.id();
+                String table = id.startsWith("view:") ? id.substring("view:".length())
+                                                       : id.substring("table:".length());
                 setEditorText("SELECT * FROM " + table + " LIMIT 100;");
                 runQuery();
             }
