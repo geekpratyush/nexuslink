@@ -588,13 +588,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
         refresh); errors surfaced to status/log, never crash the UI. _(publisher confirms/ack UI still TODO)_
 
 ### 5.6 Cloud Messaging
-- [-] AWS SQS: send/receive/delete, DLQ, FIFO support — `SqsService` (new `nexuslink-protocol-sqs` module,
-      AWS SDK v2 + url-connection client, emulator-aware endpoint): list/create queues, send, long-poll
-      receive, delete, purge, approximate-count, FIFO send (`.fifo` → content-dedup). **Live-verified** via
-      `SqsSnsLiveIT` (send→receive→delete round-trip + FIFO order) against LocalStack. _(UI panel + DLQ redrive TODO.)_
-- [-] AWS SNS: publish, subscription listing — `SnsService` (same module): create/list topics, publish
-      (subject+message), list subscriptions, delete topic. **Live-verified** (create→publish→list) vs LocalStack.
-      _(UI panel + SNS→SQS subscription wiring TODO.)_
+- [x] AWS SQS: send/receive/delete, DLQ, FIFO support — `SqsService` (new `nexuslink-protocol-sqs` module,
+      AWS SDK v2 + url-connection client, emulator-aware endpoint): list/create/delete queues, send, long-poll
+      receive, delete, purge, approximate-count, FIFO send (`.fifo` → content-dedup), **DLQ redrive**
+      (`redrive(dlq,target,max)`). **Live-verified** via `SqsSnsLiveIT` (send→receive→delete, FIFO order,
+      DLQ redrive) against LocalStack. **UI:** `SqsSnsView` (Queues tab) wired into the shell (sidebar +
+      File menu) — queue list, create/delete/purge, send (+FIFO group), receive table, delete, redrive.
+- [x] AWS SNS: publish, subscription listing — `SnsService` (same module): create/list/delete topics, publish
+      (subject+message), list subscriptions. **Live-verified** (create→publish→list) vs LocalStack. **UI:**
+      `SqsSnsView` Topics tab — topic list, create/delete, publish, per-topic subscriptions table.
 - [ ] Azure Service Bus: queue/topic/subscription, sessions, DLQ
 - [ ] Google Pub/Sub: publish, pull subscription
 

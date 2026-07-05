@@ -172,6 +172,11 @@
             </dependency>
             <dependency>
                 <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-sqs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>

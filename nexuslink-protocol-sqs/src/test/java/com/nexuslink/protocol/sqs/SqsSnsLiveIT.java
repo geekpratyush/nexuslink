@@ -58,6 +58,28 @@ class SqsSnsLiveIT {
     }
 
     @Test
+    void redriveMovesMessagesFromDlqToTarget() {
+        long t = System.currentTimeMillis();
+        String dlqName = "nexus-it-dlq-" + t;
+        String targetName = "nexus-it-target-" + t;
+        try (SqsService sqs = new SqsService()) {
+            sqs.connect(ENDPOINT, "us-east-1", "test", "test");
+            String dlq = sqs.createQueue(dlqName);
+            String target = sqs.createQueue(targetName);
+            sqs.send(dlq, "stuck-1");
+            sqs.send(dlq, "stuck-2");
+
+            int moved = sqs.redrive(dlq, target, 10);
+            assertEquals(2, moved, "both DLQ messages redriven");
+            assertTrue(sqs.receive(dlq, 5, 1).isEmpty(), "DLQ drained");
+            assertEquals(2, sqs.receive(target, 10, 5).size(), "messages landed on the target queue");
+
+            sqs.deleteQueue(dlq);
+            sqs.deleteQueue(target);
+        }
+    }
+
+    @Test
     void snsCreateTopicPublishAndList() {
         String name = "nexus-it-topic-" + System.currentTimeMillis();
         try (SnsService sns = new SnsService()) {

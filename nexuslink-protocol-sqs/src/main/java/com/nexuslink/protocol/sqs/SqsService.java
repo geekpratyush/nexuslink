@@ -115,6 +115,28 @@ public final class SqsService implements AutoCloseable {
         client.deleteQueue(DeleteQueueRequest.builder().queueUrl(queueUrl).build());
     }
 
+    /**
+     * Redrives messages from a dead-letter queue back to a source queue: receives up to {@code max}
+     * messages from {@code dlqUrl}, re-sends each body to {@code targetUrl}, and deletes it from the
+     * DLQ only after the re-send succeeds. Returns the number of messages moved. Standard queues only.
+     */
+    public int redrive(String dlqUrl, String targetUrl, int max) {
+        int moved = 0;
+        int remaining = Math.max(0, max);
+        while (remaining > 0) {
+            List<Message> batch = receive(dlqUrl, Math.min(10, remaining), 0);
+            if (batch.isEmpty()) break;
+            for (Message m : batch) {
+                send(targetUrl, m.body());
+                delete(dlqUrl, m.receiptHandle());
+                moved++;
+                remaining--;
+                if (remaining == 0) break;
+            }
+        }
+        return moved;
+    }
+
     @Override
     public void close() {
         if (client != null) { try { client.close(); } catch (Exception ignored) {} client = null; }

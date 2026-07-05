@@ -353,6 +353,13 @@ public final class MainWindow {
         return view;
     }
 
+    private com.nexuslink.ui.sqs.SqsSnsView openSqsTab() {
+        com.nexuslink.ui.sqs.SqsSnsView view = new com.nexuslink.ui.sqs.SqsSnsView();
+        view.setLogger(this::log);
+        addTab("SQS/SNS " + (++newTabCounter), view);
+        return view;
+    }
+
     private KafkaView openKafkaTab() {
         KafkaView view = new KafkaView();
         view.setLogger(this::log);
@@ -715,6 +722,7 @@ public final class MainWindow {
                 new ProtocolDef("kafka", "Kafka", "New Kafka Client", "topic", this::openKafkaTab),
                 new ProtocolDef("mqtt", "MQTT", "New MQTT Client", "topic", this::openMqttTab),
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
+                new ProtocolDef("sqs", "AWS SQS / SNS", "New SQS / SNS Client", "topic", this::openSqsTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),
                 new ProtocolDef("snmp", "SNMP Browser", "New SNMP Browser", "server", this::openSnmpTab),
