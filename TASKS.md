@@ -964,7 +964,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`nexuslink-core/metrics`, **8/8 tests**); registered in `AppContext`, fed by the REST view via `Metrics`
 - [x] `MetricsView` (Tools ▸ Metrics Dashboard…) — live per-channel table + requests/sec LineChart,
       1s `Timeline` refresh, Reset button; **P50/P95/P99** columns
-- [ ] Per-endpoint breakdown, exportable reports, alerting thresholds
+- [-] Per-endpoint breakdown, exportable reports, alerting thresholds — **exportable reports done:**
+      pure `MetricsReport` renders a collector snapshot to CSV (RFC 4180 quoting) or JSON (dependency-free),
+      5 tests; wired an **Export…** button in the Metrics Dashboard (FileChooser → CSV/JSON by extension).
+      _(per-endpoint breakdown beyond the existing per-channel grouping + alerting thresholds still TODO.)_
 - [ ] Connection state panel (active/idle/failed counts)
 
 ### 9.2 Distributed Tracing

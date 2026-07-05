@@ -1,6 +1,7 @@
 package com.nexuslink.ui.metrics;
 
 import com.nexuslink.core.metrics.MetricsCollector;
+import com.nexuslink.core.metrics.MetricsReport;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -14,6 +15,7 @@ import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.FileChooser;
 import javafx.util.Duration;
 
 import java.util.Map;
@@ -94,16 +96,47 @@ public final class MetricsView extends BorderPane {
             tick = 0;
             refresh();
         });
+        Button exportBtn = new Button("Export…");
+        exportBtn.getStyleClass().add("btn-secondary");
+        exportBtn.setTooltip(new Tooltip("Save the current per-channel metrics as CSV or JSON"));
+        exportBtn.setOnAction(e -> exportReport(exportBtn));
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("metrics"));
         statusLabel.getStyleClass().add("meta-label");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(10, title, spacer, statusLabel, clearBtn, helpBtn);
+        HBox bar = new HBox(10, title, spacer, statusLabel, exportBtn, clearBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
         return bar;
+    }
+
+    /** Writes the current metrics snapshot to a user-chosen CSV or JSON file. */
+    private void exportReport(javafx.scene.Node anchor) {
+        MetricsCollector c = Metrics.collector();
+        Map<String, MetricsCollector.Stats> snapshot =
+                c == null ? Map.of() : c.snapshot();
+        if (snapshot.isEmpty()) {
+            statusLabel.setText("Nothing to export yet.");
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Export metrics");
+        chooser.setInitialFileName("nexuslink-metrics.csv");
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("CSV", "*.csv"),
+                new FileChooser.ExtensionFilter("JSON", "*.json"));
+        java.io.File file = chooser.showSaveDialog(anchor.getScene() == null ? null : anchor.getScene().getWindow());
+        if (file == null) return;
+        boolean json = file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".json");
+        String content = json ? MetricsReport.toJson(snapshot) : MetricsReport.toCsv(snapshot);
+        try {
+            java.nio.file.Files.writeString(file.toPath(), content);
+            statusLabel.setText("Exported " + snapshot.size() + " channels → " + file.getName());
+        } catch (java.io.IOException ex) {
+            statusLabel.setText("Export failed: " + ex.getMessage());
+        }
     }
 
     private SplitPane buildBody() {
