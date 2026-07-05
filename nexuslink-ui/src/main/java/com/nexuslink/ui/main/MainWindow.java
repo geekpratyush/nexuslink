@@ -124,6 +124,7 @@ public final class MainWindow {
             sql.setHistoryRecorder(this::recordHistory);
             Tab tab = new Tab("SQL " + (++newTabCounter), sql);
             tab.setClosable(true);
+            installTabMenu(tab);
             workspace.getTabs().add(tab);
             workspace.getSelectionModel().select(tab);
             javafx.application.Platform.runLater(sql::runDemo);
@@ -310,6 +311,7 @@ public final class MainWindow {
         view.setOnSave(this::saveConnection);
         Tab tab = new Tab("REST " + (++newTabCounter), view);
         tab.setClosable(true);
+        installTabMenu(tab);
         workspace.getTabs().add(tab);
         workspace.getSelectionModel().select(tab);
         statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
@@ -482,9 +484,67 @@ public final class MainWindow {
     private void addTab(String title, javafx.scene.Node content) {
         Tab tab = new Tab(title, content);
         tab.setClosable(true);
+        installTabMenu(tab);
         workspace.getTabs().add(tab);
         workspace.getSelectionModel().select(tab);
         statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+    }
+
+    /** Desktop-style right-click menu on a workspace tab: rename + close / close others / to the right / all. */
+    private void installTabMenu(Tab tab) {
+        javafx.scene.control.MenuItem rename = new javafx.scene.control.MenuItem("Rename…");
+        rename.setOnAction(e -> renameTab(tab));
+        javafx.scene.control.MenuItem close = new javafx.scene.control.MenuItem("Close");
+        close.setOnAction(e -> closeTab(tab));
+        javafx.scene.control.MenuItem closeOthers = new javafx.scene.control.MenuItem("Close Others");
+        closeOthers.setOnAction(e -> {
+            workspace.getTabs().stream().filter(t -> t != tab && t.isClosable())
+                    .collect(java.util.stream.Collectors.toList()).forEach(this::closeTab);
+        });
+        javafx.scene.control.MenuItem closeRight = new javafx.scene.control.MenuItem("Close Tabs to the Right");
+        closeRight.setOnAction(e -> {
+            int idx = workspace.getTabs().indexOf(tab);
+            if (idx < 0) return;
+            new java.util.ArrayList<>(workspace.getTabs().subList(idx + 1, workspace.getTabs().size()))
+                    .forEach(this::closeTab);
+        });
+        javafx.scene.control.MenuItem closeAll = new javafx.scene.control.MenuItem("Close All");
+        closeAll.setOnAction(e ->
+                new java.util.ArrayList<>(workspace.getTabs()).forEach(this::closeTab));
+
+        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu(
+                rename, new javafx.scene.control.SeparatorMenuItem(),
+                close, closeOthers, closeRight, closeAll);
+        menu.setOnShowing(e -> {
+            int idx = workspace.getTabs().indexOf(tab);
+            close.setDisable(!tab.isClosable());
+            long others = workspace.getTabs().stream().filter(t -> t != tab && t.isClosable()).count();
+            closeOthers.setDisable(others == 0);
+            closeRight.setDisable(idx < 0 || idx >= workspace.getTabs().size() - 1);
+            closeAll.setDisable(workspace.getTabs().stream().noneMatch(Tab::isClosable));
+        });
+        tab.setContextMenu(menu);
+    }
+
+    /** Removes a closable tab, running its close handler if one is set, and refreshes the count. */
+    private void closeTab(Tab tab) {
+        if (tab == null || !tab.isClosable()) return;
+        workspace.getTabs().remove(tab);
+        if (tab.getOnClosed() != null) {
+            tab.getOnClosed().handle(new javafx.event.Event(Tab.CLOSED_EVENT));
+        }
+        statusConnections.setText(workspace.getTabs().size() + " open tab(s)");
+    }
+
+    /** Prompts for a new title for {@code tab}. */
+    private void renameTab(Tab tab) {
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(tab.getText());
+        dialog.setTitle("Rename tab");
+        dialog.setHeaderText(null);
+        dialog.setContentText("Tab name:");
+        dialog.showAndWait().ifPresent(name -> {
+            if (!name.isBlank()) tab.setText(name.trim());
+        });
     }
 
     /** Opens a saved/sample connection in the appropriate protocol tab, pre-filled. */
