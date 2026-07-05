@@ -52,4 +52,12 @@
     -nl-p-ldap:     #0F766E;  -nl-p-ldap-soft:     derive(-nl-p-ldap, 82%);
     -nl-p-snmp:     #7E22CE;  -nl-p-snmp-soft:     derive(-nl-p-snmp, 82%);
     -nl-p-ai:       #7E22CE;  -nl-p-ai-soft:       derive(-nl-p-ai, 82%);
+
+    /* JSON / code token colours (light) — deeper hues for contrast on white. */
+    -nl-json-key:    #0369A1;   /* field name — blue    */
+    -nl-json-string: #15803D;   /* string value — green */
+    -nl-json-number: #B45309;   /* number — amber       */
+    -nl-json-bool:   #7E22CE;   /* true/false — purple  */
+    -nl-json-null:   #BE123C;   /* null — rose          */
+    -nl-json-punct:  #64748B;   /* braces/commas — slate*/
 }

@@ -222,12 +222,12 @@
 .code-json .text     { -fx-fill: -nl-text; }
 .code-json .caret    { -fx-stroke: -nl-accent; }
 .code-json .selection { -fx-fill: -nl-accent-soft; }
-.json-key    { -fx-fill: -nl-accent;   -fx-font-weight: bold; }
-.json-string { -fx-fill: -nl-ok; }
-.json-number { -fx-fill: -nl-warn; }
-.json-bool   { -fx-fill: -nl-accent-2; -fx-font-weight: bold; }
-.json-null   { -fx-fill: -nl-danger;   -fx-font-style: italic; }
-.json-punct  { -fx-fill: -nl-text-muted; }
+.json-key    { -fx-fill: -nl-json-key;    -fx-font-weight: bold; }
+.json-string { -fx-fill: -nl-json-string; }
+.json-number { -fx-fill: -nl-json-number; }
+.json-bool   { -fx-fill: -nl-json-bool;   -fx-font-weight: bold; }
+.json-null   { -fx-fill: -nl-json-null;   -fx-font-style: italic; }
+.json-punct  { -fx-fill: -nl-json-punct; }
 
 /* ---------- SQL syntax highlighting (RichTextFX CodeArea) ---------- */
 .code-sql {

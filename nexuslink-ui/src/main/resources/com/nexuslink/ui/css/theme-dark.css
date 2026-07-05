@@ -54,4 +54,13 @@
     -nl-p-ldap:     #2DD4BF;  -nl-p-ldap-soft:     derive(-nl-p-ldap, -64%);
     -nl-p-snmp:     #C084FC;  -nl-p-snmp-soft:     derive(-nl-p-snmp, -64%);
     -nl-p-ai:       #C084FC;  -nl-p-ai-soft:       derive(-nl-p-ai, -64%);
+
+    /* JSON / code token colours (dark) — deliberate and distinct, independent of the accent
+     * so a "key" reads the same blue in every protocol view. */
+    -nl-json-key:    #7DD3FC;   /* field name — light blue   */
+    -nl-json-string: #4ADE80;   /* string value — green      */
+    -nl-json-number: #FBBF24;   /* number — amber            */
+    -nl-json-bool:   #C084FC;   /* true/false — purple       */
+    -nl-json-null:   #FB7185;   /* null — rose               */
+    -nl-json-punct:  #64748B;   /* braces/commas — slate     */
 }
