@@ -79,6 +79,13 @@ public final class SqlClientView extends BorderPane {
     private final java.util.List<String> schemaWords = new java.util.ArrayList<>();
     private final ContextMenu completionPopup = new ContextMenu();
 
+    // Editability context for the displayed grid: the single source table + its PK columns, resolved
+    // from the executed statement. Empty when the result isn't a simple single-table SELECT — which
+    // keeps row deletes (and future in-grid UPDATEs) safe and unambiguous.
+    private String editTable;
+    private final java.util.List<String> editPk = new java.util.ArrayList<>();
+    private final java.util.List<String> currentColumns = new java.util.ArrayList<>();
+
     // Result row model: master → filter (live text search) → sort (column headers).
     private final ObservableList<List<String>> masterRows = FXCollections.observableArrayList();
     private final FilteredList<List<String>> filteredRows = new FilteredList<>(masterRows, r -> true);
@@ -444,6 +451,18 @@ public final class SqlClientView extends BorderPane {
         resultGrid.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         resultGrid.setPlaceholder(new Label("Run a query to see results"));
 
+        // Right-click a result row → copy it, or delete it (via the preview-then-apply gate).
+        resultGrid.setRowFactory(tv -> {
+            TableRow<List<String>> row = new TableRow<>();
+            MenuItem copy = new MenuItem("Copy row");
+            copy.setOnAction(e -> { if (row.getItem() != null) copyToClipboard(String.join("\t", nullSafe(row.getItem()))); });
+            MenuItem delete = new MenuItem("Delete row…");
+            delete.setOnAction(e -> deleteRow(row.getItem()));
+            ContextMenu menu = new ContextMenu(copy, delete);
+            row.emptyProperty().addListener((o, was, empty) -> row.setContextMenu(empty ? null : menu));
+            return row;
+        });
+
         // Keep sorting and filtering composed: sorted(filtered(master)). The grid's own
         // sort order drives the comparator; the filter field narrows visible rows live.
         sortedRows.comparatorProperty().bind(resultGrid.comparatorProperty());
@@ -644,6 +663,68 @@ public final class SqlClientView extends BorderPane {
         });
         if (d.showAndWait().orElse(ButtonType.CANCEL) != apply) { statusLabel.setText("Change cancelled"); return; }
         runDdl(sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql);
+    }
+
+    // ---- editable-result support (row delete now; in-grid UPDATE to follow) ------------------
+
+    private static final java.util.regex.Pattern FROM_TABLE = java.util.regex.Pattern.compile(
+            "(?is)\\bfrom\\s+[\"`\\[]?([A-Za-z_][A-Za-z0-9_]*)[\"`\\]]?");
+
+    /**
+     * Determines whether the just-run statement yields an editable grid: a single-table
+     * {@code SELECT} (no join / comma-join / subquery) whose table has a primary key. Resolves the
+     * table + PK off-thread and stores them for {@link #deleteRow}.
+     */
+    private void setEditContext(String statement) {
+        editTable = null;
+        editPk.clear();
+        if (statement == null) return;
+        String s = statement.strip();
+        String lower = s.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith("select")) return;
+        if (lower.contains(" join ") || lower.matches("(?s).*\\bfrom\\b[^;]*,.*")) return;   // multi-table → not editable
+        java.util.regex.Matcher m = FROM_TABLE.matcher(s);
+        if (!m.find()) return;
+        String table = m.group(1);
+        Task<List<String>> pkTask = new Task<>() {
+            @Override protected List<String> call() throws Exception { return service.primaryKeyColumns(table); }
+        };
+        pkTask.setOnSucceeded(e -> {
+            List<String> pk = pkTask.getValue();
+            if (!pk.isEmpty() && currentColumns.containsAll(pk)) { editTable = table; editPk.addAll(pk); }
+        });
+        runBg(pkTask);
+    }
+
+    private void deleteRow(List<String> row) {
+        if (row == null) return;
+        if (editTable == null || editPk.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("This result isn't editable — run a simple SELECT from one table that has a primary key");
+            return;
+        }
+        List<String> conds = new ArrayList<>();
+        for (String pk : editPk) {
+            int idx = currentColumns.indexOf(pk);
+            if (idx < 0) { statusLabel.setText("Primary key column not in result — can't delete safely"); return; }
+            String val = idx < row.size() ? row.get(idx) : null;
+            conds.add(quoteIdent(pk) + " = " + sqlLiteral(val));
+        }
+        previewAndApply("DELETE FROM " + quoteIdent(editTable) + " WHERE " + String.join(" AND ", conds) + ";",
+                "Delete 1 row from “" + editTable + "”?");
+    }
+
+    /** Renders a cell value as a SQL literal: NULL, a bare number, or a single-quoted, escaped string. */
+    private static String sqlLiteral(String v) {
+        if (v == null || "NULL".equals(v)) return "NULL";
+        if (v.matches("-?\\d+(\\.\\d+)?")) return v;
+        return "'" + v.replace("'", "''") + "'";
+    }
+
+    private static List<String> nullSafe(List<String> row) {
+        List<String> out = new ArrayList<>(row.size());
+        for (String c : row) out.add(c == null ? "" : c);
+        return out;
     }
 
     private void generateStructure(List<String> names) {
@@ -1048,6 +1129,7 @@ public final class SqlClientView extends BorderPane {
             RunOutcome o = task.getValue();
             messagesArea.setText(o.messages());
             renderResult(o.display());
+            setEditContext(o.displayStmt());
             if (o.display() != null && o.display().failed()) selectTab("Messages");
             recordQueryHistory(o.displayStmt(), o.display());
         });
@@ -1092,10 +1174,12 @@ public final class SqlClientView extends BorderPane {
 
         resultGrid.getColumns().clear();
         masterRows.clear();
+        currentColumns.clear();
         if (!r.isResultSet()) {
             setStats(0, 0, r.durationMs());
             return;
         }
+        currentColumns.addAll(r.columns());
 
         for (int i = 0; i < r.columns().size(); i++) {
             final int col = i;

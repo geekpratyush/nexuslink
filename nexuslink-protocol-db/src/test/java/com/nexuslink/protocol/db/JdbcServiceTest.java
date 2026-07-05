@@ -128,4 +128,16 @@ class JdbcServiceTest {
             assertTrue(cols.get(0).startsWith("id"));
         }
     }
+
+    @Test
+    void reportsPrimaryKeyColumnsInOrder() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE t (a INTEGER, b INTEGER, note TEXT, PRIMARY KEY (a, b))");
+            assertEquals(java.util.List.of("a", "b"), svc.primaryKeyColumns("t"));
+
+            svc.execute("CREATE TABLE nopk (x INTEGER)");
+            assertTrue(svc.primaryKeyColumns("nopk").isEmpty());
+        }
+    }
 }

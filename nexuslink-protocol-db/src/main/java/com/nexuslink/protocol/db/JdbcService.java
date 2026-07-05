@@ -192,6 +192,16 @@ public final class JdbcService implements AutoCloseable {
         return cols;
     }
 
+    /** Primary-key column names for a table, in key order (empty if none). */
+    public List<String> primaryKeyColumns(String table) throws SQLException {
+        java.util.TreeMap<Short, String> pk = new java.util.TreeMap<>();
+        DatabaseMetaData md = connection.getMetaData();
+        try (ResultSet rs = md.getPrimaryKeys(null, null, table)) {
+            while (rs.next()) pk.put(rs.getShort("KEY_SEQ"), rs.getString("COLUMN_NAME"));
+        }
+        return new ArrayList<>(pk.values());
+    }
+
     /** Index descriptors for a table: {@code "name (col1, col2)[  UNIQUE]"}. */
     public List<String> listIndexes(String table) throws SQLException {
         DatabaseMetaData md = connection.getMetaData();
