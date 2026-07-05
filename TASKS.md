@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~65%** — 197 done · 45 in-progress · 61 open of 303 (~73% weighted). Phases 1, 2 & (essentially) 4 complete; `mvn test` green across all 24 modules. Docker `test-env/` live-verifies 15 protocol families |
+| Progress | **~67%** — 201 done · 46 in-progress · 52 open of **299 in-scope** (~75% weighted; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; `mvn test` green across 24 modules. Docker `test-env/` live-verifies 15 protocol families |
 
 ---
 
@@ -73,6 +73,25 @@ tooling/signing). These are the realistic residual after a full close-out day.
 **How to work each item:** pure/JavaFX-free core + unit tests → thin UI wiring (gate on `mvn -pl nexuslink-ui
 -am compile` + full `mvn test`; no TestFX harness) → for a broker, a `*LiveIT` gated on `-Dnexuslink.it=true`
 + a compose service, run it, confirm PASS. Commit+push each; keep `origin/main` in sync; no AI attribution.
+
+---
+
+## ⊘ OUT OF SCOPE FOR THIS ENVIRONMENT (excluded from progress)
+
+**Decision (2026-07-05):** these require resources this environment will never have — cloud accounts, a
+hosted backend/release server, or Windows/macOS build+signing machines — and cannot be tested here even
+with Docker. They are **excluded from the progress denominator** (no checkbox) but kept for completeness so
+anyone with those resources can pick them up. Not "not done" — *not applicable here.*
+
+- **Azure Key Vault: managed identity** (was §9.4) — no local emulator (Azurite doesn't cover Key Vault);
+  needs a real Azure subscription + managed identity. _(AWS Secrets Manager, HashiCorp Vault and CyberArk
+  Conjur stay in scope — all have Docker/LocalStack images.)_
+- **Optional cloud sync of profiles** (was §9.3) — needs a hosted sync backend that doesn't exist in-repo.
+- **RBAC: admin/developer/read-only profiles** (was §9.3) — needs a multi-user auth/identity backend.
+- **Auto-updater service** (was §9.6) — needs a hosted release/update server + artifact signing.
+- **Signed native installers for Windows & macOS** (was §9.6 note) — `jpackage` builds a host-OS app-image
+  here, but signed `.exe/.msi` and `.dmg/.pkg` need those OSes + Authenticode / Apple Developer-ID certs;
+  can't cross-build or sign from Linux. _(The Linux app-image + fat-jar paths remain in scope and done.)_
 
 ---
 
@@ -993,15 +1012,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [ ] Trace tree view in response panel
 
 ### 9.3 Team Collaboration
-- [ ] Profile export as encrypted JSON bundle
-- [ ] Optional cloud sync (encrypted at rest)
-- [ ] RBAC: admin/developer/read-only connection profiles
+- [x] Profile export as encrypted JSON bundle — `ProfileImportExport` (AES-256-GCM + PBKDF2, 8 tests)
+      wired into `ConnectionsPanel` as **Export…/Import…** with a passphrase dialog
+- _Optional cloud sync + RBAC → **excluded** (needs a hosted backend). See ⊘ Out of scope._
 
 ### 9.4 External Secret Vaults
 - [ ] HashiCorp Vault: KV v2, AppRole, AWS/Azure/GCP auth
 - [ ] AWS Secrets Manager: IAM role, rotation support
-- [ ] Azure Key Vault: managed identity
 - [ ] CyberArk Conjur: machine identity
+- _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._
 
 ### 9.5 Code Generation (Global)
 - [-] `RestCodeGenerator` — REST request → client snippet (per-language enum registry). _SPI across all protocols TODO._
@@ -1020,7 +1039,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       run `bin/NexusLink`). `mvn -Pfatjar,jpackage -pl nexuslink-app -am clean verify`. Built per-OS;
       switch `<type>` to EXE/MSI · DMG/PKG · DEB/RPM for installers (may need extra OS tooling).
 - [ ] `jlink` — further minimize the bundled runtime (jpackage currently bundles the full JDK runtime)
-- [ ] Auto-updater service
+- _Auto-updater service + signed cross-OS installers → **excluded** (need a release server / other OSes + signing). See ⊘ Out of scope._
 
 ---
 
