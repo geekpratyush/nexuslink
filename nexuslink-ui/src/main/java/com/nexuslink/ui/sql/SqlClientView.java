@@ -604,7 +604,13 @@ public final class SqlClientView extends BorderPane {
             ddl.setOnAction(e -> generateStructure(List.of(name)));
             MenuItem copy = new MenuItem("Copy name");
             copy.setOnAction(e -> copyToClipboard(name));
-            ContextMenu menu = new ContextMenu(select, ddl, copy, new SeparatorMenuItem());
+            ContextMenu menu = new ContextMenu(select, ddl, copy);
+            if (!view) {
+                MenuItem addCol = new MenuItem("Add column…");
+                addCol.setOnAction(e -> addColumnDialog(name));
+                menu.getItems().add(addCol);
+            }
+            menu.getItems().add(new SeparatorMenuItem());
             MenuItem drop = new MenuItem(view ? "Drop view…" : "Drop table…");
             drop.setOnAction(e -> previewAndApply("DROP " + (view ? "VIEW" : "TABLE") + " " + quoteIdent(name) + ";",
                     "Drop " + (view ? "view" : "table") + " “" + name + "”?"));
@@ -612,12 +618,21 @@ public final class SqlClientView extends BorderPane {
             return menu;
         }
         if (id.startsWith("col:")) {
-            String col = node.details().getOrDefault("Column", node.label());
+            String rest = id.substring("col:".length());
+            int dot = rest.lastIndexOf('.');   // "table.column" — column names carry no dot
+            String table = dot > 0 ? rest.substring(0, dot) : rest;
+            String col = node.details().getOrDefault("Column", dot > 0 ? rest.substring(dot + 1) : node.label());
             MenuItem copy = new MenuItem("Copy column name");
             copy.setOnAction(e -> copyToClipboard(col));
             MenuItem insert = new MenuItem("Insert into editor");
             insert.setOnAction(e -> sqlEditor.insertText(sqlEditor.getCaretPosition(), col));
-            return new ContextMenu(copy, insert);
+            MenuItem rename = new MenuItem("Rename column…");
+            rename.setOnAction(e -> renameColumnDialog(table, col));
+            MenuItem drop = new MenuItem("Drop column…");
+            drop.setOnAction(e -> previewAndApply(
+                    "ALTER TABLE " + quoteIdent(table) + " DROP COLUMN " + quoteIdent(col) + ";",
+                    "Drop column “" + col + "” from “" + table + "”?"));
+            return new ContextMenu(copy, insert, new SeparatorMenuItem(), rename, drop);
         }
         return null;
     }
@@ -901,6 +916,40 @@ public final class SqlClientView extends BorderPane {
             if (name.getText().isBlank()) return;
             String body = cols.getText().replaceAll("\\s+", " ").trim().replaceAll(",\\s*$", "");
             runDdl("CREATE TABLE " + name.getText().trim() + " (" + body + ")");
+        });
+    }
+
+    /** Add a column to a table — builds ALTER TABLE … ADD COLUMN and routes it through the preview gate. */
+    private void addColumnDialog(String table) {
+        Dialog<ButtonType> d = themedDialog("Add column", "Add a column to “" + table + "”");
+        TextField name = new TextField();
+        name.setPromptText("column_name");
+        TextField type = new TextField("TEXT");
+        GridPane g = formGrid();
+        g.addRow(0, new Label("Name:"), name);
+        g.addRow(1, new Label("Type:"), type);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            if (name.getText().isBlank() || type.getText().isBlank()) return;
+            previewAndApply("ALTER TABLE " + quoteIdent(table) + " ADD COLUMN "
+                            + quoteIdent(name.getText().trim()) + " " + type.getText().trim() + ";",
+                    "Add column “" + name.getText().trim() + "” to “" + table + "”?");
+        });
+    }
+
+    /** Rename a column — builds ALTER TABLE … RENAME COLUMN … TO … and routes it through the preview gate. */
+    private void renameColumnDialog(String table, String column) {
+        Dialog<ButtonType> d = themedDialog("Rename column", "Rename “" + column + "” on “" + table + "”");
+        TextField newName = new TextField(column);
+        GridPane g = formGrid();
+        g.addRow(0, new Label("New name:"), newName);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            String nn = newName.getText().trim();
+            if (nn.isBlank() || nn.equals(column)) return;
+            previewAndApply("ALTER TABLE " + quoteIdent(table) + " RENAME COLUMN "
+                            + quoteIdent(column) + " TO " + quoteIdent(nn) + ";",
+                    "Rename column “" + column + "” to “" + nn + "”?");
         });
     }
 
