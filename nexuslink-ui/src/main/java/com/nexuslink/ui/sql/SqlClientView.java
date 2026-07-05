@@ -408,6 +408,7 @@ public final class SqlClientView extends BorderPane {
                 runQuery();
             }
         });
+        explorer.setContextMenuFactory(this::explorerMenu);
 
         // Right: syntax-highlighted editor over tabbed results.
         VirtualizedScrollPane<CodeArea> editorScroll = new VirtualizedScrollPane<>(sqlEditor);
@@ -567,6 +568,82 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Could not list objects: " + listTask.getException().getMessage());
         });
         runBg(listTask);
+    }
+
+    // ---- schema-tree right-click actions ----------------------------------------------------
+
+    /** Builds the context menu for a schema-tree node (table/view/column/…). Null for none. */
+    private ContextMenu explorerMenu(ResourceNode node) {
+        if (node == null) return null;
+        String id = node.id();
+        if (id.startsWith("table:") || id.startsWith("view:")) {
+            boolean view = id.startsWith("view:");
+            String name = id.substring(id.indexOf(':') + 1);
+            MenuItem select = new MenuItem("Generate SELECT");
+            select.setOnAction(e -> { setEditorText("SELECT * FROM " + name + " LIMIT 100;"); runQuery(); });
+            MenuItem ddl = new MenuItem("View / export DDL…");
+            ddl.setOnAction(e -> generateStructure(List.of(name)));
+            MenuItem copy = new MenuItem("Copy name");
+            copy.setOnAction(e -> copyToClipboard(name));
+            ContextMenu menu = new ContextMenu(select, ddl, copy, new SeparatorMenuItem());
+            MenuItem drop = new MenuItem(view ? "Drop view…" : "Drop table…");
+            drop.setOnAction(e -> previewAndApply("DROP " + (view ? "VIEW" : "TABLE") + " " + quoteIdent(name) + ";",
+                    "Drop " + (view ? "view" : "table") + " “" + name + "”?"));
+            menu.getItems().add(drop);
+            return menu;
+        }
+        if (id.startsWith("col:")) {
+            String col = node.details().getOrDefault("Column", node.label());
+            MenuItem copy = new MenuItem("Copy column name");
+            copy.setOnAction(e -> copyToClipboard(col));
+            MenuItem insert = new MenuItem("Insert into editor");
+            insert.setOnAction(e -> sqlEditor.insertText(sqlEditor.getCaretPosition(), col));
+            return new ContextMenu(copy, insert);
+        }
+        return null;
+    }
+
+    private void copyToClipboard(String text) {
+        javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
+        cc.putString(text);
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
+    }
+
+    private static String quoteIdent(String name) {
+        return "\"" + name.replace("\"", "\"\"") + "\"";
+    }
+
+    /**
+     * Preview-then-apply confirm for any statement that <b>writes</b> to the database: shows the exact
+     * SQL (read-only, highlighted) in a dialog; only on explicit Apply does it run — then the schema
+     * tree refreshes and the outcome lands in the Messages tab. This is the safety gate for every
+     * generated mutation (DROP now; UPDATE/DELETE/ALTER as they land).
+     */
+    private void previewAndApply(String sql, String header) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Confirm change");
+        d.setHeaderText(header + "\nReview the SQL below — it runs only when you click Apply.");
+        ButtonType apply = new ButtonType("Apply", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(apply, ButtonType.CANCEL);
+
+        CodeArea preview = SqlHighlighter.area();
+        preview.replaceText(sql);
+        preview.setEditable(false);
+        VirtualizedScrollPane<CodeArea> scroll = new VirtualizedScrollPane<>(preview);
+        scroll.setPrefSize(520, 140);
+        d.getDialogPane().setContent(scroll);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        // Make the Apply button visually a "danger" action.
+        javafx.application.Platform.runLater(() -> {
+            var btn = d.getDialogPane().lookupButton(apply);
+            if (btn != null) btn.getStyleClass().add("btn-primary");
+        });
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != apply) { statusLabel.setText("Change cancelled"); return; }
+        runDdl(sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql);
     }
 
     private void generateStructure(List<String> names) {

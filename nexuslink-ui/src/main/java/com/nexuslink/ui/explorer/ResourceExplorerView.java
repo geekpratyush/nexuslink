@@ -14,6 +14,7 @@ import javafx.scene.layout.VBox;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Reusable object browser: a lazy {@link TreeView} of {@link ResourceNode}s (each rendered with
@@ -32,6 +33,7 @@ public final class ResourceExplorerView extends BorderPane {
     private Consumer<String> logger = s -> {};
     private Consumer<ResourceNode> onSelect = n -> {};
     private Consumer<ResourceNode> onActivate = n -> {};
+    private Function<ResourceNode, ContextMenu> contextMenuFactory = n -> null;
 
     public ResourceExplorerView(String titleText) {
         getStyleClass().add("explorer-view");
@@ -40,6 +42,16 @@ public final class ResourceExplorerView extends BorderPane {
 
         tree.setShowRoot(false);
         tree.getStyleClass().add("explorer-tree");
+        // Custom cell so nodes can carry a right-click menu (built per-node by the host view).
+        tree.setCellFactory(tv -> new TreeCell<>() {
+            @Override protected void updateItem(ResourceNode item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) { setText(null); setGraphic(null); setContextMenu(null); return; }
+                setText(item.label());
+                setGraphic(getTreeItem() == null ? null : getTreeItem().getGraphic());
+                setContextMenu(contextMenuFactory.apply(item));
+            }
+        });
         tree.getSelectionModel().selectedItemProperty().addListener((o, ov, item) -> {
             ResourceNode n = item == null ? null : item.getValue();
             showDetails(n);
@@ -79,6 +91,11 @@ public final class ResourceExplorerView extends BorderPane {
 
     /** Fired when a node is activated (double click). */
     public void setOnActivate(Consumer<ResourceNode> c) { this.onActivate = c == null ? n -> {} : c; }
+
+    /** Supplies a right-click menu per node (return {@code null} for no menu). */
+    public void setContextMenuFactory(Function<ResourceNode, ContextMenu> f) {
+        this.contextMenuFactory = f == null ? n -> null : f;
+    }
 
     /** (Re)loads the top-level nodes from the current explorer. */
     public void load() {
