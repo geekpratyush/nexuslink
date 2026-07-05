@@ -965,13 +965,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`nexuslink-core/metrics`, **8/8 tests**); registered in `AppContext`, fed by the REST view via `Metrics`
 - [x] `MetricsView` (Tools ▸ Metrics Dashboard…) — live per-channel table + requests/sec LineChart,
       1s `Timeline` refresh, Reset button; **P50/P95/P99** columns
-- [-] Per-endpoint breakdown, exportable reports, alerting thresholds — **exportable reports + alerting
-      done:** pure `MetricsReport` renders a collector snapshot to CSV (RFC 4180 quoting) or JSON
-      (dependency-free), 5 tests, wired to an **Export…** button (FileChooser → CSV/JSON by extension);
-      pure `MetricsAlerts` evaluates a snapshot against `Thresholds` (error-rate / P95 / mean, with a
-      min-samples floor; each threshold individually disable-able), 6 tests, wired into the dashboard —
-      breaching channels are tinted (`:alert` row pseudo-class) and counted in the status bar (⚠ N over
-      threshold). _(per-endpoint breakdown beyond the existing per-channel grouping still TODO.)_
+- [x] Per-endpoint breakdown, exportable reports, alerting thresholds — **all three done.** Exportable
+      reports: pure `MetricsReport` → CSV (RFC 4180) / JSON (5 tests), wired to an **Export…** button.
+      Alerting: pure `MetricsAlerts` vs `Thresholds` (error-rate / P95 / mean + min-samples floor, each
+      check disable-able; 6 tests), wired into the dashboard — breaching channels tinted (`:alert` row
+      pseudo-class) + "⚠ N over threshold" in the status bar. Per-endpoint breakdown: REST now records
+      metrics keyed by endpoint via pure `EndpointLabel.forRest` (method + host/path, query/fragment/scheme
+      stripped, so calls to one endpoint aggregate; 8 tests) instead of a flat "REST" channel — the
+      dashboard table becomes a per-endpoint breakdown and the throughput chart still sums across channels.
 - [ ] Connection state panel (active/idle/failed counts)
 
 ### 9.2 Distributed Tracing
