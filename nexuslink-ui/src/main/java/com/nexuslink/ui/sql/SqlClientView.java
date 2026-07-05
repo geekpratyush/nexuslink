@@ -181,7 +181,9 @@ public final class SqlClientView extends BorderPane {
         createTable.setOnAction(e -> createTableDialog());
         MenuItem createIndex = new MenuItem("Create Index…");
         createIndex.setOnAction(e -> createIndexDialog());
-        structureBtn.getItems().addAll(createTable, createIndex);
+        MenuItem exportStructure = new MenuItem("Export Structure…");
+        exportStructure.setOnAction(e -> exportStructureDialog());
+        structureBtn.getItems().addAll(createTable, createIndex, new SeparatorMenuItem(), exportStructure);
 
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
         dbCombo.getItems().setAll(JdbcDriverRegistry.all());
@@ -519,7 +521,7 @@ public final class SqlClientView extends BorderPane {
         listTask.setOnSucceeded(e -> {
             List<String> tables = listTask.getValue();
             if (tables.isEmpty()) { statusLabel.setText("No tables to diagram"); return; }
-            List<String> selected = pickErTables(tables);
+            List<String> selected = pickTables(tables, "ER Diagram", "Select tables to include");
             if (selected == null) { statusLabel.setText("ER diagram cancelled"); return; }
             if (selected.isEmpty()) { statusLabel.setText("Pick at least one table"); return; }
             buildErDiagram(selected);
@@ -531,9 +533,115 @@ public final class SqlClientView extends BorderPane {
         runBg(listTask);
     }
 
-    /** Checkbox picker for which tables go into the ER diagram. Returns null if cancelled. */
-    private List<String> pickErTables(List<String> tables) {
-        Dialog<ButtonType> d = themedDialog("ER Diagram", "Select tables to include");
+    /**
+     * Pick tables/views, then generate portable CREATE-TABLE DDL for them (via {@link
+     * com.nexuslink.protocol.db.SchemaExporter}) — a structure dump to share with a teammate or hand
+     * to a coding assistant. Shown in a dialog with Copy-to-clipboard and Save-to-file.
+     */
+    private void exportStructureDialog() {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        statusLabel.setText("Loading objects…");
+        Task<List<String>> listTask = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                List<String> out = new ArrayList<>();
+                for (String t : service.listTables()) out.add(t.trim());   // keeps the "(view)" marker
+                return out;
+            }
+        };
+        listTask.setOnSucceeded(e -> {
+            List<String> objects = listTask.getValue();
+            if (objects.isEmpty()) { statusLabel.setText("No tables or views to export"); return; }
+            List<String> selected = pickTables(objects, "Export Structure", "Select tables / views to export");
+            if (selected == null) { statusLabel.setText("Structure export cancelled"); return; }
+            if (selected.isEmpty()) { statusLabel.setText("Pick at least one object"); return; }
+            // Strip the "  (view)" display marker before asking the exporter for them.
+            List<String> names = new ArrayList<>();
+            for (String s : selected) names.add(s.replace("  (view)", "").trim());
+            generateStructure(names);
+        });
+        listTask.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not list objects: " + listTask.getException().getMessage());
+        });
+        runBg(listTask);
+    }
+
+    private void generateStructure(List<String> names) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Generating structure for " + names.size() + " object(s)…");
+        Task<String> task = new Task<>() {
+            @Override protected String call() throws Exception { return service.exportSchema(names); }
+        };
+        task.setOnSucceeded(e -> { statusLabel.setText("Structure ready"); showStructureExport(task.getValue()); });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Structure export failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Read-only, SQL-highlighted preview of the exported DDL with Copy and Save actions. */
+    private void showStructureExport(String ddl) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Structure export");
+        d.setHeaderText("CREATE-TABLE DDL — copy it to share, or save as .sql");
+        d.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
+        CodeArea preview = SqlHighlighter.area();
+        preview.replaceText(ddl);
+        preview.setEditable(false);
+        VirtualizedScrollPane<CodeArea> scroll = new VirtualizedScrollPane<>(preview);
+        scroll.setPrefSize(720, 460);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        Button copyBtn = new Button("Copy to clipboard");
+        copyBtn.getStyleClass().add("btn-primary");
+        copyBtn.setOnAction(ev -> {
+            javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
+            cc.putString(ddl);
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
+            copyBtn.setText("Copied ✓");
+        });
+        Button saveBtn = new Button("Save as .sql…");
+        saveBtn.getStyleClass().add("btn-secondary");
+        saveBtn.setOnAction(ev -> saveStructure(ddl));
+        HBox actions = new HBox(8, copyBtn, saveBtn);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox content = new VBox(8, actions, scroll);
+        content.setPadding(new Insets(6));
+        content.setPrefSize(740, 520);
+        d.getDialogPane().setContent(content);
+        d.setResizable(true);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        d.showAndWait();
+    }
+
+    private void saveStructure(String ddl) {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Save schema structure");
+        fc.setInitialFileName("schema.sql");
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("SQL files", "*.sql"));
+        File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        try {
+            Files.writeString(file.toPath(), ddl, StandardCharsets.UTF_8);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Structure saved → " + file.getName());
+            logger.accept("Schema structure saved to " + file.getName());
+        } catch (Exception ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Save failed: " + ex.getMessage());
+        }
+    }
+
+    /** Checkbox picker for a subset of tables (shared by ER diagram + structure export). Null if cancelled. */
+    private List<String> pickTables(List<String> tables, String title, String header) {
+        Dialog<ButtonType> d = themedDialog(title, header);
         List<CheckBox> boxes = new ArrayList<>();
         VBox list = new VBox(4);
         list.setPadding(new Insets(4));

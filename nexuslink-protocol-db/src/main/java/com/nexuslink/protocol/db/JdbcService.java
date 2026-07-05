@@ -170,6 +170,15 @@ public final class JdbcService implements AutoCloseable {
         return type.replaceAll("[^A-Za-z0-9]", "_");
     }
 
+    /**
+     * Exports {@code CREATE TABLE} DDL (columns, keys, indexes) plus a view summary for the given
+     * tables — a portable structure dump for sharing or handing to a coding assistant. A {@code null}
+     * or empty selection exports every object. See {@link SchemaExporter}.
+     */
+    public String exportSchema(java.util.Collection<String> tables) throws SQLException {
+        return SchemaExporter.toDdl(connection, tables);
+    }
+
     /** Returns "column TYPE" descriptors for a table. */
     public List<String> describeTable(String table) throws SQLException {
         List<String> cols = new ArrayList<>();
