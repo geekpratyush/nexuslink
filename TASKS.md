@@ -1613,11 +1613,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - `e14a046` Schema-tree **right-click actions** (Generate SELECT / View DDL / Copy / Drop) + a reusable
   **preview-SQL-then-apply** write gate (Drop uses it; UPDATE/DELETE/ALTER to follow).
 
-**SQL workbench — remaining (offline-testable, in-memory SQLite):**
-1. **In-grid data editing** — editable cells → generated `UPDATE`, row insert / `DELETE`, all through
-   the `previewAndApply` gate. Needs source-table + PK detection for simple `SELECT * FROM t` results.
-2. **Structure editing** — ALTER (add / rename / drop column) dialogs, also preview-then-apply.
-3. **Visual query help** — visual query builder; EXPLAIN-plan view; inline error markers; result charting.
+**SQL workbench — data/structure editing + query help (DONE this session):**
+- ✅ `1d767fa` row **DELETE**, `8f568c0` in-grid **UPDATE** — both through `previewAndApply`, gated on
+  single-table + PK detection (`JdbcService.primaryKeyColumns`).
+- ✅ `1e14a86` **structure editing** — ALTER add / rename / drop column (right-click table/column).
+- ✅ `e861a71` **EXPLAIN plan** (dialect-aware) + themed **result charting** (bar chart).
+
+**SQL workbench — still open:**
+- **Visual query builder** (pick table/columns/filters → generated SQL); inline editor error markers;
+  row insert (blank-row append → INSERT); multi-column / line charts.
 
 **Then the broader roadmap** (verify each against `git log` first — the list below is from Session 40
 and much has since landed: `TransferGovernor` throttling, REST NTLM/HMAC/Digest/OAuth, Kafka browser/metrics):
