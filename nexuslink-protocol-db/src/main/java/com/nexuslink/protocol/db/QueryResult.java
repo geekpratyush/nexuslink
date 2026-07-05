@@ -9,6 +9,7 @@ import java.util.List;
 public record QueryResult(
         boolean isResultSet,
         List<String> columns,
+        List<String> columnTypes,  // JDBC type name per column (parallel to columns); empty for non-selects
         List<List<String>> rows,   // cell values rendered as strings (null → "NULL")
         int updateCount,
         long durationMs,
@@ -16,7 +17,7 @@ public record QueryResult(
         String errorMessage
 ) {
     public static QueryResult error(String message, long durationMs) {
-        return new QueryResult(false, List.of(), List.of(), 0, durationMs, true, message);
+        return new QueryResult(false, List.of(), List.of(), List.of(), 0, durationMs, true, message);
     }
 
     public int rowCount() {

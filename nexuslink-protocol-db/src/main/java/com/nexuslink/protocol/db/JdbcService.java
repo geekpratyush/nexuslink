@@ -73,7 +73,7 @@ public final class JdbcService implements AutoCloseable {
                     return readResultSet(rs, ms(start));
                 }
             } else {
-                return new QueryResult(false, List.of(), List.of(),
+                return new QueryResult(false, List.of(), List.of(), List.of(),
                         st.getUpdateCount(), ms(start), false, null);
             }
         } catch (SQLException e) {
@@ -186,7 +186,11 @@ public final class JdbcService implements AutoCloseable {
         ResultSetMetaData md = rs.getMetaData();
         int colCount = md.getColumnCount();
         List<String> columns = new ArrayList<>(colCount);
-        for (int i = 1; i <= colCount; i++) columns.add(md.getColumnLabel(i));
+        List<String> columnTypes = new ArrayList<>(colCount);
+        for (int i = 1; i <= colCount; i++) {
+            columns.add(md.getColumnLabel(i));
+            columnTypes.add(columnTypeLabel(md, i));
+        }
 
         List<List<String>> rows = new ArrayList<>();
         int limit = 10_000; // guard against runaway result sets in the UI
@@ -198,7 +202,26 @@ public final class JdbcService implements AutoCloseable {
             }
             rows.add(row);
         }
-        return new QueryResult(true, columns, rows, 0, durationMs, false, null);
+        return new QueryResult(true, columns, columnTypes, rows, 0, durationMs, false, null);
+    }
+
+    /** A compact, lower-cased column type label for the grid header (e.g. {@code varchar(255)}). */
+    private String columnTypeLabel(ResultSetMetaData md, int col) {
+        try {
+            String name = md.getColumnTypeName(col);
+            if (name == null || name.isBlank()) return "";
+            name = name.toLowerCase(java.util.Locale.ROOT);
+            int precision = md.getPrecision(col);
+            // Show a size only for the character/decimal types where it's meaningful.
+            if (precision > 0 && precision < 65535
+                    && (name.contains("char") || name.contains("varchar") || name.equals("decimal") || name.equals("numeric"))) {
+                int scale = md.getScale(col);
+                return scale > 0 ? name + "(" + precision + "," + scale + ")" : name + "(" + precision + ")";
+            }
+            return name;
+        } catch (SQLException e) {
+            return "";
+        }
     }
 
     private long ms(long startNanos) {

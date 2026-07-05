@@ -26,6 +26,8 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
+import org.fxmisc.richtext.CodeArea;
+import org.fxmisc.flowless.VirtualizedScrollPane;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -63,9 +65,19 @@ public final class SqlClientView extends BorderPane {
     private final CheckBox trustAllCheck = new CheckBox("Trust any server certificate (no verification — testing only)");
 
     private final ResourceExplorerView explorer = new ResourceExplorerView("Schema");
-    private final TextArea sqlEditor = new TextArea();
+    private final CodeArea sqlEditor = SqlHighlighter.area();
     private final TableView<List<String>> resultGrid = new TableView<>();
+    private final TextArea messagesArea = new TextArea();
+    private final TabPane resultTabs = new TabPane();
     private final Label resultStatus = new Label();
+    // Stats strip (rows · cols · ms), each a value label styled via .stat-chip .value.
+    private final Label statRows = new Label("0");
+    private final Label statCols = new Label("0");
+    private final Label statMs = new Label("0");
+
+    // Autocomplete: SQL vocabulary plus schema words (tables + columns) cached on connect/refresh.
+    private final java.util.List<String> schemaWords = new java.util.ArrayList<>();
+    private final ContextMenu completionPopup = new ContextMenu();
 
     // Result row model: master → filter (live text search) → sort (column headers).
     private final ObservableList<List<String>> masterRows = FXCollections.observableArrayList();
@@ -105,7 +117,7 @@ public final class SqlClientView extends BorderPane {
             String url = node.path("url").asText("");
             String sql = node.path("sql").asText("");
             if (!url.isBlank()) urlField.setText(url);
-            if (!sql.isBlank()) sqlEditor.setText(sql);
+            if (!sql.isBlank()) setEditorText(sql);
         } catch (Exception ignored) {
             // A malformed detail blob just leaves the editor as-is.
         }
@@ -132,7 +144,7 @@ public final class SqlClientView extends BorderPane {
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected: in-memory SQLite");
-            sqlEditor.setText("SELECT id, name, role FROM users ORDER BY id;");
+            setEditorText("SELECT id, name, role FROM users ORDER BY id;");
             renderResult(task.getValue());
             refreshExplorer();
         });
@@ -387,30 +399,44 @@ public final class SqlClientView extends BorderPane {
         explorer.setOnActivate(node -> {
             if (node.kind() == ResourceNode.Kind.TABLE) {
                 String table = node.id().substring("table:".length());
-                sqlEditor.setText("SELECT * FROM " + table + " LIMIT 100;");
+                setEditorText("SELECT * FROM " + table + " LIMIT 100;");
                 runQuery();
             }
         });
 
-        // Right: editor over results
-        sqlEditor.getStyleClass().add("code-area");
-        sqlEditor.setPromptText("SELECT * FROM ...   (Ctrl+Enter to run)");
-        sqlEditor.setPrefRowCount(5);
-        sqlEditor.setOnKeyPressed(e -> {
-            if (e.isShortcutDown() && e.getCode() == javafx.scene.input.KeyCode.ENTER) runQuery();
+        // Right: syntax-highlighted editor over tabbed results.
+        VirtualizedScrollPane<CodeArea> editorScroll = new VirtualizedScrollPane<>(sqlEditor);
+        editorScroll.setPrefHeight(150);
+        VBox.setVgrow(editorScroll, Priority.NEVER);
+        sqlEditor.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (e.isShortcutDown() && e.getCode() == javafx.scene.input.KeyCode.ENTER) { runQuery(); e.consume(); }
+            else if (e.isShortcutDown() && e.getCode() == javafx.scene.input.KeyCode.SPACE) { showCompletions(); e.consume(); }
+            else if (e.isShortcutDown() && e.getCode() == javafx.scene.input.KeyCode.SLASH) { toggleLineComment(); e.consume(); }
         });
 
-        Button runBtn = new Button("Run  (Ctrl+Enter)");
+        Button runBtn = new Button("Run  ⌘/Ctrl+Enter");
         runBtn.getStyleClass().add("btn-primary");
+        runBtn.setTooltip(new Tooltip("Run the selection, or all statements if nothing is selected"));
         runBtn.setOnAction(e -> runQuery());
+        Button runSelBtn = new Button("Run selection");
+        runSelBtn.getStyleClass().add("btn-secondary");
+        runSelBtn.setOnAction(e -> runSelection());
+        Button formatBtn = new Button("Format");
+        formatBtn.getStyleClass().add("btn-secondary");
+        formatBtn.setTooltip(new Tooltip("Tidy the SQL — upper-case keywords, break before clauses"));
+        formatBtn.setOnAction(e -> formatEditor());
         resultStatus.getStyleClass().add("meta-label");
-        HBox runRow = new HBox(10, runBtn, resultStatus);
+        Region runSpacer = new Region();
+        HBox.setHgrow(runSpacer, Priority.ALWAYS);
+        HBox runRow = new HBox(8, runBtn, runSelBtn, formatBtn, runSpacer, statsStrip(), resultStatus);
         runRow.setAlignment(Pos.CENTER_LEFT);
         runRow.setPadding(new Insets(6, 0, 6, 0));
 
-        resultGrid.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        // Content-sized columns (like DBeaver / SQL Developer): each column is as wide as its data
+        // needs, with any leftover space trailing after the last column — far cleaner than a
+        // constrained policy ballooning one column. Widths are computed per query in renderResult.
+        resultGrid.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         resultGrid.setPlaceholder(new Label("Run a query to see results"));
-        VBox.setVgrow(resultGrid, Priority.ALWAYS);
 
         // Keep sorting and filtering composed: sorted(filtered(master)). The grid's own
         // sort order drives the comparator; the filter field narrows visible rows live.
@@ -430,13 +456,52 @@ public final class SqlClientView extends BorderPane {
 
         HBox gridTools = new HBox(8, filterField, exportJson, exportCsv);
         gridTools.setAlignment(Pos.CENTER_LEFT);
+        gridTools.setPadding(new Insets(0, 0, 6, 0));
 
-        VBox right = new VBox(6, sqlEditor, runRow, gridTools, resultGrid);
+        VBox gridPane = new VBox(6, gridTools, resultGrid);
+        VBox.setVgrow(resultGrid, Priority.ALWAYS);
+        gridPane.setPadding(new Insets(6));
+
+        messagesArea.setEditable(false);
+        messagesArea.getStyleClass().add("code-area");
+        messagesArea.setPromptText("Statement messages appear here");
+
+        Tab resultTab = new Tab("Result", gridPane);
+        resultTab.setClosable(false);
+        Tab msgTab = new Tab("Messages", messagesArea);
+        msgTab.setClosable(false);
+        resultTabs.getTabs().setAll(resultTab, msgTab);
+        resultTabs.getStyleClass().add("editor-tabs");
+        VBox.setVgrow(resultTabs, Priority.ALWAYS);
+
+        VBox right = new VBox(6, editorScroll, runRow, resultTabs);
         right.setPadding(new Insets(8));
 
         SplitPane sp = new SplitPane(explorer, right);
         sp.setDividerPositions(0.26);
         return sp;
+    }
+
+    /** rows · cols · ms chips shown next to the Run button. */
+    private HBox statsStrip() {
+        HBox strip = new HBox(14, chip("rows", statRows), chip("cols", statCols), chip("ms", statMs));
+        strip.setAlignment(Pos.CENTER_LEFT);
+        return strip;
+    }
+
+    private HBox chip(String name, Label value) {
+        Label caption = new Label(name);
+        value.getStyleClass().add("value");
+        HBox box = new HBox(4, value, caption);
+        box.getStyleClass().add("stat-chip");
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
+    }
+
+    private void setStats(int rows, int cols, long ms) {
+        statRows.setText(String.valueOf(rows));
+        statCols.setText(String.valueOf(cols));
+        statMs.setText(String.valueOf(ms));
     }
 
     private void showErDiagram() {
@@ -564,7 +629,7 @@ public final class SqlClientView extends BorderPane {
     private void runDdl(String ddl) {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Running DDL…");
-        sqlEditor.setText(ddl + ";");
+        setEditorText(ddl + ";");
         logger.accept("SQL DDL → " + ddl);
         Task<QueryResult> task = new Task<>() {
             @Override protected QueryResult call() { return service.execute(ddl); }
@@ -664,25 +729,154 @@ public final class SqlClientView extends BorderPane {
     private void refreshExplorer() {
         explorer.setExplorer(new JdbcExplorer(service));
         explorer.load();
+        cacheSchemaWords();
     }
 
-    private void runQuery() {
-        String sql = sqlEditor.getText().trim();
-        if (sql.isEmpty()) return;
-        // Run only the statement at the caret-ish: take the first ;-separated non-empty statement
-        String statement = Env.resolve(sql.split(";")[0].trim());   // resolve ${VAR} in the statement
-        resultStatus.setText("Running…");
-        logger.accept("SQL → " + truncate(statement));
-        Task<QueryResult> task = new Task<>() {
-            @Override protected QueryResult call() { return service.execute(statement); }
+    /** Loads table + column names off-thread so Ctrl+Space completion can offer them. */
+    private void cacheSchemaWords() {
+        Task<List<String>> task = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                java.util.LinkedHashSet<String> words = new java.util.LinkedHashSet<>();
+                List<String> tables = new ArrayList<>();
+                for (String t : service.listTables()) tables.add(t.replace("  (view)", "").trim());
+                words.addAll(tables);
+                for (String t : tables) {
+                    try {
+                        for (String c : service.describeTable(t)) {
+                            String name = c.split("\\s{2,}", 2)[0].trim();   // "col  TYPE" → col
+                            if (!name.isEmpty()) words.add(name);
+                        }
+                    } catch (Exception ignore) { /* skip a table we can't describe */ }
+                }
+                return new ArrayList<>(words);
+            }
         };
-        task.setOnSucceeded(e -> { QueryResult r = task.getValue(); renderResult(r); recordQueryHistory(statement, r); });
-        task.setOnFailed(e -> resultStatus.setText("Error: " + task.getException().getMessage()));
+        task.setOnSucceeded(e -> { schemaWords.clear(); schemaWords.addAll(task.getValue()); });
         runBg(task);
+    }
+
+    // ---- editor actions -------------------------------------------------------------------
+
+    private void setEditorText(String s) {
+        sqlEditor.replaceText(s == null ? "" : s);
+        sqlEditor.moveTo(0);
+        sqlEditor.requestFollowCaret();
+    }
+
+    /** Run: the selection if there is one, otherwise every statement in the editor. */
+    private void runQuery() {
+        String sel = sqlEditor.getSelectedText();
+        runStatements((sel != null && !sel.isBlank()) ? sel : sqlEditor.getText());
+    }
+
+    /** Run selection, or the single statement surrounding the caret when nothing is selected. */
+    private void runSelection() {
+        String sel = sqlEditor.getSelectedText();
+        runStatements((sel != null && !sel.isBlank()) ? sel : currentStatementAtCaret());
+    }
+
+    private void formatEditor() {
+        String sel = sqlEditor.getSelectedText();
+        if (sel != null && !sel.isBlank()) {
+            sqlEditor.replaceSelection(SqlFormatter.format(sel));
+        } else {
+            String all = sqlEditor.getText();
+            StringBuilder out = new StringBuilder();
+            for (String s : splitStatements(all)) {
+                if (out.length() > 0) out.append(";\n\n");
+                out.append(SqlFormatter.format(s));
+            }
+            if (!all.isBlank()) out.append(";");
+            setEditorText(out.toString());
+        }
+    }
+
+    /** Comment or uncomment the current line with a leading {@code -- }. */
+    private void toggleLineComment() {
+        int para = sqlEditor.getCurrentParagraph();
+        String line = sqlEditor.getParagraph(para).getText();
+        int start = sqlEditor.getAbsolutePosition(para, 0);
+        String trimmed = line.stripLeading();
+        int indent = line.length() - trimmed.length();
+        if (trimmed.startsWith("-- ")) {
+            sqlEditor.replaceText(start + indent, start + indent + 3, "");
+        } else if (trimmed.startsWith("--")) {
+            sqlEditor.replaceText(start + indent, start + indent + 2, "");
+        } else {
+            sqlEditor.insertText(start + indent, "-- ");
+        }
+    }
+
+    /** The ;-bounded statement containing the caret. */
+    private String currentStatementAtCaret() {
+        String text = sqlEditor.getText();
+        int caret = sqlEditor.getCaretPosition();
+        int from = text.lastIndexOf(';', Math.max(0, caret - 1)) + 1;
+        int to = text.indexOf(';', caret);
+        if (to < 0) to = text.length();
+        return text.substring(Math.min(from, text.length()), Math.min(to, text.length()));
+    }
+
+    /**
+     * Splits a SQL block into non-empty statements, delegating to the DB module's
+     * {@link com.nexuslink.protocol.db.SqlScriptSplitter} so strings, comments and dollar-quoting
+     * are handled the same way the rest of the app splits scripts.
+     */
+    private List<String> splitStatements(String block) {
+        return com.nexuslink.protocol.db.SqlScriptSplitter.split(block);
+    }
+
+    // ---- execution ------------------------------------------------------------------------
+
+    /** Result of running a block: which result to display, plus a per-statement message log. */
+    private record RunOutcome(QueryResult display, String displayStmt, String messages) {}
+
+    private void runStatements(String block) {
+        if (block == null || block.isBlank()) return;
+        List<String> statements = splitStatements(block);
+        if (statements.isEmpty()) return;
+        resultStatus.getStyleClass().setAll("meta-label");
+        resultStatus.setText("Running " + statements.size() + " statement" + (statements.size() == 1 ? "" : "s") + "…");
+        logger.accept("SQL → " + truncate(statements.get(0)) + (statements.size() > 1 ? "  (+" + (statements.size() - 1) + " more)" : ""));
+
+        Task<RunOutcome> task = new Task<>() {
+            @Override protected RunOutcome call() {
+                QueryResult display = null;
+                String displayStmt = null;
+                StringBuilder msg = new StringBuilder();
+                for (String s : statements) {
+                    String stmt = Env.resolve(s);
+                    QueryResult r = service.execute(stmt);
+                    msg.append(r.failed() ? "✖ " : "✔ ").append(truncate(stmt)).append("  →  ")
+                       .append(r.failed() ? r.errorMessage() : r.summary()).append('\n');
+                    // Prefer the last statement that returned a grid; otherwise keep the last outcome.
+                    if (r.failed()) { display = r; displayStmt = stmt; break; }
+                    if (r.isResultSet() || display == null) { display = r; displayStmt = stmt; }
+                }
+                return new RunOutcome(display, displayStmt, msg.toString());
+            }
+        };
+        task.setOnSucceeded(e -> {
+            RunOutcome o = task.getValue();
+            messagesArea.setText(o.messages());
+            renderResult(o.display());
+            if (o.display() != null && o.display().failed()) selectTab("Messages");
+            recordQueryHistory(o.displayStmt(), o.display());
+        });
+        task.setOnFailed(e -> {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Error: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    private void selectTab(String text) {
+        for (Tab t : resultTabs.getTabs()) if (text.equals(t.getText())) { resultTabs.getSelectionModel().select(t); return; }
     }
 
     /** Records an executed statement into the shared history store (summary + replayable detail JSON). */
     private void recordQueryHistory(String statement, QueryResult r) {
+        if (statement == null || r == null) return;
         try {
             String url = urlField.getText().trim();
             String summary = truncate(statement) + " → " + r.summary();
@@ -697,6 +891,7 @@ public final class SqlClientView extends BorderPane {
     }
 
     private void renderResult(QueryResult r) {
+        if (r == null) return;
         if (r.failed()) {
             resultStatus.getStyleClass().setAll("status-err");
             resultStatus.setText("✖ " + r.errorMessage());
@@ -709,18 +904,97 @@ public final class SqlClientView extends BorderPane {
 
         resultGrid.getColumns().clear();
         masterRows.clear();
-        if (!r.isResultSet()) return;
+        if (!r.isResultSet()) {
+            setStats(0, 0, r.durationMs());
+            return;
+        }
 
         for (int i = 0; i < r.columns().size(); i++) {
             final int col = i;
-            TableColumn<List<String>, String> tc = new TableColumn<>(r.columns().get(i));
+            String type = i < r.columnTypes().size() ? r.columnTypes().get(i) : "";
+            TableColumn<List<String>, String> tc = new TableColumn<>();
+            tc.setGraphic(columnHeader(r.columns().get(i), type));
             tc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                     col < cd.getValue().size() ? cd.getValue().get(col) : ""));
+            tc.setCellFactory(c -> nullAwareCell());
+            tc.setPrefWidth(contentWidth(r, col, type));
             resultGrid.getColumns().add(tc);
         }
         masterRows.setAll(r.rows());
         applyRowFilter(filterField.getText());
+        setStats(r.rowCount(), r.columns().size(), r.durationMs());
+        selectTab("Result");
     }
+
+    /** Pref width for a column: the widest of header name, type label, and a sample of cell values. */
+    private double contentWidth(QueryResult r, int col, String type) {
+        int widest = Math.max(r.columns().get(col).length(), type == null ? 0 : type.length());
+        int sample = Math.min(r.rows().size(), 200);
+        for (int i = 0; i < sample; i++) {
+            List<String> row = r.rows().get(i);
+            if (col < row.size() && row.get(col) != null) widest = Math.max(widest, row.get(col).length());
+        }
+        return Math.max(70, Math.min(360, widest * 7.5 + 26));   // ~7.5px per char, clamped
+    }
+
+    /** A two-line column header: bold name over a faint, mono type label. */
+    private VBox columnHeader(String name, String type) {
+        Label n = new Label(name);
+        n.getStyleClass().add("col-name");
+        VBox box = new VBox(n);
+        if (type != null && !type.isBlank()) {
+            Label t = new Label(type);
+            t.getStyleClass().add("col-type");
+            box.getChildren().add(t);
+        }
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
+    }
+
+    /** Renders SQL NULLs (the literal "NULL" cell value) in a faint italic style. */
+    private TableCell<List<String>, String> nullAwareCell() {
+        return new TableCell<>() {
+            @Override protected void updateItem(String v, boolean empty) {
+                super.updateItem(v, empty);
+                getStyleClass().remove("null-cell");
+                if (empty || v == null) { setText(null); return; }
+                if ("NULL".equals(v)) { setText("NULL"); if (!getStyleClass().contains("null-cell")) getStyleClass().add("null-cell"); }
+                else setText(v);
+            }
+        };
+    }
+
+    // ---- autocomplete ---------------------------------------------------------------------
+
+    /** Ctrl+Space: suggest SQL keywords + schema tables/columns matching the word before the caret. */
+    private void showCompletions() {
+        int caret = sqlEditor.getCaretPosition();
+        String text = sqlEditor.getText();
+        int start = caret;
+        while (start > 0 && isWordChar(text.charAt(start - 1))) start--;
+        String prefix = text.substring(start, caret);
+        String lower = prefix.toLowerCase(Locale.ROOT);
+
+        java.util.LinkedHashSet<String> pool = new java.util.LinkedHashSet<>(schemaWords);
+        pool.addAll(SqlHighlighter.vocabulary());
+        List<String> matches = new ArrayList<>();
+        for (String w : pool) {
+            if (prefix.isBlank() || w.toLowerCase(Locale.ROOT).startsWith(lower)) matches.add(w);
+            if (matches.size() >= 40) break;
+        }
+        completionPopup.getItems().clear();
+        if (matches.isEmpty()) { completionPopup.hide(); return; }
+        final int wordStart = start;
+        for (String w : matches) {
+            MenuItem mi = new MenuItem(w);
+            mi.setOnAction(ev -> { sqlEditor.replaceText(wordStart, caret, w); sqlEditor.requestFocus(); });
+            completionPopup.getItems().add(mi);
+        }
+        sqlEditor.getCaretBounds().ifPresent(b ->
+                completionPopup.show(sqlEditor, b.getMaxX(), b.getMaxY()));
+    }
+
+    private static boolean isWordChar(char c) { return Character.isLetterOrDigit(c) || c == '_'; }
 
     /** Live row filter: keeps rows where any cell contains {@code text} (case-insensitive). */
     private void applyRowFilter(String text) {
