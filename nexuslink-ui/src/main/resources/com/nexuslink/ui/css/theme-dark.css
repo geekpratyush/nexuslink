@@ -30,3 +30,28 @@
 
     -nl-shadow:       rgba(0, 0, 0, 0.50);
 }
+
+/* ---- Per-protocol accents (dark) ----
+ * Each view adopts one of these as its local -nl-view-accent (see theme-base.css),
+ * giving every protocol its own identity while sharing the same chrome. The *-soft
+ * companion is the selection/active background, derived a fixed step darker. */
+.root, .context-menu, .combo-box-popup {
+    -nl-p-sql:      #22D3EE;  -nl-p-sql-soft:      derive(-nl-p-sql, -64%);
+    -nl-p-rest:     #34D399;  -nl-p-rest-soft:     derive(-nl-p-rest, -64%);
+    -nl-p-graphql:  #F472B6;  -nl-p-graphql-soft:  derive(-nl-p-graphql, -64%);
+    -nl-p-ws:       #38BDF8;  -nl-p-ws-soft:       derive(-nl-p-ws, -64%);
+    -nl-p-sse:      #2DD4BF;  -nl-p-sse-soft:      derive(-nl-p-sse, -64%);
+    -nl-p-grpc:     #A78BFA;  -nl-p-grpc-soft:     derive(-nl-p-grpc, -64%);
+    -nl-p-kafka:    #FBBF24;  -nl-p-kafka-soft:    derive(-nl-p-kafka, -64%);
+    -nl-p-rabbitmq: #FB923C;  -nl-p-rabbitmq-soft: derive(-nl-p-rabbitmq, -64%);
+    -nl-p-mqtt:     #FB7185;  -nl-p-mqtt-soft:     derive(-nl-p-mqtt, -64%);
+    -nl-p-redis:    #F87171;  -nl-p-redis-soft:    derive(-nl-p-redis, -64%);
+    -nl-p-mongo:    #4ADE80;  -nl-p-mongo-soft:    derive(-nl-p-mongo, -64%);
+    -nl-p-sftp:     #60A5FA;  -nl-p-sftp-soft:     derive(-nl-p-sftp, -64%);
+    -nl-p-s3:       #F59E0B;  -nl-p-s3-soft:       derive(-nl-p-s3, -64%);
+    -nl-p-gcs:      #818CF8;  -nl-p-gcs-soft:      derive(-nl-p-gcs, -64%);
+    -nl-p-azure:    #38BDF8;  -nl-p-azure-soft:    derive(-nl-p-azure, -64%);
+    -nl-p-ldap:     #2DD4BF;  -nl-p-ldap-soft:     derive(-nl-p-ldap, -64%);
+    -nl-p-snmp:     #C084FC;  -nl-p-snmp-soft:     derive(-nl-p-snmp, -64%);
+    -nl-p-ai:       #C084FC;  -nl-p-ai-soft:       derive(-nl-p-ai, -64%);
+}

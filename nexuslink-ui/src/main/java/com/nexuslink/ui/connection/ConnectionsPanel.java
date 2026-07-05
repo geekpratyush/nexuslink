@@ -149,24 +149,28 @@ public final class ConnectionsPanel extends VBox {
     public void refresh() {
         TreeItem<Object> root = new TreeItem<>("root");
 
-        TreeItem<Object> saved = group("Saved");
+        TreeItem<Object> saved = group("Saved", true);
         for (ConnectionProfile p : store.saved()) saved.getChildren().add(new TreeItem<>(p));
         if (saved.getChildren().isEmpty()) {
             saved.getChildren().add(new TreeItem<>(new Hint("No saved connections yet")));
         }
 
-        TreeItem<Object> samples = group("Samples (public)");
+        // Samples ship collapsed so the (long) public catalogue doesn't flood the sidebar on open;
+        // the user expands it on demand. Saved connections stay expanded — that's their workspace.
+        TreeItem<Object> samples = group("Samples (public)", false);
+        int sampleCount = 0;
         for (ConnectionProfile p : SampleCatalog.all()) {
-            if (!store.isSampleHidden(p.id)) samples.getChildren().add(new TreeItem<>(p));
+            if (!store.isSampleHidden(p.id)) { samples.getChildren().add(new TreeItem<>(p)); sampleCount++; }
         }
+        samples.setValue(new Group("Samples (public)  (" + sampleCount + ")"));
 
         root.getChildren().addAll(saved, samples);
         tree.setRoot(root);
     }
 
-    private TreeItem<Object> group(String name) {
+    private TreeItem<Object> group(String name, boolean expanded) {
         TreeItem<Object> g = new TreeItem<>(new Group(name));
-        g.setExpanded(true);
+        g.setExpanded(expanded);
         return g;
     }
 

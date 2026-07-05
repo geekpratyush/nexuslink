@@ -8,6 +8,38 @@
     -fx-font-size: 13px;
 }
 
+/* ---------- Per-view accent indirection ----------
+ * Accented chrome (primary buttons, focus rings, selected tabs/rows) references
+ * -nl-view-accent instead of -nl-accent. It defaults to the app accent, and each
+ * protocol view overrides it to its own colour (see the .*-view rules below), so a
+ * button inside the SQL view is cyan while the same button in gRPC is violet — with
+ * zero Java changes. Popups sit outside any view, so they keep the default. */
+.root, .context-menu, .combo-box-popup {
+    -nl-view-accent:      -nl-accent;
+    -nl-view-accent-soft: -nl-accent-soft;
+}
+.sql-view         { -nl-view-accent: -nl-p-sql;      -nl-view-accent-soft: -nl-p-sql-soft; }
+.rest-client-view { -nl-view-accent: -nl-p-rest;     -nl-view-accent-soft: -nl-p-rest-soft; }
+.graphql-view     { -nl-view-accent: -nl-p-graphql;  -nl-view-accent-soft: -nl-p-graphql-soft; }
+.ws-view          { -nl-view-accent: -nl-p-ws;       -nl-view-accent-soft: -nl-p-ws-soft; }
+.sse-view         { -nl-view-accent: -nl-p-sse;      -nl-view-accent-soft: -nl-p-sse-soft; }
+.grpc-view        { -nl-view-accent: -nl-p-grpc;     -nl-view-accent-soft: -nl-p-grpc-soft; }
+.kafka-view       { -nl-view-accent: -nl-p-kafka;    -nl-view-accent-soft: -nl-p-kafka-soft; }
+.rabbitmq-view    { -nl-view-accent: -nl-p-rabbitmq; -nl-view-accent-soft: -nl-p-rabbitmq-soft; }
+.mqtt-view        { -nl-view-accent: -nl-p-mqtt;     -nl-view-accent-soft: -nl-p-mqtt-soft; }
+.redis-view       { -nl-view-accent: -nl-p-redis;    -nl-view-accent-soft: -nl-p-redis-soft; }
+.mongo-view       { -nl-view-accent: -nl-p-mongo;    -nl-view-accent-soft: -nl-p-mongo-soft; }
+.sftp-view        { -nl-view-accent: -nl-p-sftp;     -nl-view-accent-soft: -nl-p-sftp-soft; }
+.ftp-view         { -nl-view-accent: -nl-p-sftp;     -nl-view-accent-soft: -nl-p-sftp-soft; }
+.s3-view          { -nl-view-accent: -nl-p-s3;       -nl-view-accent-soft: -nl-p-s3-soft; }
+.gcs-view         { -nl-view-accent: -nl-p-gcs;      -nl-view-accent-soft: -nl-p-gcs-soft; }
+.azure-view       { -nl-view-accent: -nl-p-azure;    -nl-view-accent-soft: -nl-p-azure-soft; }
+.ldap-view        { -nl-view-accent: -nl-p-ldap;     -nl-view-accent-soft: -nl-p-ldap-soft; }
+.snmp-view        { -nl-view-accent: -nl-p-snmp;     -nl-view-accent-soft: -nl-p-snmp-soft; }
+.mcp-view         { -nl-view-accent: -nl-p-ai;       -nl-view-accent-soft: -nl-p-ai-soft; }
+.llm-view         { -nl-view-accent: -nl-p-ai;       -nl-view-accent-soft: -nl-p-ai-soft; }
+.agent-view       { -nl-view-accent: -nl-p-ai;       -nl-view-accent-soft: -nl-p-ai-soft; }
+
 /* ---------- Bespoke SVG icons ---------- */
 .nl-icon {
     -fx-fill: transparent;
@@ -119,14 +151,14 @@
 
 /* ---------- Buttons ---------- */
 .btn-primary {
-    -fx-background-color: -nl-accent;
+    -fx-background-color: -nl-view-accent;
     -fx-text-fill: -nl-on-accent;
     -fx-font-weight: bold;
     -fx-background-radius: 6;
     -fx-padding: 7 18 7 18;
     -fx-cursor: hand;
 }
-.btn-primary:hover { -fx-background-color: -nl-accent-press; }
+.btn-primary:hover { -fx-background-color: derive(-nl-view-accent, -10%); }
 .btn-secondary {
     -fx-background-color: -nl-surface-2;
     -fx-text-fill: -nl-text;
@@ -145,7 +177,7 @@
     -fx-text-fill: -nl-text-strong;
     -fx-prompt-text-fill: -nl-text-faint;
 }
-.nl-field:focused, .text-field:focused, .text-area:focused { -fx-border-color: -nl-accent; }
+.nl-field:focused, .text-field:focused, .text-area:focused { -fx-border-color: -nl-view-accent; }
 .text-area .content { -fx-background-color: -nl-surface; }
 
 .combo-box {
@@ -197,6 +229,32 @@
 .json-null   { -fx-fill: -nl-danger;   -fx-font-style: italic; }
 .json-punct  { -fx-fill: -nl-text-muted; }
 
+/* ---------- SQL syntax highlighting (RichTextFX CodeArea) ---------- */
+.code-sql {
+    -fx-background-color: -nl-bg;
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 13px;
+    -fx-padding: 6;
+}
+.code-sql .text     { -fx-fill: -nl-text; }
+.code-sql .caret    { -fx-stroke: -nl-view-accent; }
+.code-sql .selection { -fx-fill: -nl-view-accent-soft; }
+.sql-keyword  { -fx-fill: -nl-accent-2; -fx-font-weight: bold; }
+.sql-function { -fx-fill: -nl-info; }
+.sql-type     { -fx-fill: -nl-view-accent; }
+.sql-string   { -fx-fill: -nl-ok; }
+.sql-number   { -fx-fill: -nl-warn; }
+.sql-comment  { -fx-fill: -nl-text-faint; -fx-font-style: italic; }
+.sql-punct    { -fx-fill: -nl-text-muted; }
+
+/* SQL result grid: typed column sub-label, NULL cells, and the stats strip. */
+.col-name   { -fx-text-fill: -nl-text-muted; -fx-font-weight: bold; }
+.col-type   { -fx-text-fill: -nl-text-faint; -fx-font-size: 10px; -fx-font-family: "JetBrains Mono", monospace; }
+.null-cell  { -fx-text-fill: -nl-text-faint; -fx-font-style: italic; }
+.stat-chip  { -fx-text-fill: -nl-text-muted; -fx-font-family: "JetBrains Mono", monospace; -fx-font-size: 11px; }
+.stat-chip .value { -fx-text-fill: -nl-text-strong; -fx-font-weight: bold; }
+.sql-toolbar { -fx-background-color: transparent; }
+
 /* ---------- Status badges ---------- */
 .status-2xx { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
 .status-3xx { -fx-text-fill: -nl-info;   -fx-font-weight: bold; }
@@ -230,7 +288,7 @@
 /* ---------- Tab panes inside request editor ---------- */
 .editor-tabs .tab-header-background { -fx-background-color: transparent; }
 .editor-tabs .tab { -fx-background-color: transparent; -fx-padding: 3 10 3 10; }
-.editor-tabs .tab:selected { -fx-border-color: -nl-accent; -fx-border-width: 0 0 2 0; }
+.editor-tabs .tab:selected { -fx-border-color: -nl-view-accent; -fx-border-width: 0 0 2 0; }
 .editor-tabs .tab .tab-label { -fx-text-fill: -nl-text-muted; }
 .editor-tabs .tab:selected .tab-label { -fx-text-fill: -nl-text-strong; }
 
@@ -243,7 +301,7 @@
 .table-view .column-header .label { -fx-text-fill: -nl-text-muted; }
 .table-view .table-row-cell { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
 .table-view .table-row-cell:odd { -fx-background-color: derive(-nl-surface, 4%); }
-.table-view .table-row-cell:selected { -fx-background-color: -nl-accent-soft; }
+.table-view .table-row-cell:selected { -fx-background-color: -nl-view-accent-soft; }
 .table-view .table-cell { -fx-text-fill: -nl-text; }
 
 /* ---------- Scroll bars ---------- */
@@ -301,12 +359,12 @@
 }
 .sql-view .list-cell:filled:hover, .mongo-view .list-cell:filled:hover { -fx-background-color: -nl-surface-2; }
 .sql-view .list-cell:filled:selected, .mongo-view .list-cell:filled:selected {
-    -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent;
+    -fx-background-color: -nl-view-accent-soft; -fx-text-fill: -nl-view-accent;
 }
 .mcp-view .list-view, .llm-view .list-view { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
 .mcp-view .list-cell { -fx-background-color: -nl-surface; -fx-text-fill: -nl-text; -fx-padding: 4 8 4 8; }
 .mcp-view .list-cell:filled:hover { -fx-background-color: -nl-surface-2; }
-.mcp-view .list-cell:filled:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+.mcp-view .list-cell:filled:selected { -fx-background-color: -nl-view-accent-soft; -fx-text-fill: -nl-view-accent; }
 .split-pane { -fx-background-color: -nl-bg; }
 .split-pane-divider { -fx-background-color: -nl-border; -fx-padding: 0 1 0 1; }
 
@@ -321,9 +379,9 @@
     -fx-text-fill: -nl-text;
     -fx-padding: 2 4 2 4;
 }
-.explorer-tree .tree-cell:selected { -fx-background-color: -nl-accent-soft; -fx-text-fill: -nl-accent; }
+.explorer-tree .tree-cell:selected { -fx-background-color: -nl-view-accent-soft; -fx-text-fill: -nl-view-accent; }
 .explorer-tree .tree-cell:hover { -fx-background-color: -nl-surface-2; }
-.explorer-tree .tree-cell:selected .nl-icon { -fx-stroke: -nl-accent; }
+.explorer-tree .tree-cell:selected .nl-icon { -fx-stroke: -nl-view-accent; }
 .details-table { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
 .details-table .table-row-cell { -fx-background-color: -nl-surface; -fx-border-color: -nl-border; }
 .details-table .table-cell { -fx-text-fill: -nl-text; -fx-padding: 4 8 4 8; }

@@ -29,3 +29,27 @@
 
     -nl-shadow:       rgba(15, 23, 42, 0.18);
 }
+
+/* ---- Per-protocol accents (light) ----
+ * Mirror of the dark set with deeper hues for contrast on white; the *-soft companion
+ * is derived a fixed step LIGHTER for a pale selection tint. */
+.root, .context-menu, .combo-box-popup {
+    -nl-p-sql:      #0E7490;  -nl-p-sql-soft:      derive(-nl-p-sql, 82%);
+    -nl-p-rest:     #047857;  -nl-p-rest-soft:     derive(-nl-p-rest, 82%);
+    -nl-p-graphql:  #BE185D;  -nl-p-graphql-soft:  derive(-nl-p-graphql, 82%);
+    -nl-p-ws:       #0369A1;  -nl-p-ws-soft:       derive(-nl-p-ws, 82%);
+    -nl-p-sse:      #0F766E;  -nl-p-sse-soft:      derive(-nl-p-sse, 82%);
+    -nl-p-grpc:     #7C3AED;  -nl-p-grpc-soft:     derive(-nl-p-grpc, 82%);
+    -nl-p-kafka:    #B45309;  -nl-p-kafka-soft:    derive(-nl-p-kafka, 82%);
+    -nl-p-rabbitmq: #C2410C;  -nl-p-rabbitmq-soft: derive(-nl-p-rabbitmq, 82%);
+    -nl-p-mqtt:     #BE123C;  -nl-p-mqtt-soft:     derive(-nl-p-mqtt, 82%);
+    -nl-p-redis:    #B91C1C;  -nl-p-redis-soft:    derive(-nl-p-redis, 82%);
+    -nl-p-mongo:    #15803D;  -nl-p-mongo-soft:    derive(-nl-p-mongo, 82%);
+    -nl-p-sftp:     #1D4ED8;  -nl-p-sftp-soft:     derive(-nl-p-sftp, 82%);
+    -nl-p-s3:       #B45309;  -nl-p-s3-soft:       derive(-nl-p-s3, 82%);
+    -nl-p-gcs:      #4338CA;  -nl-p-gcs-soft:      derive(-nl-p-gcs, 82%);
+    -nl-p-azure:    #0369A1;  -nl-p-azure-soft:    derive(-nl-p-azure, 82%);
+    -nl-p-ldap:     #0F766E;  -nl-p-ldap-soft:     derive(-nl-p-ldap, 82%);
+    -nl-p-snmp:     #7E22CE;  -nl-p-snmp-soft:     derive(-nl-p-snmp, 82%);
+    -nl-p-ai:       #7E22CE;  -nl-p-ai-soft:       derive(-nl-p-ai, 82%);
+}
