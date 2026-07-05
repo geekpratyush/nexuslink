@@ -177,6 +177,11 @@ public final class SqlClientView extends BorderPane {
         saveBtn.getStyleClass().add("btn-secondary");
         saveBtn.setOnAction(e -> saveCurrent());
 
+        Button builderBtn = new Button("Query Builder…");
+        builderBtn.getStyleClass().add("btn-secondary");
+        builderBtn.setTooltip(new Tooltip("Assemble a SELECT visually and drop it into the editor"));
+        builderBtn.setOnAction(e -> openQueryBuilder());
+
         Button erBtn = new Button("ER Diagram");
         erBtn.getStyleClass().add("btn-secondary");
         erBtn.setTooltip(new Tooltip("Generate an entity-relationship diagram of the schema"));
@@ -210,7 +215,7 @@ public final class SqlClientView extends BorderPane {
 
         Label lbl = new Label("Database:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, erBtn, structureBtn, helpBtn);
+        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, builderBtn, erBtn, structureBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -535,6 +540,55 @@ public final class SqlClientView extends BorderPane {
         statRows.setText(String.valueOf(rows));
         statCols.setText(String.valueOf(cols));
         statMs.setText(String.valueOf(ms));
+    }
+
+    /**
+     * Opens the visual {@link QueryBuilderDialog}: loads the table list off-thread, then lets the user
+     * assemble a SELECT. Column names for the chosen table are fetched lazily (also off-thread) via
+     * {@code describeTable}. On OK the generated SQL replaces the editor contents and runs.
+     */
+    private void openQueryBuilder() {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        statusLabel.setText("Loading tables…");
+        Task<List<String>> listTask = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                List<String> out = new ArrayList<>();
+                // Strip the "  (view)" marker — views are queryable with SELECT * just like tables.
+                for (String t : service.listTables()) out.add(t.replace("  (view)", "").trim());
+                return out;
+            }
+        };
+        listTask.setOnSucceeded(e -> {
+            List<String> tables = listTask.getValue();
+            if (tables.isEmpty()) { statusLabel.setText("No tables to build a query from"); return; }
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("Query builder ready");
+            QueryBuilderDialog dialog = new QueryBuilderDialog(
+                    getScene() == null ? null : getScene().getWindow(), tables, this::loadColumnsFor);
+            dialog.showAndBuild().ifPresent(sql -> { setEditorText(sql); runQuery(); });
+        });
+        listTask.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not list tables: " + listTask.getException().getMessage());
+        });
+        runBg(listTask);
+    }
+
+    /** Fetches column names for a table off-thread, stripping the trailing type text, for the builder. */
+    private void loadColumnsFor(String table, Consumer<List<String>> onColumns) {
+        Task<List<String>> task = new Task<>() {
+            @Override protected List<String> call() throws Exception {
+                List<String> cols = new ArrayList<>();
+                for (String desc : service.describeTable(table)) {
+                    String name = desc.split("\\s{2,}", 2)[0].trim();   // "col  TYPE" → col
+                    if (!name.isEmpty()) cols.add(name);
+                }
+                return cols;
+            }
+        };
+        task.setOnSucceeded(e -> onColumns.accept(task.getValue()));
+        task.setOnFailed(e -> onColumns.accept(List.of()));
+        runBg(task);
     }
 
     private void showErDiagram() {
