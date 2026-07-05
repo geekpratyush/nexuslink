@@ -143,6 +143,35 @@ public final class HistoryStore implements AutoCloseable {
         }
     }
 
+    /** Deletes a single entry (and its FTS mirror row); returns true if a row was removed. */
+    public boolean delete(long id) {
+        try (PreparedStatement ps = conn.prepareStatement("DELETE FROM history WHERE id=?")) {
+            ps.setLong(1, id);
+            int n = ps.executeUpdate();
+            if (ftsAvailable) {
+                try (PreparedStatement f = conn.prepareStatement("DELETE FROM history_fts WHERE rowid=?")) {
+                    f.setLong(1, id);
+                    f.executeUpdate();
+                }
+            }
+            recentCache.invalidate(id);
+            return n > 0;
+        } catch (SQLException e) {
+            throw new HistoryException("Failed to delete history entry", e);
+        }
+    }
+
+    /** Removes every entry (and the FTS mirror). */
+    public void clear() {
+        try (Statement st = conn.createStatement()) {
+            st.executeUpdate("DELETE FROM history");
+            if (ftsAvailable) st.executeUpdate("DELETE FROM history_fts");
+            recentCache.invalidateAll();
+        } catch (SQLException e) {
+            throw new HistoryException("Failed to clear history", e);
+        }
+    }
+
     public boolean isFtsAvailable() {
         return ftsAvailable;
     }

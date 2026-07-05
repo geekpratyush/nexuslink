@@ -65,4 +65,34 @@ class HistoryStoreTest {
             assertTrue(reopened.recent(1).get(0).summary().contains("/persist"));
         }
     }
+
+    @Test
+    void deleteRemovesOneEntryAndKeepsSearchConsistent(@TempDir Path dir) {
+        try (HistoryStore store = new HistoryStore(dir.resolve("h.db").toString())) {
+            HistoryEntry a = store.add(HistoryEntry.newRest("GET /alpha → 200", 200, 10, "{}"));
+            store.add(HistoryEntry.newRest("GET /beta → 200", 200, 10, "{}"));
+            assertEquals(2, store.count());
+
+            assertTrue(store.delete(a.id()));
+            assertEquals(1, store.count());
+            assertTrue(store.byId(a.id()).isEmpty());
+            // the deleted entry must not linger in search results
+            assertTrue(store.search("alpha", 10).isEmpty());
+            assertEquals(1, store.search("beta", 10).size());
+
+            assertFalse(store.delete(a.id()), "deleting a missing id returns false");
+        }
+    }
+
+    @Test
+    void clearEmptiesEverything(@TempDir Path dir) {
+        try (HistoryStore store = new HistoryStore(dir.resolve("h.db").toString())) {
+            store.add(HistoryEntry.newRest("GET /a → 200", 200, 10, "{}"));
+            store.add(HistoryEntry.newRest("GET /b → 200", 200, 10, "{}"));
+            store.clear();
+            assertEquals(0, store.count());
+            assertTrue(store.recent(10).isEmpty());
+            assertTrue(store.search("a", 10).isEmpty());
+        }
+    }
 }

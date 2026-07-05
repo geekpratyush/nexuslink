@@ -54,6 +54,7 @@ public final class HistoryPanel extends BorderPane {
 
         list.setCellFactory(lv -> new HistoryCell());
         list.setOnMouseClicked(e -> { if (e.getClickCount() == 2) replaySelected(); });
+        list.setContextMenu(buildContextMenu());
         VBox.setVgrow(list, Priority.ALWAYS);
 
         setTop(toolbar);
@@ -75,9 +76,62 @@ public final class HistoryPanel extends BorderPane {
         });
     }
 
+    /** Right-click actions on a history row. */
+    private ContextMenu buildContextMenu() {
+        MenuItem replay = new MenuItem("Replay");
+        replay.setOnAction(e -> replaySelected());
+        MenuItem copy = new MenuItem("Copy summary");
+        copy.setOnAction(e -> copySelected());
+        MenuItem favorite = new MenuItem("Toggle favorite");
+        favorite.setOnAction(e -> toggleFavoriteSelected());
+        MenuItem delete = new MenuItem("Delete");
+        delete.setOnAction(e -> deleteSelected());
+        MenuItem clearAll = new MenuItem("Clear all history…");
+        clearAll.setOnAction(e -> clearAll());
+
+        ContextMenu menu = new ContextMenu(replay, copy, favorite,
+                new SeparatorMenuItem(), delete, clearAll);
+        menu.setOnShowing(e -> {
+            boolean hasSel = list.getSelectionModel().getSelectedItem() != null;
+            replay.setDisable(!hasSel);
+            copy.setDisable(!hasSel);
+            favorite.setDisable(!hasSel);
+            delete.setDisable(!hasSel);
+            clearAll.setDisable(list.getItems().isEmpty());
+        });
+        return menu;
+    }
+
     private void replaySelected() {
         HistoryEntry sel = list.getSelectionModel().getSelectedItem();
         if (sel != null) onReplay.accept(sel);
+    }
+
+    private void copySelected() {
+        HistoryEntry sel = list.getSelectionModel().getSelectedItem();
+        if (sel == null) return;
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        content.putString(sel.summary());
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    private void deleteSelected() {
+        HistoryEntry sel = list.getSelectionModel().getSelectedItem();
+        if (sel == null) return;
+        store.delete(sel.id());
+        refresh(search.getText());
+    }
+
+    private void clearAll() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete all " + list.getItems().size() + " history entries? This cannot be undone.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText(null);
+        confirm.setTitle("Clear history");
+        confirm.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            store.clear();
+            refresh("");
+        });
     }
 
     private void toggleFavoriteSelected() {
