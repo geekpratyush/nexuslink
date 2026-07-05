@@ -26,11 +26,15 @@ workbench you use for REST and Kafka.
 ## Current Status
 
 NexusLink is under active development and **not yet feature-complete** against the full
-specification (`NexusLink_Specification.md`). As of the latest session, roughly **65% of the
-tracked tasks are done** (197 done · 45 in-progress · 61 not started; ~73% weighting partial
-work), and **Phases 1, 2 and (essentially) 4 are complete**. A local Docker stack (`test-env/`)
-live-verifies 15 protocol families incl. Kafka, SQS/SNS, JMS, MQTT, SFTP/FTP and databases.
-`TASKS.md` is the live, phase-by-phase tracker and the source of truth; the table below summarizes it.
+specification (`NexusLink_Specification.md`). As of the latest session, roughly **68% of the
+in-scope tasks are done** (203 done · 44 in-progress · 52 not started of **299 in-scope**;
+~75% weighting partial work), and **Phases 0–4 and 6 are complete**. Five items that need
+resources this environment will never have (a real Azure/cloud account, a hosted backend/release
+server, or Windows/macOS signing machines) are **excluded from scope** — see the "⊘ Out of scope
+for this environment" section in `TASKS.md`. A local Docker stack (`test-env/`) live-verifies 15
+protocol families incl. Kafka, SQS/SNS, JMS, MQTT, SFTP/FTP and databases (14 gated `*LiveIT`s
+confirmed green this session). `TASKS.md` is the live, phase-by-phase tracker and the source of
+truth; the table below summarizes it.
 
 Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
