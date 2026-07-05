@@ -6,12 +6,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nexuslink.core.connection.AuthMethod;
 import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.env.EnvironmentService;
+import com.nexuslink.core.env.VariableInterpolator;
 import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.protocol.http.rest.AssertionSpec;
 import com.nexuslink.protocol.http.rest.BodyFormatter;
 import com.nexuslink.protocol.http.rest.CurlImporter;
 import com.nexuslink.protocol.http.rest.HarExporter;
+import com.nexuslink.protocol.http.rest.PreRequestScript;
 import com.nexuslink.protocol.http.rest.ResponseAssertions;
 import com.nexuslink.protocol.http.rest.RestExecutionService;
 import com.nexuslink.protocol.http.rest.RestRequest;
@@ -39,6 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
@@ -77,6 +80,7 @@ public final class RestClientView extends BorderPane {
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
+    private TextArea preRequestArea;
 
     private ComboBox<RestRequest.AuthType> authTypeCombo;
     private final TextField authUser = new TextField();
@@ -375,6 +379,7 @@ public final class RestClientView extends BorderPane {
                 new Tab("Headers", buildKeyValueTable(headerRows)),
                 new Tab("Body", buildBodyTab()),
                 new Tab("Auth", buildAuthTab()),
+                new Tab("Pre-request Script", buildPreRequestTab()),
                 new Tab("Tests", buildAssertionsTable()),
                 new Tab("Settings", buildSettingsTab()));
         return tabs;
@@ -513,6 +518,26 @@ public final class RestClientView extends BorderPane {
         VBox.setVgrow(bodyArea, Priority.ALWAYS);
 
         VBox box = new VBox(controls, bodyArea);
+        box.setPadding(new Insets(4));
+        return box;
+    }
+
+    private VBox buildPreRequestTab() {
+        Label hint = new Label(
+                "Runs before Send. One statement per line: set VAR = <expr>. "
+                + "Functions: now(), isoNow(), uuid(), base64(x), hmacSha256(key, msg), "
+                + "randomInt(min, max). Reference vars/env with ${NAME}; use them in the request as ${VAR}.");
+        hint.getStyleClass().add("meta-label");
+        hint.setWrapText(true);
+        hint.setPadding(new Insets(6));
+
+        preRequestArea = new TextArea();
+        preRequestArea.getStyleClass().add("code-area");
+        preRequestArea.setPromptText(
+                "# e.g.\nset TS = now()\nset NONCE = uuid()\nset SIG = hmacSha256(${API_SECRET}, ${TS})");
+        VBox.setVgrow(preRequestArea, Priority.ALWAYS);
+
+        VBox box = new VBox(hint, preRequestArea);
         box.setPadding(new Insets(4));
         return box;
     }
@@ -859,6 +884,24 @@ public final class RestClientView extends BorderPane {
             return;
         }
 
+        EnvironmentService env = Env.service();
+
+        // Pre-request script: compute values (timestamps, UUIDs, HMAC signatures, …) before sending.
+        // Its ${NAME} references resolve against the active environment; the resulting vars then take
+        // precedence over the environment when the request's own ${VAR} placeholders are resolved.
+        Function<String, String> envResolver = env == null ? n -> null : env::resolve;
+        PreRequestScript.Result pre = PreRequestScript.run(preRequestArea.getText(), envResolver);
+        for (String err : pre.errors()) logger.accept("Pre-request script — " + err);
+        if (pre.hasErrors()) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Pre-request script error (" + pre.errors().size() + ") — see log");
+            return;     // don't send with a broken script; the log shows exactly what failed
+        }
+        if (!pre.variables().isEmpty()) {
+            logger.accept("Pre-request set " + pre.variables().size() + " var(s): "
+                    + String.join(", ", pre.variables().keySet()));
+        }
+
         sendButton.setDisable(true);
         progress.setVisible(true);
         progress.setManaged(true);
@@ -866,11 +909,15 @@ public final class RestClientView extends BorderPane {
         timingLabel.setText("");
         sizeLabel.setText("");
 
-        // Resolve ${VAR} references against the active environment at send time. The on-screen request
-        // stays templated (so history/replay re-resolve later); only this copy carries real values.
-        EnvironmentService env = Env.service();
-        // The request actually put on the wire (a deep copy either way, safe to retain for HAR export).
-        final RestRequest exec = request.interpolated(env == null ? UnaryOperator.identity() : env::interpolate);
+        // Resolve ${VAR} references at send time: pre-request vars first, then the active environment.
+        // The on-screen request stays templated (so history/replay re-resolve later); only this copy
+        // carries real values. (A deep copy either way, safe to retain for HAR export.)
+        UnaryOperator<String> interp = template -> VariableInterpolator.interpolate(template, name -> {
+            String v = pre.variables().get(name);
+            if (v != null) return v;
+            return env == null ? null : env.resolve(name);
+        });
+        final RestRequest exec = request.interpolated(interp);
         final Instant startedAt = Instant.now();
         String loggedUrl = exec.effectiveUrl();
         if (env != null) loggedUrl = env.masker().scrub(loggedUrl);   // never log resolved secrets
@@ -1033,6 +1080,7 @@ public final class RestClientView extends BorderPane {
         root.put("tlsTrustStorePath", request.getTlsTrustStorePath());
         root.put("tlsKeyStorePath", request.getTlsKeyStorePath());
         root.put("tlsTrustAll", request.isTlsTrustAll());
+        root.put("preRequestScript", preRequestArea.getText());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         ArrayNode tests = root.putArray("assertions");
@@ -1095,6 +1143,7 @@ public final class RestClientView extends BorderPane {
             tlsTrustStore.setText(root.path("tlsTrustStorePath").asText(""));
             tlsKeyStore.setText(root.path("tlsKeyStorePath").asText(""));
             tlsTrustAll.setSelected(root.path("tlsTrustAll").asBoolean(false));
+            preRequestArea.setText(root.path("preRequestScript").asText(""));
             loadKeyValues(root.path("params"), paramRows);
             loadKeyValues(root.path("headers"), headerRows);
             loadAssertions(root.path("assertions"));
