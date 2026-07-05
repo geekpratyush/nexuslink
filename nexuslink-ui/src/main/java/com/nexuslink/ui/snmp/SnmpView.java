@@ -272,6 +272,7 @@ public final class SnmpView extends BorderPane {
         table.getColumns().addAll(List.of(nameCol, oidCol, typeCol, valueCol));
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Label("Open a session, then GET an OID or WALK a subtree."));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(table);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         VBox box = new VBox(8, opRow, new Separator(), table);
@@ -451,6 +452,7 @@ public final class SnmpView extends BorderPane {
         trapTable.getColumns().addAll(List.of(timeCol, srcCol, verCol, oidCol, vbCol));
         trapTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         trapTable.setPlaceholder(new Label("Start the listener to receive SNMP v1/v2c traps."));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(trapTable);
         VBox.setVgrow(trapTable, Priority.ALWAYS);
 
         VBox box = new VBox(8, ctlRow, new HBox(trapStatusLabel), new Separator(), trapTable);

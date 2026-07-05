@@ -560,6 +560,7 @@ public final class KafkaView extends BorderPane {
     private void buildLagTable() {
         lagTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         lagTable.setPlaceholder(new Label("Pick a consumer group and Refresh to see per-partition lag."));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(lagTable);
 
         TableColumn<ConsumerLagCalculator.LagRow, String> topic = new TableColumn<>("Topic");
         topic.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().topic()));
@@ -823,6 +824,7 @@ public final class KafkaView extends BorderPane {
         messageTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         messageTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         messageTable.setPlaceholder(new Label("Consumed records appear here. Start consuming to populate."));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(messageTable);
 
         TableColumn<KafkaService.KafkaMessage, String> time = new TableColumn<>("Time");
         time.setCellValueFactory(c -> new SimpleStringProperty(Instant.ofEpochMilli(c.getValue().timestamp())

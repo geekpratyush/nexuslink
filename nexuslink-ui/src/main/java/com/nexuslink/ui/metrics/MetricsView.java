@@ -157,6 +157,7 @@ public final class MetricsView extends BorderPane {
         addColumn("Data", "bytes", 90);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Label("No requests recorded yet — send some traffic from a protocol tab."));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(table);
 
         // Tint rows whose channel currently breaches an alerting threshold.
         table.setRowFactory(tv -> new TableRow<>() {

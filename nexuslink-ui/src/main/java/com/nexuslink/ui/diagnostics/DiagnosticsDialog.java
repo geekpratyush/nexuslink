@@ -27,6 +27,7 @@ public final class DiagnosticsDialog {
         TableView<ConnectionDiagnostics.StepResult> table = new TableView<>(rows);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("Running…"));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(table);
 
         TableColumn<ConnectionDiagnostics.StepResult, String> step = new TableColumn<>("Step");
         step.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name()));

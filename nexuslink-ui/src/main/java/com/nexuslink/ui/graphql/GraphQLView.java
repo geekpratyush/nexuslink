@@ -158,6 +158,7 @@ public final class GraphQLView extends BorderPane {
         TableView<GraphQLSchema.Field> fields = new TableView<>();
         fields.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         fields.setPlaceholder(new Label("Select a type"));
+        com.nexuslink.ui.util.TableContextMenus.installCopy(fields);
         TableColumn<GraphQLSchema.Field, String> fName = new TableColumn<>("Field");
         fName.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name()));
         TableColumn<GraphQLSchema.Field, String> fType = new TableColumn<>("Type");

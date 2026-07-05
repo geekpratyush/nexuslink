@@ -300,6 +300,7 @@ public final class RabbitMqView extends BorderPane {
                 col("State", QueueInfo::state));
         queuesTable.setPlaceholder(new Label("No queues loaded"));
         queuesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        com.nexuslink.ui.util.TableContextMenus.installCopy(queuesTable);
     }
 
     private void buildExchangesColumns() {
@@ -310,6 +311,7 @@ public final class RabbitMqView extends BorderPane {
                 col("Durable", ex -> ex.durable() ? "yes" : "no"));
         exchangesTable.setPlaceholder(new Label("No exchanges loaded"));
         exchangesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        com.nexuslink.ui.util.TableContextMenus.installCopy(exchangesTable);
     }
 
     private void buildBindingsColumns() {
@@ -320,6 +322,7 @@ public final class RabbitMqView extends BorderPane {
                 col("Routing key", BindingInfo::routingKey));
         bindingsTable.setPlaceholder(new Label("No bindings loaded"));
         bindingsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        com.nexuslink.ui.util.TableContextMenus.installCopy(bindingsTable);
     }
 
     private static <T> TableColumn<T, String> col(String title, Function<T, String> value) {
