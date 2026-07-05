@@ -1593,6 +1593,35 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 ---
 
+## NEXT ACTION  — RESUME POINT (saved 2026-07-05, after SQL-workbench + theming session)
+
+> Trust `git log --oneline -20`, not this prose. Everything below is committed on `main` (local;
+> not yet pushed as of this note).
+
+**Landed this session (UI look-and-feel + SQL workbench depth):**
+- `654e640` Sidebar Samples group opens **collapsed** (with count); **per-protocol accent theming**
+  across every view via a `-nl-view-accent` indirection layer + `-nl-p-*` palette (both themes).
+- `a654983` SQL editor overhaul — RichTextFX **syntax highlighting** (on the shared `SqlTokenizer`),
+  Run-selection, **Format**, Ctrl+Space **autocomplete**, Ctrl+/ comment, multi-statement run with a
+  **Messages** tab, typed two-line result headers, NULL styling, content-sized columns, rows/cols/ms strip.
+- `b72cb9c` Dedicated **JSON syntax palette** (`-nl-json-*`) — keys/strings/numbers/bool/null distinct,
+  shared by REST · Mongo · gRPC · GraphQL · Kafka · MCP.
+- `cb7c579` **Structure export** — pick tables/views → portable `CREATE TABLE` DDL (cols, PK, FK,
+  indexes, view summary) with Copy / Save. `SchemaExporter` (+tests), `JdbcService.exportSchema`.
+- `e9a9cc8` **Richer schema tree** — category folders (Tables/Views/Procedures/Functions), per-table
+  columns · indexes · foreign keys. New `JdbcService` metadata readers (+`JdbcExplorerTest`).
+- `e14a046` Schema-tree **right-click actions** (Generate SELECT / View DDL / Copy / Drop) + a reusable
+  **preview-SQL-then-apply** write gate (Drop uses it; UPDATE/DELETE/ALTER to follow).
+
+**SQL workbench — remaining (offline-testable, in-memory SQLite):**
+1. **In-grid data editing** — editable cells → generated `UPDATE`, row insert / `DELETE`, all through
+   the `previewAndApply` gate. Needs source-table + PK detection for simple `SELECT * FROM t` results.
+2. **Structure editing** — ALTER (add / rename / drop column) dialogs, also preview-then-apply.
+3. **Visual query help** — visual query builder; EXPLAIN-plan view; inline error markers; result charting.
+
+**Then the broader roadmap** (verify each against `git log` first — the list below is from Session 40
+and much has since landed: `TransferGovernor` throttling, REST NTLM/HMAC/Digest/OAuth, Kafka browser/metrics):
+
 ## NEXT ACTION  — RESUME POINT (saved 2026-06-29, after Session 40)
 
 > ⚠️ **This section goes stale — trust `git log`, not this prose.** Sessions 40a–40c (REST timeline +
