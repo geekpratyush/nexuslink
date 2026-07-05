@@ -255,6 +255,20 @@
 .stat-chip .value { -fx-text-fill: -nl-text-strong; -fx-font-weight: bold; }
 .sql-toolbar { -fx-background-color: transparent; }
 
+/* ---------- Charts (result charting) ---------- */
+.chart { -fx-background-color: -nl-bg; -fx-padding: 10; }
+.chart-content { -fx-padding: 6; }
+.chart-title { -fx-text-fill: -nl-text-strong; }
+.chart-plot-background { -fx-background-color: -nl-surface; }
+.chart-vertical-grid-lines { -fx-stroke: -nl-border; }
+.chart-horizontal-grid-lines { -fx-stroke: -nl-border; }
+.chart-alternative-row-fill { -fx-fill: transparent; }
+.axis { -fx-tick-label-fill: -nl-text-muted; -fx-font-size: 11px; }
+.axis .axis-label { -fx-text-fill: -nl-text; }
+.axis:bottom .tick-mark, .axis:left .tick-mark { -fx-stroke: -nl-border-2; }
+.default-color0.chart-bar { -fx-bar-fill: -nl-view-accent; }
+.chart-bar { -fx-bar-fill: -nl-view-accent; }
+
 /* ---------- Status badges ---------- */
 .status-2xx { -fx-text-fill: -nl-ok;     -fx-font-weight: bold; }
 .status-3xx { -fx-text-fill: -nl-info;   -fx-font-weight: bold; }

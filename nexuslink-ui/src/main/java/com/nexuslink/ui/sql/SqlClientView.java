@@ -438,10 +438,18 @@ public final class SqlClientView extends BorderPane {
         formatBtn.getStyleClass().add("btn-secondary");
         formatBtn.setTooltip(new Tooltip("Tidy the SQL — upper-case keywords, break before clauses"));
         formatBtn.setOnAction(e -> formatEditor());
+        Button explainBtn = new Button("Explain");
+        explainBtn.getStyleClass().add("btn-secondary");
+        explainBtn.setTooltip(new Tooltip("Show the query plan for the current statement"));
+        explainBtn.setOnAction(e -> explainQuery());
+        Button chartBtn = new Button("Chart");
+        chartBtn.getStyleClass().add("btn-secondary");
+        chartBtn.setTooltip(new Tooltip("Plot two columns of the current result as a bar chart"));
+        chartBtn.setOnAction(e -> chartDialog());
         resultStatus.getStyleClass().add("meta-label");
         Region runSpacer = new Region();
         HBox.setHgrow(runSpacer, Priority.ALWAYS);
-        HBox runRow = new HBox(8, runBtn, runSelBtn, formatBtn, runSpacer, statsStrip(), resultStatus);
+        HBox runRow = new HBox(8, runBtn, runSelBtn, formatBtn, explainBtn, chartBtn, runSpacer, statsStrip(), resultStatus);
         runRow.setAlignment(Pos.CENTER_LEFT);
         runRow.setPadding(new Insets(6, 0, 6, 0));
 
@@ -1139,6 +1147,122 @@ public final class SqlClientView extends BorderPane {
             if (!all.isBlank()) out.append(";");
             setEditorText(out.toString());
         }
+    }
+
+    // ---- visual query help: EXPLAIN plan + charting -----------------------------------------
+
+    /** Runs a dialect-appropriate EXPLAIN on the current statement and shows the plan in a dialog. */
+    private void explainQuery() {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        String sel = sqlEditor.getSelectedText();
+        String base = (sel != null && !sel.isBlank()) ? sel : currentStatementAtCaret();
+        if (base == null || base.isBlank()) { statusLabel.setText("Nothing to explain"); return; }
+        String stmt = Env.resolve(base.trim());
+        String explainSql = explainPrefix() + stmt;
+        statusLabel.setText("Explaining…");
+        Task<QueryResult> task = new Task<>() {
+            @Override protected QueryResult call() { return service.execute(explainSql); }
+        };
+        task.setOnSucceeded(e -> {
+            QueryResult r = task.getValue();
+            if (r.failed()) {
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("Explain failed: " + r.errorMessage());
+            } else {
+                statusLabel.getStyleClass().setAll("meta-label");
+                statusLabel.setText("Query plan ready");
+                showGridDialog("Query plan", explainSql, r);
+            }
+        });
+        task.setOnFailed(e -> statusLabel.setText("Explain failed: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
+    /** SQLite needs EXPLAIN QUERY PLAN (bare EXPLAIN is bytecode); most others use plain EXPLAIN. */
+    private String explainPrefix() {
+        DriverInfo d = dbCombo.getValue();
+        String id = d == null ? "" : d.id();
+        return "sqlite".equals(id) ? "EXPLAIN QUERY PLAN " : "EXPLAIN ";
+    }
+
+    /** A read-only modal grid over a QueryResult (used for the query plan). */
+    private void showGridDialog(String title, String header, QueryResult r) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle(title);
+        d.setHeaderText(header.length() > 90 ? header.substring(0, 90) + "…" : header);
+        d.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        TableView<List<String>> grid = new TableView<>();
+        grid.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
+        for (int i = 0; i < r.columns().size(); i++) {
+            final int col = i;
+            TableColumn<List<String>, String> tc = new TableColumn<>(r.columns().get(i));
+            tc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    col < cd.getValue().size() ? cd.getValue().get(col) : ""));
+            tc.setPrefWidth(Math.max(120, Math.min(520, r.columns().get(col).length() * 8 + 60)));
+            grid.getColumns().add(tc);
+        }
+        grid.getItems().setAll(r.rows());
+        grid.setPrefSize(720, 420);
+        d.getDialogPane().setContent(grid);
+        d.setResizable(true);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        d.showAndWait();
+    }
+
+    /** Bar-chart the current result: pick a category column and a numeric column, then plot. */
+    private void chartDialog() {
+        if (currentColumns.isEmpty() || masterRows.isEmpty()) { statusLabel.setText("Run a query first — nothing to chart"); return; }
+        Dialog<ButtonType> d = themedDialog("Chart result", "Plot two columns as a bar chart");
+        ComboBox<String> category = new ComboBox<>(FXCollections.observableArrayList(currentColumns));
+        ComboBox<String> value = new ComboBox<>(FXCollections.observableArrayList(currentColumns));
+        category.getSelectionModel().select(0);
+        value.getSelectionModel().select(Math.min(1, currentColumns.size() - 1));
+        GridPane g = formGrid();
+        g.addRow(0, new Label("Category (X):"), category);
+        g.addRow(1, new Label("Value (Y):"), value);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> showChart(category.getValue(), value.getValue()));
+    }
+
+    private void showChart(String categoryCol, String valueCol) {
+        int ci = currentColumns.indexOf(categoryCol), vi = currentColumns.indexOf(valueCol);
+        if (ci < 0 || vi < 0) return;
+        javafx.scene.chart.CategoryAxis x = new javafx.scene.chart.CategoryAxis();
+        javafx.scene.chart.NumberAxis y = new javafx.scene.chart.NumberAxis();
+        x.setLabel(categoryCol); y.setLabel(valueCol);
+        javafx.scene.chart.BarChart<String, Number> chart = new javafx.scene.chart.BarChart<>(x, y);
+        chart.getStyleClass().add("sql-view");   // so themed bars pick up the SQL accent
+        chart.setLegendVisible(false);
+        chart.setAnimated(false);
+        javafx.scene.chart.XYChart.Series<String, Number> series = new javafx.scene.chart.XYChart.Series<>();
+        int plotted = 0, limit = 60;   // keep the chart legible
+        for (List<String> row : sortedRows) {
+            if (plotted >= limit) break;
+            String label = ci < row.size() ? row.get(ci) : "";
+            Double num = parseNumber(vi < row.size() ? row.get(vi) : null);
+            if (num == null) continue;
+            series.getData().add(new javafx.scene.chart.XYChart.Data<>(label, num));
+            plotted++;
+        }
+        if (series.getData().isEmpty()) { statusLabel.setText("Column “" + valueCol + "” has no numeric values to plot"); return; }
+        chart.getData().add(series);
+
+        javafx.stage.Stage stage = new javafx.stage.Stage();
+        if (getScene() != null) stage.initOwner(getScene().getWindow());
+        stage.setTitle("Chart — " + valueCol + " by " + categoryCol);
+        javafx.scene.Scene scene = new javafx.scene.Scene(chart, 820, 520);
+        com.nexuslink.ui.theme.ThemeManager.get().register(scene);
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    private static Double parseNumber(String s) {
+        if (s == null || s.isBlank() || "NULL".equals(s)) return null;
+        try { return Double.parseDouble(s.replace(",", "").trim()); } catch (NumberFormatException e) { return null; }
     }
 
     /** Comment or uncomment the current line with a leading {@code -- }. */
