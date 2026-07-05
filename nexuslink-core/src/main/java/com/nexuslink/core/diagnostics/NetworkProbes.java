@@ -1,5 +1,7 @@
 package com.nexuslink.core.diagnostics;
 
+import com.nexuslink.core.net.DnsCache;
+
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import java.net.InetAddress;
@@ -19,11 +21,22 @@ public final class NetworkProbes {
 
     private NetworkProbes() {}
 
-    /** Resolves {@code host} to one or more IP addresses. */
+    /** Process-wide short-TTL DNS cache (30s) shared by every diagnostics run. */
+    private static final DnsCache SHARED_DNS = DnsCache.standard();
+
+    /** Resolves {@code host} to one or more IP addresses, reusing the shared 30s DNS cache. */
     public static ConnectionDiagnostics.Probe dnsResolve(String host) {
+        return dnsResolve(host, SHARED_DNS);
+    }
+
+    /** Resolves {@code host} through a specific {@link DnsCache} (used by tests). */
+    public static ConnectionDiagnostics.Probe dnsResolve(String host, DnsCache cache) {
         return () -> {
-            InetAddress[] addrs = InetAddress.getAllByName(host);
-            return "resolved " + addrs.length + " address(es) · " + addrs[0].getHostAddress();
+            long hitsBefore = cache.hitCount();
+            List<InetAddress> addrs = cache.resolve(host);
+            boolean cached = cache.hitCount() > hitsBefore;
+            return "resolved " + addrs.size() + " address(es) · " + addrs.get(0).getHostAddress()
+                    + (cached ? " (cached)" : "");
         };
     }
 

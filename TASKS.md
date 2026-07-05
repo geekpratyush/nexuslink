@@ -372,11 +372,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       query `{?x,y}`/`{&x}`, plus prefix `{var:3}` and explode `{var*}` over String/List/Map values, with
       operator-aware percent-encoding and undefined-var omission; `UriTemplateException` on malformed input. 21 tests.
 - [ ] Request history sidebar integration
-- [-] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s) — **DNS done:** pure
-      `DnsCache` (nexuslink-core/net) memoizes host→addresses through the existing `CacheRegistry.DNS`
-      region (30s TTL); injectable `Resolver` seam (defaults to `InetAddress.getAllByName`), failures
-      are not cached, per-instance hit/miss stats. 8 tests. _(TLS session resumption is handled natively
-      by the JDK `SSLSessionContext`; wiring `DnsCache` into the REST connect path is a thin follow-up.)_
+- [x] Caffeine cache: DNS cache (TTL=30s), TLS session cache (TTL=300s) — pure `DnsCache`
+      (nexuslink-core/net) memoizes host→addresses through the existing `CacheRegistry.DNS` region (30s TTL);
+      injectable `Resolver` seam (defaults to `InetAddress.getAllByName`), failures not cached, per-instance
+      hit/miss stats (8 tests). **Wired** into `NetworkProbes.dnsResolve` so every Diagnose run shares one
+      30s cache (detail shows "(cached)" on a hit); injectable-cache overload tested. TLS session resumption
+      is handled natively by the JDK `SSLSessionContext` (no app-level cache needed).
 
 ### 3.2 WebSocket Client
 - [x] `WebSocketService` — JDK `java.net.http.WebSocket`, text frame reassembly _(auto-reconnect TODO)_

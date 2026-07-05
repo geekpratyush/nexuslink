@@ -1,9 +1,13 @@
 package com.nexuslink.core.diagnostics;
 
+import com.nexuslink.core.net.DnsCache;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.nexuslink.core.diagnostics.ConnectionDiagnostics.Status.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -14,6 +18,20 @@ class NetworkProbesTest {
     void dnsResolvesLocalhost() throws Exception {
         String detail = NetworkProbes.dnsResolve("localhost").probe();
         assertTrue(detail.startsWith("resolved"), detail);
+    }
+
+    @Test
+    void dnsProbeReusesTheCacheOnASecondRun() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        DnsCache cache = DnsCache.withTtl(Duration.ofMinutes(1), host -> {
+            calls.incrementAndGet();
+            return List.of(InetAddress.getByAddress(new byte[]{10, 0, 0, 1}));
+        });
+        String first = NetworkProbes.dnsResolve("host.local", cache).probe();
+        String second = NetworkProbes.dnsResolve("host.local", cache).probe();
+        assertEquals(1, calls.get(), "second probe served from cache");
+        assertFalse(first.contains("(cached)"), first);
+        assertTrue(second.contains("(cached)"), second);
     }
 
     @Test
