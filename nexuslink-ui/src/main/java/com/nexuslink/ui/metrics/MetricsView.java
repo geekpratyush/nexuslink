@@ -1,5 +1,6 @@
 package com.nexuslink.ui.metrics;
 
+import com.nexuslink.core.metrics.MetricsAlerts;
 import com.nexuslink.core.metrics.MetricsCollector;
 import com.nexuslink.core.metrics.MetricsReport;
 import javafx.animation.Animation;
@@ -68,6 +69,10 @@ public final class MetricsView extends BorderPane {
     private final Label statusLabel = new Label();
     private final Timeline timeline;
     private int tick;
+
+    private static final javafx.css.PseudoClass ALERT_ROW = javafx.css.PseudoClass.getPseudoClass("alert");
+    private final MetricsAlerts.Thresholds thresholds = MetricsAlerts.Thresholds.defaults();
+    private final java.util.Set<String> alertingChannels = new java.util.HashSet<>();
 
     public MetricsView() {
         getStyleClass().add("metrics-view");
@@ -153,6 +158,15 @@ public final class MetricsView extends BorderPane {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Label("No requests recorded yet — send some traffic from a protocol tab."));
 
+        // Tint rows whose channel currently breaches an alerting threshold.
+        table.setRowFactory(tv -> new TableRow<>() {
+            @Override protected void updateItem(Row row, boolean empty) {
+                super.updateItem(row, empty);
+                boolean alert = !empty && row != null && alertingChannels.contains(row.getChannel());
+                pseudoClassStateChanged(ALERT_ROW, alert);
+            }
+        });
+
         xAxis.setLabel("seconds");
         xAxis.setForceZeroInRange(false);
         NumberAxis yAxis = new NumberAxis();
@@ -181,6 +195,7 @@ public final class MetricsView extends BorderPane {
         ObservableList<Row> rows = FXCollections.observableArrayList();
         double totalTps = 0;
         long totalReq = 0;
+        alertingChannels.clear();
         if (collector != null) {
             Map<String, MetricsCollector.Stats> snapshot = collector.snapshot();
             for (var entry : snapshot.entrySet()) {
@@ -188,10 +203,16 @@ public final class MetricsView extends BorderPane {
                 totalTps += tps;
                 totalReq += entry.getValue().count();
                 rows.add(new Row(entry.getValue(), tps));
+                if (MetricsAlerts.isBreaching(entry.getValue(), thresholds)) {
+                    alertingChannels.add(entry.getKey());
+                }
             }
         }
         table.setItems(rows);
-        statusLabel.setText(rows.size() + " channel(s) · " + totalReq + " total requests");
+        table.refresh();   // re-evaluate the row pseudo-class against the fresh alerting set
+        String base = rows.size() + " channel(s) · " + totalReq + " total requests";
+        statusLabel.setText(alertingChannels.isEmpty()
+                ? base : base + " · ⚠ " + alertingChannels.size() + " over threshold");
 
         // Append the throughput point and keep a rolling 60-second window on the chart.
         series.getData().add(new XYChart.Data<>(tick, totalTps));

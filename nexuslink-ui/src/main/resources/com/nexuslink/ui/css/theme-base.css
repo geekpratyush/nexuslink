@@ -317,6 +317,10 @@
 .table-view .table-row-cell:odd { -fx-background-color: derive(-nl-surface, 4%); }
 .table-view .table-row-cell:selected { -fx-background-color: -nl-view-accent-soft; }
 .table-view .table-cell { -fx-text-fill: -nl-text; }
+/* Metrics dashboard: a channel breaching an alerting threshold. */
+.table-view .table-row-cell:alert { -fx-background-color: derive(-nl-danger, 72%); }
+.table-view .table-row-cell:alert:odd { -fx-background-color: derive(-nl-danger, 66%); }
+.table-view .table-row-cell:alert .table-cell { -fx-text-fill: -nl-danger; }
 
 /* ---------- Scroll bars ---------- */
 .scroll-bar { -fx-background-color: transparent; }
