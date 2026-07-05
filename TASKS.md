@@ -978,13 +978,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `parseTraceparent`/`tryParseTraceparent` (validates field count, lowercase-hex, all-zero trace/parent-id,
       version-`00` trailing data, reserved `ff`), `formatTraceparent`, `newRootTraceparent`, `childOf`/`child`,
       `injectInto`/`extract`; nested immutable `TraceState` (OWS trimming, whole-list drop on invalid/dup/>32,
-      `with(k,v)` move-to-front + evict). `SecureRandom` ids. 44 tests. _(UI: auto-inject on REST requests TODO.)_
-- [-] Jaeger/Zipkin span export — **core done:** pure dependency-free `ZipkinSpanExporter` renders
-      captured `Span`s (traceId/id/parentId/name/kind/timestamp-µs/duration-µs/localEndpoint/tags) to
-      Zipkin v2 JSON (the format Jaeger's Zipkin collector also accepts); root vs child, kind/service/tags
-      omitted when absent, sorted tags for stable output, full string escaping. 8 tests.
-      _(capturing a span per REST call + an Export/POST action still TODO — pairs with wiring `TraceContext`
-      auto-inject.)_
+      `with(k,v)` move-to-front + evict). `SecureRandom` ids. 44 tests. **Auto-inject wired:** a **Trace**
+      toggle in REST Settings (`RestRequest.traceEnabled`) makes `RestExecutionService` inject a fresh root
+      `traceparent` on each request (respecting a user-supplied one), verified end-to-end vs a loopback server.
+- [x] Jaeger/Zipkin span export — pure dependency-free `ZipkinSpanExporter` renders captured `Span`s
+      (traceId/id/parentId/name/kind/timestamp-µs/duration-µs/localEndpoint/tags) to Zipkin v2 JSON (the
+      format Jaeger's Zipkin collector also accepts); root vs child, kind/service/tags omitted when absent,
+      sorted tags, full escaping (8 tests). **Wired end-to-end:** when tracing is on, `RestExecutionService`
+      captures one CLIENT span per request (traceId/spanId from the sent `traceparent`, http.method/url/
+      status tags) into a session buffer; a **Trace** button in the REST URL bar exports the buffer as a
+      Zipkin `.json`. Service-level tests (4) verify inject + capture + user-traceparent passthrough + clear.
 - [ ] Trace tree view in response panel
 
 ### 9.3 Team Collaboration

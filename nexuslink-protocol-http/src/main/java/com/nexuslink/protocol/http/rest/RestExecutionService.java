@@ -29,6 +29,13 @@ public final class RestExecutionService {
     /** When false, cookies are neither captured nor sent (the jar is left untouched). */
     private boolean cookieJarEnabled = true;
 
+    /**
+     * Distributed-tracing spans captured during this session — one per request whose
+     * {@link RestRequest#isTraceEnabled()} injected a {@code traceparent}. Exportable as Zipkin v2
+     * JSON via {@link ZipkinSpanExporter}. Guarded by its own monitor (execute runs off the UI thread).
+     */
+    private final java.util.List<ZipkinSpanExporter.Span> spans = new java.util.ArrayList<>();
+
     /** The session cookie jar (for a Cookies viewer / inspection). */
     public CookieJar cookieJar() {
         return cookieJar;
@@ -43,9 +50,21 @@ public final class RestExecutionService {
         return cookieJarEnabled;
     }
 
+    /** An immutable snapshot of the spans captured so far this session. */
+    public java.util.List<ZipkinSpanExporter.Span> capturedSpans() {
+        synchronized (spans) { return java.util.List.copyOf(spans); }
+    }
+
+    /** Discards all captured spans (e.g. when the user clears the trace). */
+    public void clearSpans() {
+        synchronized (spans) { spans.clear(); }
+    }
+
     /** Executes the request and returns a populated {@link RestResponse}. */
     public RestResponse execute(RestRequest req) {
         long start = System.nanoTime();
+        long startEpochMicros = System.currentTimeMillis() * 1_000L;
+        String traceparent = resolveTraceparent(req);   // null when tracing is off or the user set their own
         try {
             HttpClient.Builder clientBuilder = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofMillis(req.getConnectTimeoutMs()))
@@ -58,7 +77,7 @@ public final class RestExecutionService {
             HttpClient client = clientBuilder.build();
 
             long sendStart = System.nanoTime();
-            HttpResponse<String> resp = client.send(buildRequest(req, null),
+            HttpResponse<String> resp = client.send(buildRequest(req, null, traceparent),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             captureCookies(req, resp);
 
@@ -71,7 +90,7 @@ public final class RestExecutionService {
                             DigestAuthenticator.parseChallenge(challenge),
                             req.getAuthUsername(), req.getAuthPassword(),
                             req.getMethod().toUpperCase(), URI.create(req.requestUri()).getRawPath());
-                    resp = client.send(buildRequest(req, authHeader),
+                    resp = client.send(buildRequest(req, authHeader, traceparent),
                             HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
                     captureCookies(req, resp);
                 }
@@ -89,7 +108,7 @@ public final class RestExecutionService {
                             NtlmAuthenticator.parseType2(challenge.substring(5).trim());
                     String type3 = NtlmAuthenticator.type3Message(req.getNtlmDomain(),
                             req.getNtlmUsername(), req.getNtlmPassword(), type2, req.getNtlmWorkstation());
-                    resp = client.send(buildRequest(req, "NTLM " + type3),
+                    resp = client.send(buildRequest(req, "NTLM " + type3, traceparent),
                             HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
                     captureCookies(req, resp);
                 }
@@ -105,6 +124,10 @@ public final class RestExecutionService {
 
             RestResponse.Timing timing = new RestResponse.Timing(
                     0, ttfbMs, 0, ttfbMs, downloadMs, totalMs);
+
+            if (traceparent != null) {
+                captureSpan(req, traceparent, startEpochMicros, now - start, resp.statusCode());
+            }
 
             return new RestResponse(
                     resp.statusCode(),
@@ -126,14 +149,47 @@ public final class RestExecutionService {
     }
 
     /**
+     * The {@code traceparent} to send for this request, or null when tracing is off. When the user has
+     * already set an explicit {@code traceparent} header we respect theirs (return null → no override).
+     */
+    private String resolveTraceparent(RestRequest req) {
+        if (!req.isTraceEnabled()) return null;
+        boolean userSet = req.getHeaders().stream()
+                .anyMatch(kv -> kv.isEnabled() && kv.getKey().equalsIgnoreCase(TraceContext.TRACEPARENT)
+                        && !kv.getValue().isBlank());
+        if (userSet) return null;
+        return TraceContext.newRootTraceparent(true).formatTraceparent();
+    }
+
+    /** Records a Zipkin CLIENT span for a completed traced request. */
+    private void captureSpan(RestRequest req, String traceparent, long startEpochMicros,
+                             long durationNanos, int statusCode) {
+        TraceContext tc = TraceContext.parseTraceparent(traceparent);
+        java.util.Map<String, String> tags = new java.util.LinkedHashMap<>();
+        tags.put("http.method", req.getMethod().toUpperCase());
+        tags.put("http.url", req.effectiveUrl());
+        tags.put("http.status_code", Integer.toString(statusCode));
+        String path = URI.create(req.requestUri()).getRawPath();
+        ZipkinSpanExporter.Span span = new ZipkinSpanExporter.Span(
+                tc.traceId(), tc.spanId(), null,
+                req.getMethod().toUpperCase() + " " + (path == null || path.isBlank() ? "/" : path),
+                ZipkinSpanExporter.Kind.CLIENT,
+                startEpochMicros, durationNanos / 1_000L, "nexuslink", tags);
+        synchronized (spans) { spans.add(span); }
+    }
+
+    /**
      * Builds the JDK {@link HttpRequest} including body, headers, and auth. {@code authorizationOverride}
      * carries a precomputed {@code Authorization} value for a challenge-response retry — the Digest
-     * header, or the NTLM Type 3 token — and is null on the first attempt.
+     * header, or the NTLM Type 3 token — and is null on the first attempt. {@code traceparent} is the
+     * W3C header to inject when distributed tracing is on (null to send none).
      */
-    private HttpRequest buildRequest(RestRequest req, String authorizationOverride) {
+    private HttpRequest buildRequest(RestRequest req, String authorizationOverride, String traceparent) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(req.requestUri()))
                 .timeout(Duration.ofMillis(req.getReadTimeoutMs()));
+
+        if (traceparent != null) builder.header(TraceContext.TRACEPARENT, traceparent);
 
         byte[] bodyBytes = req.getBodyType() == RestRequest.BodyType.NONE
                 ? new byte[0] : req.getBody().getBytes(StandardCharsets.UTF_8);

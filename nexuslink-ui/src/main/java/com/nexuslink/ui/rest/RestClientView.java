@@ -117,6 +117,7 @@ public final class RestClientView extends BorderPane {
     private final TextField connectTimeoutField = new TextField();
     private final TextField readTimeoutField = new TextField();
     private final CheckBox followRedirectsBox = new CheckBox("Follow redirects automatically");
+    private final CheckBox traceBox = new CheckBox("Inject W3C traceparent + capture a span per request");
 
     /** Optional sink for log lines (wired to the app log panel). */
     private Consumer<String> logger = s -> {};
@@ -284,6 +285,30 @@ public final class RestClientView extends BorderPane {
         }
     }
 
+    /** Saves the spans captured from traced requests in this tab as Zipkin v2 JSON. */
+    private void exportTrace() {
+        var spans = executor.capturedSpans();
+        if (spans.isEmpty()) {
+            logger.accept("No trace captured — enable tracing in Settings and send a request first");
+            return;
+        }
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("Export trace (Zipkin v2)");
+        fc.setInitialFileName("nexuslink-trace.json");
+        fc.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("Zipkin JSON", "*.json"),
+                new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+        java.io.File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        try {
+            Files.writeString(file.toPath(),
+                    com.nexuslink.protocol.http.rest.ZipkinSpanExporter.toJsonArray(spans), StandardCharsets.UTF_8);
+            logger.accept("Exported " + spans.size() + " span(s) to " + file.getName());
+        } catch (java.io.IOException ex) {
+            logger.accept("Trace export failed: " + ex.getMessage());
+        }
+    }
+
     /** Pushes a parsed {@link RestRequest} into the editor's visible fields. */
     private void applyImported(RestRequest r) {
         methodCombo.setValue(r.getMethod());
@@ -341,11 +366,16 @@ public final class RestClientView extends BorderPane {
         harBtn.setTooltip(new Tooltip("Export the requests sent in this tab as an HTTP Archive (.har)"));
         harBtn.setOnAction(e -> exportHar());
 
+        Button traceBtn = new Button("Trace");
+        traceBtn.getStyleClass().add("btn-secondary");
+        traceBtn.setTooltip(new Tooltip("Export captured trace spans as Zipkin v2 JSON (enable tracing in Settings)"));
+        traceBtn.setOnAction(e -> exportTrace());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, harBtn, helpBtn);
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, harBtn, traceBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 
@@ -754,6 +784,9 @@ public final class RestClientView extends BorderPane {
         connectTimeoutField.setText(String.valueOf(request.getConnectTimeoutMs()));
         readTimeoutField.setText(String.valueOf(request.getReadTimeoutMs()));
         followRedirectsBox.setSelected(request.isFollowRedirects());
+        traceBox.setSelected(request.isTraceEnabled());
+        traceBox.setTooltip(new Tooltip("Adds a W3C traceparent header and records a Zipkin span for each "
+                + "request sent from this tab; export the trace from the URL bar"));
 
         Label ctLbl = new Label("Connect timeout (ms):");
         Label rtLbl = new Label("Read timeout (ms):");
@@ -763,6 +796,7 @@ public final class RestClientView extends BorderPane {
         grid.add(ctLbl, 0, 0); grid.add(connectTimeoutField, 1, 0);
         grid.add(rtLbl, 0, 1); grid.add(readTimeoutField, 1, 1);
         grid.add(followRedirectsBox, 1, 2);
+        grid.add(traceBox, 1, 3);
 
         // ---- TLS / mTLS ----
         Label tlsHeader = new Label("TLS / mTLS");
@@ -994,6 +1028,7 @@ public final class RestClientView extends BorderPane {
         request.setConnectTimeoutMs(parseIntOr(connectTimeoutField.getText(), 10_000));
         request.setReadTimeoutMs(parseIntOr(readTimeoutField.getText(), 30_000));
         request.setFollowRedirects(followRedirectsBox.isSelected());
+        request.setTraceEnabled(traceBox.isSelected());
         request.getAssertions().clear();
         request.getAssertions().addAll(assertionRows);
     }

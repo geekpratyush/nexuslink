@@ -68,6 +68,7 @@ public final class RestRequest {
     private int connectTimeoutMs = 10_000;
     private int readTimeoutMs = 30_000;
     private boolean followRedirects = true;
+    private boolean traceEnabled = false;   // inject a W3C traceparent + capture a span for distributed tracing
 
     // Response assertions ("tests") authored in the UI and evaluated after each call
     private final List<AssertionSpec> assertions = new ArrayList<>();
@@ -204,6 +205,9 @@ public final class RestRequest {
     public boolean isFollowRedirects() { return followRedirects; }
     public void setFollowRedirects(boolean v) { this.followRedirects = v; }
 
+    public boolean isTraceEnabled() { return traceEnabled; }
+    public void setTraceEnabled(boolean v) { this.traceEnabled = v; }
+
     /**
      * Returns a deep copy of this request with every string field passed through {@code fn}, used to
      * resolve {@code ${VAR}} references at send time without mutating the editor's bound model. The
@@ -261,6 +265,7 @@ public final class RestRequest {
         r.connectTimeoutMs = connectTimeoutMs;
         r.readTimeoutMs = readTimeoutMs;
         r.followRedirects = followRedirects;
+        r.traceEnabled = traceEnabled;
         for (AssertionSpec a : assertions) {
             AssertionSpec c = new AssertionSpec(a.getType(),
                     fn.apply(a.getName()), fn.apply(a.getTarget()), a.getMax());
