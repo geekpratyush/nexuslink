@@ -638,7 +638,9 @@ public final class SqlClientView extends BorderPane {
      * tree refreshes and the outcome lands in the Messages tab. This is the safety gate for every
      * generated mutation (DROP now; UPDATE/DELETE/ALTER as they land).
      */
-    private void previewAndApply(String sql, String header) {
+    private void previewAndApply(String sql, String header) { previewAndApply(sql, header, null); }
+
+    private void previewAndApply(String sql, String header, Runnable onApplied) {
         Dialog<ButtonType> d = new Dialog<>();
         if (getScene() != null) d.initOwner(getScene().getWindow());
         d.setTitle("Confirm change");
@@ -662,7 +664,37 @@ public final class SqlClientView extends BorderPane {
             if (btn != null) btn.getStyleClass().add("btn-primary");
         });
         if (d.showAndWait().orElse(ButtonType.CANCEL) != apply) { statusLabel.setText("Change cancelled"); return; }
-        runDdl(sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql);
+        runWrite(sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql, onApplied);
+    }
+
+    /** Runs a confirmed mutation off-thread; on success refreshes the schema tree, logs, and fires onApplied. */
+    private void runWrite(String sql, Runnable onApplied) {
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Applying…");
+        logger.accept("SQL write → " + truncate(sql));
+        Task<QueryResult> task = new Task<>() {
+            @Override protected QueryResult call() { return service.execute(sql); }
+        };
+        task.setOnSucceeded(e -> {
+            QueryResult r = task.getValue();
+            messagesArea.setText((r.failed() ? "✖ " : "✔ ") + truncate(sql) + "  →  "
+                    + (r.failed() ? r.errorMessage() : r.summary()) + "\n" + messagesArea.getText());
+            if (r.failed()) {
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("✖ " + r.errorMessage());
+                selectTab("Messages");
+            } else {
+                statusLabel.getStyleClass().setAll("status-2xx");
+                statusLabel.setText("Applied · " + r.summary());
+                refreshExplorer();
+                if (onApplied != null) onApplied.run();
+            }
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Apply failed: " + task.getException().getMessage());
+        });
+        runBg(task);
     }
 
     // ---- editable-result support (row delete now; in-grid UPDATE to follow) ------------------
@@ -1188,10 +1220,12 @@ public final class SqlClientView extends BorderPane {
             tc.setGraphic(columnHeader(r.columns().get(i), type));
             tc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                     col < cd.getValue().size() ? cd.getValue().get(col) : ""));
-            tc.setCellFactory(c -> nullAwareCell());
+            tc.setCellFactory(c -> editableCell());
+            tc.setOnEditCommit(ev -> onCellEdit(ev.getRowValue(), col, ev.getNewValue()));
             tc.setPrefWidth(contentWidth(r, col, type));
             resultGrid.getColumns().add(tc);
         }
+        resultGrid.setEditable(true);   // edits are gated in onCellEdit (single-table + PK only)
         masterRows.setAll(r.rows());
         applyRowFilter(filterField.getText());
         setStats(r.rowCount(), r.columns().size(), r.durationMs());
@@ -1223,17 +1257,44 @@ public final class SqlClientView extends BorderPane {
         return box;
     }
 
-    /** Renders SQL NULLs (the literal "NULL" cell value) in a faint italic style. */
-    private TableCell<List<String>, String> nullAwareCell() {
-        return new TableCell<>() {
-            @Override protected void updateItem(String v, boolean empty) {
+    /**
+     * An editable text cell (double-click to edit) that also renders SQL NULLs (the literal "NULL"
+     * value) in a faint italic style when not being edited. Commits are gated in {@link #onCellEdit}.
+     */
+    private TableCell<List<String>, String> editableCell() {
+        return new javafx.scene.control.cell.TextFieldTableCell<>(new javafx.util.converter.DefaultStringConverter()) {
+            @Override public void updateItem(String v, boolean empty) {
                 super.updateItem(v, empty);
                 getStyleClass().remove("null-cell");
-                if (empty || v == null) { setText(null); return; }
-                if ("NULL".equals(v)) { setText("NULL"); if (!getStyleClass().contains("null-cell")) getStyleClass().add("null-cell"); }
-                else setText(v);
+                if (!empty && "NULL".equals(v) && !isEditing()
+                        && !getStyleClass().contains("null-cell")) {
+                    getStyleClass().add("null-cell");
+                }
             }
         };
+    }
+
+    /** Handles a committed cell edit: builds a targeted UPDATE and runs it through the preview gate. */
+    private void onCellEdit(List<String> row, int col, String newVal) {
+        String oldVal = col < row.size() ? row.get(col) : null;
+        if (java.util.Objects.equals(oldVal, newVal)) { resultGrid.refresh(); return; }   // no-op edit
+        if (editTable == null || editPk.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("This result isn't editable — run a simple SELECT from one table that has a primary key");
+            resultGrid.refresh();   // discard the visual edit
+            return;
+        }
+        List<String> conds = new ArrayList<>();
+        for (String pk : editPk) {
+            int idx = currentColumns.indexOf(pk);
+            if (idx < 0) { statusLabel.setText("Primary key column not in result — can't update safely"); resultGrid.refresh(); return; }
+            conds.add(quoteIdent(pk) + " = " + sqlLiteral(idx < row.size() ? row.get(idx) : null));
+        }
+        String colName = currentColumns.get(col);
+        String sql = "UPDATE " + quoteIdent(editTable) + " SET " + quoteIdent(colName) + " = " + sqlLiteral(newVal)
+                + " WHERE " + String.join(" AND ", conds) + ";";
+        previewAndApply(sql, "Update “" + colName + "” in “" + editTable + "”?",
+                () -> { row.set(col, newVal); resultGrid.refresh(); });
     }
 
     // ---- autocomplete ---------------------------------------------------------------------
