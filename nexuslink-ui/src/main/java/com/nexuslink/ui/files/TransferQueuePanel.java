@@ -76,6 +76,14 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         verify.setSelected(queue.isVerifyIntegrity());
         verify.setOnAction(e -> queue.setVerifyIntegrity(verify.isSelected()));
 
+        ToggleButton autoRetry = new ToggleButton("Auto-retry");
+        autoRetry.getStyleClass().add("btn-secondary");
+        autoRetry.setTooltip(new Tooltip("Automatically retry transfers that fail with a transient network error "
+                + "(timeout, connection reset), backing off between attempts"));
+        autoRetry.setSelected(queue.autoRetryPolicy().enabled());
+        autoRetry.setOnAction(e -> queue.setAutoRetry(
+                autoRetry.isSelected() ? RetryPolicy.defaultPolicy() : RetryPolicy.none()));
+
         Button retryFailed = new Button("Retry failed");
         retryFailed.getStyleClass().add("btn-secondary");
         retryFailed.setOnAction(e -> queue.retryAllFailed());
@@ -84,7 +92,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> queue.clearCompleted());
 
-        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, verify, retryFailed, clear);
+        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, verify, autoRetry, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 

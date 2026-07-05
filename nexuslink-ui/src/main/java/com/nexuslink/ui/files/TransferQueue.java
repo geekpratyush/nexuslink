@@ -37,6 +37,8 @@ public final class TransferQueue {
     private final TransferGovernor governor = new TransferGovernor();
     private volatile boolean workerRunning;
     private volatile boolean verifyIntegrity;   // when set, each completed file is size-checked on the destination
+    private volatile RetryPolicy retryPolicy = RetryPolicy.none();   // auto-retry on transient errors (off by default)
+    private java.util.function.LongConsumer backoffSleeper = TransferQueue::sleepMillis;
     private Thread worker;
 
     public TransferQueue(FileSystem local, FileSystem remote, FileTransfer transfer) {
@@ -307,6 +309,26 @@ public final class TransferQueue {
 
     public boolean isVerifyIntegrity() { return verifyIntegrity; }
 
+    /**
+     * Enables automatic retry of transfers that fail with a <em>transient</em> error
+     * ({@link TransferErrors#isTransient}) according to {@code policy}, backing off between attempts.
+     * A permanent error (bad credentials, missing file) still fails immediately. Pass
+     * {@link RetryPolicy#none()} to disable. Off by default.
+     */
+    public void setAutoRetry(RetryPolicy policy) { this.retryPolicy = policy == null ? RetryPolicy.none() : policy; }
+
+    public RetryPolicy autoRetryPolicy() { return retryPolicy; }
+
+    /** Test seam: replaces the backoff sleeper (default {@link Thread#sleep}). */
+    void setBackoffSleeper(java.util.function.LongConsumer sleeper) {
+        this.backoffSleeper = sleeper == null ? TransferQueue::sleepMillis : sleeper;
+    }
+
+    private static void sleepMillis(long ms) {
+        if (ms <= 0) return;
+        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
+
     private void workerLoop() {
         while (workerRunning) {
             drain();
@@ -336,6 +358,7 @@ public final class TransferQueue {
 
     private void process(TransferItem item) {
         item.setStatus(TransferStatus.ACTIVE);
+        item.beginAttempt();
         item.markStarted(System.nanoTime());
         fireChanged();
         try {
@@ -363,11 +386,31 @@ public final class TransferQueue {
             if (item.isMove()) deleteSourceForMove(item);
             item.setStatus(TransferStatus.DONE);
         } catch (Exception e) {
+            if (maybeAutoRetry(item, e)) return;
             item.setError(e.getMessage() == null ? e.toString() : e.getMessage());
             item.setStatus(TransferStatus.FAILED);
         }
         item.markFinished(System.nanoTime());
         finish(item);
+    }
+
+    /**
+     * When auto-retry is enabled and {@code e} is transient with attempts left, backs off and re-queues
+     * the item (leaving it QUEUED so the worker picks it up again) and returns true. Otherwise the caller
+     * finalises the item as FAILED.
+     */
+    private boolean maybeAutoRetry(TransferItem item, Exception e) {
+        RetryPolicy policy = retryPolicy;
+        if (!policy.enabled() || !policy.shouldRetry(item.attempts()) || !TransferErrors.isTransient(e)) {
+            return false;
+        }
+        backoffSleeper.accept(policy.backoffMillis(item.attempts()));
+        synchronized (lock) {
+            item.requeueForAutoRetry();   // back to QUEUED with the attempt count preserved
+            lock.notifyAll();
+        }
+        fireChanged();
+        return true;
     }
 
     private boolean targetExists(TransferItem item) throws Exception {

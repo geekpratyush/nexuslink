@@ -28,6 +28,7 @@ public final class TransferItem {
 
     private volatile TransferStatus status = TransferStatus.QUEUED;
     private volatile long transferredBytes;
+    private volatile int attempts;   // started attempts, incremented each time the worker begins this item
     private volatile String error;
     private volatile long startNanos = -1;   // set when the transfer goes ACTIVE
     private volatile long endNanos = -1;      // set when it reaches a terminal state
@@ -60,14 +61,29 @@ public final class TransferItem {
     public TransferStatus status() { return status; }
     void setStatus(TransferStatus status) { this.status = status; }
 
-    /** Resets a terminal item back to QUEUED so the worker will pick it up again. */
+    /** Resets a terminal item back to QUEUED so the worker will pick it up again (manual retry:
+     * also clears the auto-retry attempt budget). */
     void resetForRetry() {
+        requeue();
+        this.attempts = 0;
+    }
+
+    /** Re-queues after a transient auto-retry, preserving the attempt count (and last error). */
+    void requeueForAutoRetry() {
+        requeue();
+    }
+
+    private void requeue() {
         this.status = TransferStatus.QUEUED;
         this.transferredBytes = 0;
         this.error = null;
         this.startNanos = -1;
         this.endNanos = -1;
     }
+
+    /** Number of attempts started so far; incremented as the worker begins each try. */
+    public int attempts() { return attempts; }
+    void beginAttempt() { this.attempts++; }
 
     public long transferredBytes() { return transferredBytes; }
     void setTransferredBytes(long bytes) { this.transferredBytes = bytes; }

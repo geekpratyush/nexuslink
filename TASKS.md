@@ -692,7 +692,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       resolver. 3 added tests (12 in `TransferQueueTest`)
 - [-] Conflict resolution on transfer — **done:** prompt **skip / overwrite** with **overwrite-all /
       skip-all** stickiness across a batch (`OverwriteResolver`). **TODO:** overwrite-if-newer / rename
-- [ ] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors
+- [-] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors —
+      **auto-retry done:** pure `RetryPolicy` (max attempts + exponential capped backoff) +
+      `TransferErrors.isTransient` (timeout/reset/refused/unreachable → retriable; bad-creds/missing-file/
+      unknown-host → permanent, scans the cause chain); wired into `TransferQueue` (per-item attempt
+      count, injectable backoff sleeper, off by default) behind an **Auto-retry** toggle in the queue
+      footer. 13 tests (4 RetryPolicy, 5 TransferErrors, 4 queue). _(offset-based resume of a partial file
+      still TODO — needs append/offset support in `FileTransfer`.)_
 - [ ] Parallel/background transfers (configurable concurrency)
 - [-] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
       verifier done: compares source vs landed destination — byte count always, plus a checksum when the

@@ -520,4 +520,92 @@ class TransferQueueTest {
 
         assertTrue(changes.get() >= 2, "expected change events for enqueue + status transitions");
     }
+
+    // ---- auto-retry on transient errors ----
+
+    /** A {@link FileTransfer} that throws a chosen error for its first {@code failures} attempts, then copies. */
+    private static final class FlakyTransfer implements FileTransfer {
+        private final int failures;
+        private final Exception error;
+        private int attempts;
+        FlakyTransfer(int failures, Exception error) { this.failures = failures; this.error = error; }
+        int attempts() { return attempts; }
+        @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+            run(localFile, Path.of(remoteDir).resolve(localFile.getFileName()), progress);
+        }
+        @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
+            Path src = Path.of(remoteFile.path());
+            run(src, localDir.resolve(src.getFileName()), progress);
+        }
+        private void run(Path src, Path dst, LongConsumer progress) throws Exception {
+            if (attempts++ < failures) throw error;
+            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+            progress.accept(Files.size(src));
+        }
+    }
+
+    private static TransferQueue flakyQueue(FlakyTransfer transfer, RetryPolicy policy) {
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), transfer);
+        q.setAutoRetry(policy);
+        q.setBackoffSleeper(ms -> {});   // no real waiting in tests
+        return q;
+    }
+
+    @Test
+    void transientFailureIsAutoRetriedToSuccess(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "payload");
+        FlakyTransfer transfer = new FlakyTransfer(2, new java.net.SocketTimeoutException("read timed out"));
+        TransferQueue q = flakyQueue(transfer, RetryPolicy.defaultPolicy());   // 3 attempts
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(3, item.attempts(), "two failures + one success");
+        assertTrue(Files.exists(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void transientFailureFailsAfterExhaustingAttempts(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "payload");
+        FlakyTransfer transfer = new FlakyTransfer(99, new java.net.ConnectException("connection refused"));
+        TransferQueue q = flakyQueue(transfer, new RetryPolicy(3, 0, 1, 0));
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertEquals(3, item.attempts(), "capped at maxAttempts");
+    }
+
+    @Test
+    void permanentErrorIsNotRetried(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "payload");
+        FlakyTransfer transfer = new FlakyTransfer(99, new java.nio.file.AccessDeniedException("permission denied"));
+        TransferQueue q = flakyQueue(transfer, RetryPolicy.defaultPolicy());
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertEquals(1, item.attempts(), "a permanent error is not retried");
+    }
+
+    @Test
+    void autoRetryOffLeavesTransientFailureFailedOnFirstTry(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "payload");
+        FlakyTransfer transfer = new FlakyTransfer(99, new java.net.SocketTimeoutException("timed out"));
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), transfer);
+        // no setAutoRetry → default RetryPolicy.none()
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertEquals(1, item.attempts());
+    }
 }
