@@ -95,6 +95,9 @@ public final class KafkaView extends BorderPane {
     private final CheckBox lagAutoRefresh = new CheckBox("Auto-refresh 5s");
     private final Label lagTotal = new Label("Total lag: 0");
     private final Label lagStatus = new Label();
+    private final CheckBox lagShowChart = new CheckBox("Live chart");
+    private final com.nexuslink.ui.chart.RollingLineChart lagChart =
+            new com.nexuslink.ui.chart.RollingLineChart("Lag", 60);
     private Timeline lagTimeline;
     /** Guards against overlapping refreshes when a poll fires before the previous one finishes. */
     private boolean lagRefreshing = false;
@@ -323,13 +326,34 @@ public final class KafkaView extends BorderPane {
 
         buildLagTable();
 
+        // Live per-partition lag chart: hidden by default, toggled by the "Live chart" checkbox. Each
+        // refresh appends a point per partition (see recordLagChart) so trends/spikes are visible.
+        lagChart.setPrefHeight(220);
+        lagChart.setMinHeight(160);
+        lagChart.managedProperty().bind(lagChart.visibleProperty());
+        lagChart.setVisible(false);
+        lagShowChart.setOnAction(e -> {
+            lagChart.setVisible(lagShowChart.isSelected());
+            if (!lagShowChart.isSelected()) lagChart.reset();
+        });
+
         HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh, reset, metrics,
-                lagAutoRefresh, lagTotal, lagStatus);
+                lagAutoRefresh, lagShowChart, lagTotal, lagStatus);
         top.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, top, lagTable);
+        VBox box = new VBox(8, top, lagTable, lagChart);
         box.setPadding(new Insets(8));
         VBox.setVgrow(lagTable, Priority.ALWAYS);
         return box;
+    }
+
+    /** Appends the current per-partition lag to the live chart (one series per topic-partition). */
+    private void recordLagChart(List<ConsumerLagCalculator.LagRow> rows) {
+        if (!lagShowChart.isSelected()) return;
+        java.util.Map<String, Long> byPartition = new java.util.LinkedHashMap<>();
+        for (ConsumerLagCalculator.LagRow r : rows) {
+            byPartition.put(r.topic() + "-" + r.partition(), r.lag());
+        }
+        lagChart.tick(byPartition);
     }
 
     /**
@@ -647,6 +671,7 @@ public final class KafkaView extends BorderPane {
             lagRows.setAll(rows);
             lagTotal.setText("Total lag: " + ConsumerLagCalculator.totalLag(rows));
             lagStatus.setText(rows.size() + " partition(s) · " + LocalTime.now().format(TIME));
+            recordLagChart(rows);
         });
         task.setOnFailed(e -> {
             lagRefreshing = false;

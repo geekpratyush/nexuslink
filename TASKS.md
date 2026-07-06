@@ -474,7 +474,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       Topic/Partition/Committed/End/Lag table (numeric right-aligned), "Total lag", and an Auto-refresh-5s
       `Timeline` (overlap-guarded, stopped on toggle-off/empty/failure). _(live methods need a broker for E2E.)_
 - [x] Lag table data: group, topic, partition, committed offset, end offset, lag — produced by `ConsumerLagCalculator`, shown in the Consumer Lag tab
-- [ ] Lag chart: real-time line chart per partition over time
+- [x] Lag chart: real-time line chart per partition over time — reusable `ui.chart.RollingLineChart`
+      (rolling 60-point window, one series per topic-partition, verified by a real-JavaFX-toolkit unit
+      test), toggled by a "Live chart" checkbox in the Consumer Lag tab and fed on each refresh
 - [-] Offset reset dialog: earliest/latest/specific timestamp/specific offset — pure `OffsetResetPlanner`
       done (Kafka-type-free, reuses `ConsumerLagCalculator.TopicPartitionKey`): given per-partition
       begin/end/committed maps it computes a target-offset plan for EARLIEST / LATEST / SPECIFIC_OFFSET /
