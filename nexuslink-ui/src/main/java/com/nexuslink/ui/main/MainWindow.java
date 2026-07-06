@@ -391,6 +391,13 @@ public final class MainWindow {
         return view;
     }
 
+    private com.nexuslink.ui.jms.JmsView openJmsTab() {
+        com.nexuslink.ui.jms.JmsView view = new com.nexuslink.ui.jms.JmsView();
+        view.setLogger(this::log);
+        addTab("JMS " + (++newTabCounter), view);
+        return view;
+    }
+
     private LdapView openLdapTab() {
         LdapView view = new LdapView();
         view.setLogger(this::log);
@@ -578,6 +585,7 @@ public final class MainWindow {
             case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));
             case KAFKA -> openKafkaTab().prefill(d.target);
             case MQTT -> openMqttTab().prefill(d.target, d.username, d.authProps.get("password"));
+            case JMS -> openJmsTab().prefill(d.target, d.username, d.authProps.get("password"));
             case REDIS -> openRedisTab().prefill(d.target);
             case AZURE_BLOB -> openAzureTab().prefill(d.target);
             case GCS -> openGcsTab().prefill(d.target);
@@ -732,6 +740,7 @@ public final class MainWindow {
                 new ProtocolDef("kafka", "Kafka", "New Kafka Client", "topic", this::openKafkaTab),
                 new ProtocolDef("mqtt", "MQTT", "New MQTT Client", "topic", this::openMqttTab),
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
+                new ProtocolDef("jms", "JMS (ActiveMQ/Artemis)", "New JMS Client", "topic", this::openJmsTab),
                 new ProtocolDef("sqs", "AWS SQS / SNS", "New SQS / SNS Client", "topic", this::openSqsTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),

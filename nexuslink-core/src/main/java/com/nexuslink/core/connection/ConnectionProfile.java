@@ -20,7 +20,7 @@ public final class ConnectionProfile {
         REST, WEBSOCKET, GRAPHQL, GRPC, SSE,
         SQL, MONGO, REDIS,
         MCP, LLM,
-        KAFKA, MQTT, MQ,
+        KAFKA, MQTT, MQ, JMS,
         SFTP, FTP, S3, AZURE_BLOB, GCS
     }
 
@@ -73,6 +73,7 @@ public final class ConnectionProfile {
             case KAFKA -> "topic";
             case MQTT -> "topic";
             case MQ -> "queue-manager";
+            case JMS -> "topic";
             case SFTP -> "server";
             case FTP -> "server";
             case S3 -> "collection";

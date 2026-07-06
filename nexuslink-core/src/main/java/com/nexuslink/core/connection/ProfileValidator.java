@@ -68,6 +68,7 @@ public final class ProfileValidator {
                     errors.add("Redis target should be redis://host:6379 or host:port"); }
             case KAFKA -> validateKafkaBootstrap(t, errors);
             case MQTT -> requireScheme(t, errors, "tcp", "ssl", "ws", "wss");
+            case JMS -> requireScheme(t, errors, "tcp", "ssl", "amqp", "amqps");
             case MQ -> { if (!HOST_PORT.matcher(t).matches())
                     errors.add("MQ target should be host:port (the queue-manager listener)"); }
             case SFTP, FTP -> { if (!HOST_OPT_PORT.matcher(t).matches())

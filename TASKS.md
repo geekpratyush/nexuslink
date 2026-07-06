@@ -522,14 +522,19 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ## PHASE 5 — ENTERPRISE MESSAGING
 
 ### 5.1 JMS Generic Client
-- [ ] `JmsConnectionWizard` — provider dropdown, connection factory class, JNDI config, JAR upload
-- [-] `JmsProducerService` + `JmsConsumerService` — `JmsService` (new `nexuslink-protocol-jms` module,
-      ActiveMQ Artemis Jakarta provider / `jakarta.jms`): connect to a broker URL, `sendText`, `receiveText`
-      (timed), and a non-consuming queue `browse` (JMS `QueueBrowser`). **Live-verified** via `JmsLiveIT`
-      (send→receive + browse-doesn't-consume) against Artemis 2.31.2 in `test-env`. _(generic-provider JAR
-      upload/JNDI + UI panel TODO.)_
-- [ ] Message type selector: Text/Bytes/Map/Object/Stream _(Text done in `JmsService`)_
-- [ ] Message properties editor (JMS standard + custom)
+- [x] `JmsView` UI — connection bar (URL/user/pass + connect toggle), **Send** tab (queue, type selector,
+      body, properties editor, send-with-id feedback) and **Browse & Consume** tab (non-destructive browse
+      table + message detail, timed receive-one, DLQ peek shortcut); wired into MainWindow (File/sidebar +
+      `openProfile` JMS case), `${VAR}` resolved in every field. _(Provider dropdown / JNDI / JAR upload for
+      non-Artemis providers still TODO — Artemis core wire interops with most brokers via AMQP.)_
+- [x] `JmsProducerService` + `JmsConsumerService` — `JmsService` (`nexuslink-protocol-jms`, ActiveMQ Artemis
+      Jakarta provider / `jakarta.jms`): connect, `sendText`/`sendMessage` (Text/Bytes/Map + string
+      properties), timed `receiveText`/`receive`, non-consuming `browse`. **Live-verified** via `JmsLiveIT`
+      (4 tests: send→receive, browse-doesn't-consume, typed properties round-trip, Bytes/Map bodies) against
+      Artemis 2.31.2 in `test-env`.
+- [x] Message type selector: Text / Bytes / Map (genuinely sent + rendered on browse/receive).
+      _(Object/Stream omitted — need serialized-class / typed-stream input a generic text UI can't supply.)_
+- [x] Message properties editor (JMS standard + custom string properties, editable key/value table)
 
 ### 5.2 IBM MQ
 - [ ] `MQConnectionProfile` — QM, channel, host, port, TLS, AMS
