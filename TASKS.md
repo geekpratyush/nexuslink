@@ -292,15 +292,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Context-sensitive open** — `HelpDialog.openContextual(componentId)` resolves to best anchor
 - [x] **"Did you know?" tips** — 10 rotating tips with fade animation
 - [x] **Recently viewed** topics — tracked in `HelpService`, shown in tree
-- [ ] `HelpButton` reusable component — `?` icon for any panel
+- [x] `HelpButton` reusable component — `?` icon for any panel (`ui.hint.HelpButton`; wired into REST bar)
 - [x] Smooth close animation (fade 150ms)
 - [x] `help-dialog.css` — full dark theme styling
 
 ### 2.4 In-App Contextual Hints
-- [ ] Tooltip-plus system: hover on any field → shows field purpose + `F1 for more`
-- [ ] `ErrorHelpLink` — errors include "What does this mean?" that opens help at the error code
-- [ ] First-run onboarding overlay — step-by-step with "skip" and "don't show again"
-- [ ] Empty-state illustrations — each empty panel shows a helpful "Get started" message
+- [x] Tooltip-plus system: hover on any field → shows field purpose + `F1 for more` (`ui.hint.TooltipPlus`; F1 opens contextual help; wired on REST URL field)
+- [x] `ErrorHelpLink` — errors include "What does this mean?" that opens help at the error code (`ui.hint.ErrorHelpLink` + pure `ErrorHelp` signature→anchor map, 8 unit tests; wired into REST error bar)
+- [x] First-run onboarding overlay — step-by-step with "skip" and "don't show again" (`ui.hint.FirstRunOverlay` + `OnboardingPrefs`; shown once via `overlayHost`, re-openable from Help → Welcome Tour)
+- [x] Empty-state illustrations — each empty panel shows a helpful "Get started" message (`ui.hint.EmptyState`; wired as History panel placeholder)
 
 ---
 

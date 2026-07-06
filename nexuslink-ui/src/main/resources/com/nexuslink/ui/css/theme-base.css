@@ -420,3 +420,44 @@
     -fx-border-width: 2;
     -fx-background-color: -nl-accent-soft;
 }
+
+/* ---------- Contextual help & onboarding (hint package) ---------- */
+.help-button {
+    -fx-background-color: transparent;
+    -fx-border-color: -nl-border;
+    -fx-border-radius: 999;
+    -fx-background-radius: 999;
+    -fx-min-width: 20; -fx-min-height: 20;
+    -fx-max-width: 20; -fx-max-height: 20;
+    -fx-padding: 0;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -nl-text-muted;
+    -fx-cursor: hand;
+}
+.help-button:hover { -fx-border-color: -nl-accent; -fx-text-fill: -nl-accent; }
+
+.error-help-link { -fx-text-fill: -nl-info; -fx-font-size: 11px; -fx-underline: false; }
+.error-help-link:hover { -fx-underline: true; }
+
+.tooltip-plus { -fx-font-size: 12px; }
+
+/* Empty-state placeholder */
+.empty-state { -fx-padding: 32; -fx-opacity: 0.95; }
+.empty-state-icon { -fx-opacity: 0.35; }
+.empty-state-title { -fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: -nl-text; }
+.empty-state-hint { -fx-font-size: 12px; -fx-text-fill: -nl-text-muted; }
+
+/* First-run onboarding overlay */
+.onboarding-scrim { -fx-background-color: rgba(2, 6, 23, 0.55); }
+.onboarding-card {
+    -fx-background-color: -nl-surface;
+    -fx-border-color: -nl-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-effect: dropshadow(gaussian, -nl-shadow, 28, 0.2, 0, 8);
+}
+.onboarding-title { -fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: -nl-text-strong; }
+.onboarding-body { -fx-font-size: 13px; -fx-text-fill: -nl-text; }
+.onboarding-progress { -fx-font-size: 11px; -fx-text-fill: -nl-text-faint; }
+.onboarding-learn-more { -fx-text-fill: -nl-accent; -fx-font-size: 12px; }

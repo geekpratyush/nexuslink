@@ -58,6 +58,7 @@ public final class MainWindow {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
     private final BorderPane root = new BorderPane();
+    private StackPane overlayHost;
     private TabPane workspace;
     private TextArea logArea;
     private TitledPane bottomPane;
@@ -92,7 +93,8 @@ public final class MainWindow {
         rebuildProtocols();                  // populate File menu + sidebar from enabled protocols
         openRestTab();                       // open the initial tab after all panels exist
 
-        Scene scene = new Scene(root, 1180, 760);
+        overlayHost = new StackPane(root);   // hosts modal overlays (onboarding, etc.) above the app
+        Scene scene = new Scene(overlayHost, 1180, 760);
         ThemeManager.get().register(scene, "/com/nexuslink/ui/css/rest-client.css");
 
         scene.getAccelerators().put(KeyCombination.keyCombination("F1"),
@@ -107,6 +109,10 @@ public final class MainWindow {
                 this::toggleTheme);
 
         log("NexusLink started. Press F1 for help, Ctrl+T for a new REST tab.");
+
+        // First-run onboarding — shows once, then never again (unless re-opened from Help).
+        javafx.application.Platform.runLater(
+                () -> com.nexuslink.ui.hint.FirstRunOverlay.maybeShow(overlayHost));
 
         // Demo hook: open the AI tabs (MCP + LLM) on startup for screenshots
         if ("1".equals(System.getenv("NEXUSLINK_OPEN_AI"))) {
@@ -190,7 +196,11 @@ public final class MainWindow {
         helpIndex.setOnAction(e -> HelpDialog.open("getting-started"));
         MenuItem shortcuts = new MenuItem("Keyboard Shortcuts");
         shortcuts.setOnAction(e -> HelpDialog.open("keyboard-shortcuts"));
-        help.getItems().addAll(helpIndex, shortcuts);
+        MenuItem welcomeTour = new MenuItem("Welcome Tour");
+        welcomeTour.setOnAction(e -> {
+            if (overlayHost != null) com.nexuslink.ui.hint.FirstRunOverlay.showNow(overlayHost);
+        });
+        help.getItems().addAll(helpIndex, shortcuts, new SeparatorMenuItem(), welcomeTour);
 
         menuBar.getMenus().addAll(file, buildEditMenu(), view,
                 new Menu("Connection", Icons.of("connection", 14)), tools, ai, help);

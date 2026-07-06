@@ -69,6 +69,7 @@ public final class RestClientView extends BorderPane {
     private Label statusLabel;
     private Label timingLabel;
     private Label sizeLabel;
+    private final com.nexuslink.ui.hint.ErrorHelpLink errorHelpLink = new com.nexuslink.ui.hint.ErrorHelpLink();
     private org.fxmisc.richtext.CodeArea responseBody;
     private ComboBox<BodyFormatter.Mode> bodyViewMode;
     private RestResponse lastResponse;
@@ -338,6 +339,9 @@ public final class RestClientView extends BorderPane {
         urlField.setPromptText("https://api.example.com/v1/resource   (try ${BASE_URL}/users)");
         HBox.setHgrow(urlField, Priority.ALWAYS);
         urlField.setOnAction(e -> send());
+        com.nexuslink.ui.hint.TooltipPlus.attach(urlField,
+                "The request URL. Supports ${VAR} substitution from the active environment.",
+                "rest-client#url-bar");
 
         sendButton = new Button("Send");
         sendButton.getStyleClass().add("btn-primary");
@@ -371,9 +375,8 @@ public final class RestClientView extends BorderPane {
         traceBtn.setTooltip(new Tooltip("Export captured trace spans as Zipkin v2 JSON (enable tracing in Settings)"));
         traceBtn.setOnAction(e -> exportTrace());
 
-        Button helpBtn = new Button("?");
-        helpBtn.getStyleClass().add("btn-secondary");
-        helpBtn.setOnAction(e -> HelpDialog.openContextual("urlBar"));
+        com.nexuslink.ui.hint.HelpButton helpBtn =
+                new com.nexuslink.ui.hint.HelpButton("rest-client#url-bar", "Help for the REST client");
 
         HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, harBtn, traceBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
@@ -855,7 +858,7 @@ public final class RestClientView extends BorderPane {
         sizeLabel = new Label();
         sizeLabel.getStyleClass().add("meta-label");
 
-        HBox meta = new HBox(16, statusLabel, timingLabel, sizeLabel);
+        HBox meta = new HBox(16, statusLabel, timingLabel, sizeLabel, errorHelpLink);
         meta.setAlignment(Pos.CENTER_LEFT);
         meta.setPadding(new Insets(8, 10, 8, 10));
 
@@ -942,6 +945,7 @@ public final class RestClientView extends BorderPane {
         statusLabel.setText("Sending…");
         timingLabel.setText("");
         sizeLabel.setText("");
+        errorHelpLink.showFor(null);   // clear any prior error affordance
 
         // Resolve ${VAR} references at send time: pre-request vars first, then the active environment.
         // The on-screen request stays templated (so history/replay re-resolve later); only this copy
@@ -971,6 +975,7 @@ public final class RestClientView extends BorderPane {
         task.setOnFailed(e -> {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("Error: " + task.getException());
+            errorHelpLink.showFor(String.valueOf(task.getException()));
             finishSend();
         });
         Thread t = new Thread(task, "rest-exec");

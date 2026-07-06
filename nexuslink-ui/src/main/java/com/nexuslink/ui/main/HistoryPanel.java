@@ -55,6 +55,9 @@ public final class HistoryPanel extends BorderPane {
         list.setCellFactory(lv -> new HistoryCell());
         list.setOnMouseClicked(e -> { if (e.getClickCount() == 2) replaySelected(); });
         list.setContextMenu(buildContextMenu());
+        list.setPlaceholder(com.nexuslink.ui.hint.EmptyState.of("view", "No history yet",
+                "Requests you send are recorded here. Send one (Ctrl+Enter), then double-click a row "
+                        + "to replay it."));
         VBox.setVgrow(list, Priority.ALWAYS);
 
         setTop(toolbar);
