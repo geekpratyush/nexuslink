@@ -117,6 +117,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-sqs | `SqsSnsLiveIT` | LocalStack SQS+SNS (send/receive/delete, FIFO, publish) |
 | protocol-jms | `JmsLiveIT` | ActiveMQ Artemis (send/receive + non-consuming browse) |
 | protocol-secrets | `VaultLiveIT` | HashiCorp Vault dev (health, KV v2 CRUD, AppRole login) |
+| protocol-secrets | `SecretsManagerLiveIT` | LocalStack Secrets Manager (create/read/put/versions/delete) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -1035,7 +1036,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       **`VaultLiveIT` 3/3 green** vs a dev-mode `hashicorp/vault` container (health, KV v2 write→read→
       list→delete, AppRole provision→login→read). _(AWS/Azure/GCP auth methods need a cloud IAM — deferred;
       token + AppRole cover the local/Docker path.)_
-- [ ] AWS Secrets Manager: IAM role, rotation support
+- [x] **AWS Secrets Manager: CRUD + versions** — `SecretsManagerService` (AWS SDK v2 + url-connection
+      client, emulator-aware like SQS/S3): list / create / `getSecretValue` / `putSecretValue` (new
+      version) / `listVersions` / `deleteSecret` (force or recovery-window). **`SecretsManagerLiveIT` 1/1
+      green** vs LocalStack (`secretsmanager` added to `SERVICES`) — create→read→put(v2)→list-versions→
+      force-delete. _(Static creds here; real IAM-role/rotation flows need a live AWS account.)_
 - [ ] CyberArk Conjur: machine identity
 - _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._
 

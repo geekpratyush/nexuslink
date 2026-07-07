@@ -20,7 +20,7 @@ ${COMPOSE} ps
 echo "==> Running compose-backed live ITs (-Dnexuslink.it=true)..."
 cd "${REPO_ROOT}"
 mvn test -Dnexuslink.it=true -DfailIfNoTests=false \
-  -Dtest='JdbcLiveIT,RedisLiveIT,KafkaLiveIT,RabbitMqLiveIT,MqttLiveIT,LdapLiveIT,SnmpLiveIT,S3LiveIT,SqsSnsLiveIT,JmsLiveIT,AzureLiveIT,SftpLiveIT,FtpLiveIT,RestLiveIT,VaultLiveIT'
+  -Dtest='JdbcLiveIT,RedisLiveIT,KafkaLiveIT,RabbitMqLiveIT,MqttLiveIT,LdapLiveIT,SnmpLiveIT,S3LiveIT,SqsSnsLiveIT,JmsLiveIT,AzureLiveIT,SftpLiveIT,FtpLiveIT,RestLiveIT,VaultLiveIT,SecretsManagerLiveIT'
 
 echo "==> Running GCS live IT (needs STORAGE_EMULATOR_HOST)..."
 STORAGE_EMULATOR_HOST=http://localhost:4443 \
