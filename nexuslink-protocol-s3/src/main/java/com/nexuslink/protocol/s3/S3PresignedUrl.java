@@ -69,6 +69,7 @@ public final class S3PresignedUrl {
         private final String method;
         private final int expirySeconds;
         private final boolean pathStyle;
+        private final String endpoint;
 
         private Request(Builder b) {
             this.accessKey = b.accessKey;
@@ -80,6 +81,7 @@ public final class S3PresignedUrl {
             this.method = b.method;
             this.expirySeconds = b.expirySeconds;
             this.pathStyle = b.pathStyle;
+            this.endpoint = b.endpoint;
         }
 
         /** Starts a new builder. */
@@ -99,6 +101,7 @@ public final class S3PresignedUrl {
         private String method = "GET";
         private int expirySeconds = 900;
         private boolean pathStyle;
+        private String endpoint;
 
         /** Sets the AWS access key id (required). */
         public Builder accessKey(String v) { this.accessKey = v; return this; }
@@ -118,6 +121,13 @@ public final class S3PresignedUrl {
         public Builder expirySeconds(int v) { this.expirySeconds = v; return this; }
         /** Selects path-style addressing when true; virtual-hosted (default) when false. */
         public Builder pathStyle(boolean v) { this.pathStyle = v; return this; }
+        /**
+         * Sets a custom S3-compatible endpoint (e.g. {@code https://play.min.io} or
+         * {@code http://localhost:4566}). When set, its scheme and host[:port] are used instead of the
+         * AWS {@code s3.<region>.amazonaws.com} default — required for MinIO/LocalStack/Wasabi/etc.
+         * Leave null/blank for real AWS.
+         */
+        public Builder endpoint(String v) { this.endpoint = v; return this; }
 
         /** Builds the immutable request. */
         public Request build() { return new Request(this); }
@@ -196,15 +206,29 @@ public final class S3PresignedUrl {
         String amzDate = AMZ_DATE.format(signingTime);
         String dateStamp = DATE_STAMP.format(signingTime);
 
-        // Host + canonical URI depend on the addressing style.
+        // Host + scheme come from a custom endpoint when supplied, else the AWS default; the canonical
+        // URI depends on the addressing style. The signed "host" header must match the URL's authority.
+        String scheme = "https";
+        String endpointAuthority = null;      // host[:port] parsed from a custom endpoint, if any
+        if (req.endpoint != null && !req.endpoint.isBlank()) {
+            String raw = req.endpoint.trim();
+            int sep = raw.indexOf("://");
+            if (sep >= 0) { scheme = raw.substring(0, sep); raw = raw.substring(sep + 3); }
+            int slash = raw.indexOf('/');
+            if (slash >= 0) raw = raw.substring(0, slash);   // drop any path, keep host[:port]
+            endpointAuthority = raw;
+        }
+
         String host;
         String canonicalUri;
         String keyPath = encodePath(objectKey);
         if (req.pathStyle) {
-            host = "s3." + region + ".amazonaws.com";
+            host = endpointAuthority != null ? endpointAuthority : "s3." + region + ".amazonaws.com";
             canonicalUri = "/" + encodeSegment(bucket) + keyPath;
         } else {
-            host = bucket + ".s3." + region + ".amazonaws.com";
+            host = endpointAuthority != null
+                    ? bucket + "." + endpointAuthority
+                    : bucket + ".s3." + region + ".amazonaws.com";
             canonicalUri = keyPath;
         }
 
@@ -240,7 +264,7 @@ public final class S3PresignedUrl {
         byte[] signingKey = signingKey(secretKey, dateStamp, region);
         String signature = hex(hmac(signingKey, stringToSign.getBytes(StandardCharsets.UTF_8)));
 
-        return "https://" + host + canonicalUri + "?" + canonicalQuery
+        return scheme + "://" + host + canonicalUri + "?" + canonicalQuery
                 + "&X-Amz-Signature=" + signature;
     }
 

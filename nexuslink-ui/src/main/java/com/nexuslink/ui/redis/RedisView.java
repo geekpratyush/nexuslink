@@ -1,5 +1,6 @@
 package com.nexuslink.ui.redis;
 
+import com.nexuslink.protocol.redis.RedisCommandCatalog;
 import com.nexuslink.protocol.redis.RedisExplorer;
 import com.nexuslink.protocol.redis.RedisService;
 import com.nexuslink.ui.env.Env;
@@ -7,6 +8,7 @@ import com.nexuslink.ui.explorer.ResourceExplorerView;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
@@ -27,6 +29,8 @@ public final class RedisView extends BorderPane {
 
     private final TextField commandField = new TextField();
     private final TextArea consoleOut = new TextArea();
+    // Command-name auto-complete popup, driven by RedisCommandCatalog while typing the first token.
+    private final ContextMenu completionPopup = new ContextMenu();
 
     private Consumer<String> logger = s -> {};
 
@@ -78,6 +82,8 @@ public final class RedisView extends BorderPane {
         commandField.getStyleClass().add("nl-field");
         commandField.setPromptText("e.g.  SET greeting hello   |   GET greeting   |   KEYS *");
         commandField.setOnAction(e -> runCommand());
+        completionPopup.setAutoHide(true);
+        commandField.textProperty().addListener((o, old, text) -> updateCompletions(text));
         Button runBtn = new Button("Run");
         runBtn.getStyleClass().add("btn-primary");
         runBtn.setOnAction(e -> runCommand());
@@ -142,6 +148,35 @@ public final class RedisView extends BorderPane {
         task.setOnFailed(e -> consoleOut.appendText("ERR " + task.getException().getMessage() + "\n\n"));
         commandField.clear();
         runBg(task);
+    }
+
+    /**
+     * Shows a command-name auto-complete popup while the user is typing the first token. Matches are
+     * drawn from {@link RedisCommandCatalog}; picking one inserts the command name followed by a space.
+     */
+    private void updateCompletions(String text) {
+        // Only complete the command name — once a space is typed the user is entering arguments.
+        if (text == null || text.isBlank() || text.contains(" ")) {
+            completionPopup.hide();
+            return;
+        }
+        var matches = RedisCommandCatalog.complete(text.trim());
+        if (matches.isEmpty()) {
+            completionPopup.hide();
+            return;
+        }
+        completionPopup.getItems().clear();
+        matches.stream().limit(12).forEach(cmd -> {
+            MenuItem item = new MenuItem(cmd.name() + "  —  " + cmd.summary());
+            item.setOnAction(e -> {
+                commandField.setText(cmd.name() + " ");
+                commandField.positionCaret(commandField.getText().length());
+                completionPopup.hide();
+                commandField.requestFocus();
+            });
+            completionPopup.getItems().add(item);
+        });
+        if (!completionPopup.isShowing()) completionPopup.show(commandField, Side.BOTTOM, 0, 0);
     }
 
     private void runBg(Task<?> task) {

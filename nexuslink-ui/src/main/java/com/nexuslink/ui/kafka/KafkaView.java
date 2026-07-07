@@ -8,6 +8,7 @@ import com.nexuslink.protocol.kafka.KafkaMetricsSummary;
 import com.nexuslink.protocol.kafka.KafkaService;
 import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
+import com.nexuslink.protocol.kafka.SchemaDiff;
 import com.nexuslink.protocol.kafka.SchemaRegistryClient;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
@@ -37,6 +38,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -380,6 +382,10 @@ public final class KafkaView extends BorderPane {
         registerBtn.getStyleClass().add("btn-secondary");
         registerBtn.setOnAction(e -> registerSchema());
 
+        Button compareBtn = new Button("Compare versions…");
+        compareBtn.getStyleClass().add("btn-secondary");
+        compareBtn.setOnAction(e -> compareVersions());
+
         registrySubjectList.getSelectionModel().selectedItemProperty().addListener(
                 (o, a, subject) -> { if (subject != null) { loadVersions(subject); loadCompatibility(subject); } });
         registryVersionCombo.setPromptText("version");
@@ -393,7 +399,7 @@ public final class KafkaView extends BorderPane {
                 new org.fxmisc.flowless.VirtualizedScrollPane<>(registrySchemaArea);
 
         HBox top = new HBox(8, label("Registry:"), registryUrl, label("User:"), registryUser,
-                registryPass, loadBtn, registerBtn, registryStatus);
+                registryPass, loadBtn, registerBtn, compareBtn, registryStatus);
         top.setAlignment(Pos.CENTER_LEFT);
 
         registryCompatLabel.getStyleClass().add("meta-label");
@@ -579,6 +585,115 @@ public final class KafkaView extends BorderPane {
         registryStatus.getStyleClass().setAll("status-err");
         registryStatus.setText("✖ " + ex.getMessage());
         logger.accept("Schema Registry: " + what + " FAILED: " + ex.getMessage());
+    }
+
+    /**
+     * Lets the user pick two versions of the selected subject and shows a field-level evolution diff
+     * (added/removed/type-changed) plus a backward-compatibility verdict via {@link SchemaDiff}.
+     */
+    private void compareVersions() {
+        String subject = registrySubjectList.getSelectionModel().getSelectedItem();
+        List<Integer> versions = new ArrayList<>(registryVersionCombo.getItems());
+        if (subject == null) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Select a subject first");
+            return;
+        }
+        if (versions.size() < 2) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Need at least two versions to compare");
+            return;
+        }
+        ComboBox<Integer> fromCombo = new ComboBox<>(FXCollections.observableArrayList(versions));
+        ComboBox<Integer> toCombo = new ComboBox<>(FXCollections.observableArrayList(versions));
+        fromCombo.setValue(versions.get(versions.size() - 2));   // second-newest → newest by default
+        toCombo.setValue(versions.get(versions.size() - 1));
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Compare schema versions");
+        dialog.setHeaderText("Compare two versions of " + subject);
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        HBox picker = new HBox(8, label("From v:"), fromCombo, label("To v:"), toCombo);
+        picker.setAlignment(Pos.CENTER_LEFT);
+        dialog.getDialogPane().setContent(picker);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        int from = fromCombo.getValue();
+        int to = toCombo.getValue();
+        if (from == to) {
+            registryStatus.getStyleClass().setAll("status-err");
+            registryStatus.setText("Pick two different versions");
+            return;
+        }
+        registryStatus.getStyleClass().setAll("meta-label");
+        registryStatus.setText("Comparing v" + from + " → v" + to + "…");
+        SchemaRegistryClient client = registryClient();
+        Task<SchemaDiff> task = new Task<>() {
+            @Override protected SchemaDiff call() throws Exception {
+                String oldSchema = client.getSchema(subject, from).schema();
+                String newSchema = client.getSchema(subject, to).schema();
+                return SchemaDiff.between(oldSchema, newSchema);
+            }
+        };
+        task.setOnSucceeded(e -> showDiffResult(subject, from, to, task.getValue()));
+        task.setOnFailed(e -> registryFail("compare", task.getException()));
+        runBg(task, "schema-compare");
+    }
+
+    /** Renders a {@link SchemaDiff} as a table of field changes plus a compatibility banner. */
+    private void showDiffResult(String subject, int from, int to, SchemaDiff diff) {
+        TableView<SchemaDiff.FieldChange> table = new TableView<>(
+                FXCollections.observableArrayList(diff.changes()));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setPlaceholder(new Label("No field changes — the schemas are identical."));
+
+        TableColumn<SchemaDiff.FieldChange, String> field = new TableColumn<>("Field");
+        field.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().field()));
+        TableColumn<SchemaDiff.FieldChange, String> kind = new TableColumn<>("Change");
+        kind.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().kind().name()));
+        kind.setMaxWidth(140);
+        TableColumn<SchemaDiff.FieldChange, String> oldType = new TableColumn<>("Old type");
+        oldType.setCellValueFactory(c -> new SimpleStringProperty(
+                c.getValue().oldType() == null ? "—" : c.getValue().oldType()));
+        TableColumn<SchemaDiff.FieldChange, String> newType = new TableColumn<>("New type");
+        newType.setCellValueFactory(c -> new SimpleStringProperty(
+                c.getValue().newType() == null ? "—" : c.getValue().newType()));
+        table.getColumns().setAll(List.of(field, kind, oldType, newType));
+
+        Label verdict = new Label(diff.isCompatible()
+                ? "✔ Backward-compatible (added fields only)"
+                : "✖ NOT backward-compatible (removed or type-changed fields)");
+        verdict.getStyleClass().add(diff.isCompatible() ? "status-2xx" : "status-err");
+        Label summary = new Label(diff.changes(SchemaDiff.ChangeKind.ADDED).size() + " added, "
+                + diff.changes(SchemaDiff.ChangeKind.REMOVED).size() + " removed, "
+                + diff.changes(SchemaDiff.ChangeKind.TYPE_CHANGED).size() + " type-changed, "
+                + diff.unchanged() + " unchanged");
+        summary.getStyleClass().add("meta-label");
+
+        VBox content = new VBox(8, verdict, summary, table);
+        VBox.setVgrow(table, Priority.ALWAYS);
+        content.setPrefSize(560, 360);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Schema diff");
+        dialog.setHeaderText(subject + ":  v" + from + "  →  v" + to);
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        registryStatus.getStyleClass().setAll("meta-label");
+        registryStatus.setText("Compared v" + from + " → v" + to
+                + (diff.isCompatible() ? " — compatible" : " — incompatible"));
+        logger.accept("Schema Registry: compared " + subject + " v" + from + " → v" + to
+                + " (" + diff.changes().size() + " change(s), "
+                + (diff.isCompatible() ? "compatible" : "incompatible") + ")");
+        dialog.showAndWait();
     }
 
     private void buildLagTable() {
