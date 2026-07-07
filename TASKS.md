@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~68%** — 203 done · 44 in-progress · 52 open of **299 in-scope** (~75% weighted; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; `mvn test` green across 24 modules. Docker `test-env/` live-verifies 15 protocol families |
+| Progress | **~72%** — 234 done · 46 in-progress · 41 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI). `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 

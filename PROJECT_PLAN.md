@@ -67,6 +67,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-grpc       ← gRPC (dynamic, reflection-based)
 ├── nexuslink-protocol-sftp       ← SFTP (Apache MINA SSHD)
 ├── nexuslink-protocol-ftp        ← FTP / FTPS (Apache Commons Net)
+├── nexuslink-protocol-secrets    ← External secret vaults (HashiCorp Vault, AWS Secrets Manager, CyberArk Conjur)
 ├── nexuslink-ui                  ← shell (MainWindow), all protocol views, Help system
 └── nexuslink-app                 ← JavaFX entry point (the ONLY runnable module)
     + planned: protocol-messaging (JMS), protocol-file, protocol-enterprise (IBM MQ/Solace)
@@ -133,17 +134,17 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **6** | Advanced HTTP (gRPC, GraphQL) | ✅ **gRPC** (reflection, unary, **pure `.proto` parser**) + **GraphQL** (query/introspection + **schema explorer**) done; streaming/subscription panels pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·recursive·integrity-verify·auto-retry), move, batch-rename, dir-compare + sync, bookmarks, properties**; resume/parallel/external-DnD/SSH-terminal pending |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export + **visual query builder + EXPLAIN + in-grid/structure editing**) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF + DIT tree) + **SNMP** (v1/v2c/v3 USM on the wire + MIB names + trap/inform receiver) done; SSH terminal pending |
-| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** done; HashiCorp Vault / AWS Secrets Manager / CyberArk Conjur (Docker-doable) + charts + jlink pending. _Cloud sync, RBAC, Azure Key Vault, auto-updater, cross-OS signed installers → **out of scope** (see TASKS.md)._ |
+| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** + **External Secret Vaults** (HashiCorp Vault KV v2 + AWS Secrets Manager + CyberArk Conjur + `SecretVaultsView` UI, all live-verified) done; charts + jlink pending. _Cloud sync, RBAC, Azure Key Vault, auto-updater, cross-OS signed installers → **out of scope** (see TASKS.md)._ |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~68% of in-scope tasks complete** (203 done · 44 in-progress · 52 not started of **299
-in-scope**; ~75% weighting partial work — see `TASKS.md`). **Phases 0–4 and 6 are complete.** Five
+**Overall: ~72% of in-scope tasks complete** (234 done · 46 in-progress · 41 not started by checkbox —
+see `TASKS.md`). **Phases 0–4 and 6 are complete; Phase 9.4 (External Secret Vaults) is complete.** Five
 cloud/OS-blocked items are **excluded from scope** (Azure Key Vault, cloud sync, RBAC, auto-updater,
 signed Windows/macOS installers — see the "⊘ Out of scope" section in `TASKS.md`). Full `mvn test` is
-**BUILD SUCCESS** across all 24 modules, and **14 gated `*LiveIT`s pass** against the local Docker stack
-(`test-env/`), which live-verifies 15 protocol families (incl. **AWS SQS/SNS via LocalStack** and **JMS
-via ActiveMQ Artemis**).
+**BUILD SUCCESS** across all 25 modules, and **17 gated `*LiveIT`s pass** against the local Docker stack
+(`test-env/`), which live-verifies as many protocol families (incl. **AWS SQS/SNS via LocalStack**, **JMS
+via ActiveMQ Artemis**, and **HashiCorp Vault / AWS Secrets Manager / CyberArk Conjur** secret vaults).
 
 ---
 
