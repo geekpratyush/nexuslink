@@ -172,13 +172,28 @@ services:
   localstack:                                   # Apache-2.0 (community edition)
     image: localstack/localstack:3
     environment:
-      SERVICES: "s3,sqs,sns"
+      SERVICES: "s3,sqs,sns,secretsmanager"
       DEBUG: "0"
     ports: ["4566:4566"]                        # S3 endpoint: http://localhost:4566 (path-style)
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"]
       interval: 10s
       timeout: 10s
+      retries: 20
+
+  # ---- PHASE 9: HashiCorp Vault (dev mode) ----
+  vault:                                        # BUSL-1.1 image, run-only test fixture; our client is plain HTTP
+    image: hashicorp/vault:1.15
+    cap_add: ["IPC_LOCK"]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"           # dev-mode root token
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    command: "server -dev"
+    ports: ["8200:8200"]                         # API: http://localhost:8200, KV v2 mount at secret/
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 5s
       retries: 20
 
   # ---- PHASE 8: Azure Blob (emulator) ----

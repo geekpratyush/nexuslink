@@ -116,6 +116,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-s3 | `S3LiveIT` | LocalStack S3 (list buckets/objects, get) |
 | protocol-sqs | `SqsSnsLiveIT` | LocalStack SQS+SNS (send/receive/delete, FIFO, publish) |
 | protocol-jms | `JmsLiveIT` | ActiveMQ Artemis (send/receive + non-consuming browse) |
+| protocol-secrets | `VaultLiveIT` | HashiCorp Vault dev (health, KV v2 CRUD, AppRole login) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -1026,7 +1027,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - _Optional cloud sync + RBAC → **excluded** (needs a hosted backend). See ⊘ Out of scope._
 
 ### 9.4 External Secret Vaults
-- [ ] HashiCorp Vault: KV v2, AppRole, AWS/Azure/GCP auth
+- [x] **HashiCorp Vault: KV v2 + token/AppRole auth** — new `nexuslink-protocol-secrets` module.
+      `VaultService` over the JDK HTTP client (no heavy HTTP dep): `connectToken` / `loginAppRole`,
+      `health`, and full KV v2 CRUD (`readKv2`/`writeKv2`/`listKv2`/`deleteKv2`) via a generic
+      authenticated `request` seam (`X-Vault-Token` / `X-Vault-Namespace`; Vault `LIST` sent as
+      `GET ?list=true`). Pure `VaultPaths` builds the data/metadata/AppRole routes — **6/6 unit tests**.
+      **`VaultLiveIT` 3/3 green** vs a dev-mode `hashicorp/vault` container (health, KV v2 write→read→
+      list→delete, AppRole provision→login→read). _(AWS/Azure/GCP auth methods need a cloud IAM — deferred;
+      token + AppRole cover the local/Docker path.)_
 - [ ] AWS Secrets Manager: IAM role, rotation support
 - [ ] CyberArk Conjur: machine identity
 - _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._

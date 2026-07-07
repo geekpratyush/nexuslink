@@ -34,6 +34,7 @@
         <module>nexuslink-protocol-grpc</module>
         <module>nexuslink-protocol-sftp</module>
         <module>nexuslink-protocol-ftp</module>
+        <module>nexuslink-protocol-secrets</module>
         <module>nexuslink-ui</module>
         <module>nexuslink-app</module>
     </modules>
@@ -280,6 +281,11 @@
                 <artifactId>nexuslink-protocol-ftp</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-secrets</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <!-- FTP / FTPS -->
             <dependency>
                 <groupId>commons-net</groupId>
@@ -353,6 +359,23 @@
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>sns</artifactId>
+                <version>${aws.sdk.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>netty-nio-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>apache-client</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <!-- AWS SDK v2 — Secrets Manager (external secret vault); same netty/apache exclusions -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>secretsmanager</artifactId>
                 <version>${aws.sdk.version}</version>
                 <exclusions>
                     <exclusion>
