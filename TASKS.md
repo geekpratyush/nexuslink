@@ -1050,6 +1050,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       admin → read a policy-declared variable); provisioned by `test-env/conjur/setup.sh` (account + policy +
       value) since Conjur needs one-off `conjurctl` bootstrapping a healthcheck can't do (behind the `conjur`
       compose profile; admin key passed via `-Dconjur.apiKey`).
+- [x] **Secret Vaults UI** — `SecretVaultsView` (Tools ▸ Secret Vaults…): a sub-tab per backend wiring
+      all three services into the shell. **HashiCorp Vault** (address/namespace, Token vs AppRole auth that
+      swaps the credential fields, KV v2 mount/path with Read/Write/List/Delete over an editable key/value
+      table), **AWS Secrets Manager** (endpoint/region/creds, secret list + List/Get/Create/Put/Versions/
+      Delete against a value editor), **CyberArk Conjur** (appliance/account/login/API-key authenticate +
+      read variable). `${VAR}` resolved in every field; all calls run off the FX thread via `Task`; shared
+      Activity log. Launch-verified (screenshot) with the shell theme.
 - _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._
 
 ### 9.5 Code Generation (Global)

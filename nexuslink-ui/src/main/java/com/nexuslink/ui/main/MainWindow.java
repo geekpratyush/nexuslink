@@ -132,8 +132,8 @@ public final class MainWindow {
             tab.setClosable(true);
             installTabMenu(tab);
             workspace.getTabs().add(tab);
-            workspace.getSelectionModel().select(tab);
             javafx.application.Platform.runLater(sql::runDemo);
+            openSecretVaultsTab();
         }
 
         // Demo hook: auto-send the first request on startup (for screenshots/smoke test)
@@ -185,11 +185,13 @@ public final class MainWindow {
         environments.setOnAction(e -> openEnvironmentsTab());
         MenuItem metrics = new MenuItem("Metrics Dashboard…");
         metrics.setOnAction(e -> openMetricsTab());
+        MenuItem secretVaults = new MenuItem("Secret Vaults…");
+        secretVaults.setOnAction(e -> openSecretVaultsTab());
         MenuItem preferences = new MenuItem("Preferences…");
         preferences.setAccelerator(KeyCombination.keyCombination("Shortcut+,"));
         preferences.setOnAction(e -> PreferencesDialog.open(owner()));
         tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(),
-                certManager, environments, metrics, new SeparatorMenuItem(), preferences);
+                certManager, environments, metrics, secretVaults, new SeparatorMenuItem(), preferences);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
@@ -502,6 +504,13 @@ public final class MainWindow {
     private com.nexuslink.ui.metrics.MetricsView openMetricsTab() {
         com.nexuslink.ui.metrics.MetricsView view = new com.nexuslink.ui.metrics.MetricsView();
         addTab("Metrics " + (++newTabCounter), view);
+        return view;
+    }
+
+    private com.nexuslink.ui.secrets.SecretVaultsView openSecretVaultsTab() {
+        com.nexuslink.ui.secrets.SecretVaultsView view = new com.nexuslink.ui.secrets.SecretVaultsView();
+        view.setLogger(this::log);
+        addTab("Secret Vaults " + (++newTabCounter), view);
         return view;
     }
 

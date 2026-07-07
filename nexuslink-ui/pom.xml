@@ -58,6 +58,10 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-secrets</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-protocol-ldap</artifactId>
         </dependency>
         <dependency>
