@@ -1,0 +1,2 @@
+# Minimal Conjur root policy for the NexusLink live test: one secret variable.
+- !variable nexus/db/password

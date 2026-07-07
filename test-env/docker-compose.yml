@@ -196,6 +196,24 @@ services:
       timeout: 5s
       retries: 20
 
+  # ---- PHASE 9: CyberArk Conjur OSS (machine-identity secret store) ----
+  conjur-db:                                    # PostgreSQL License (permissive) — Conjur's backing store
+    image: postgres:15
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    profiles: ["conjur"]
+
+  conjur:                                       # LGPL-3.0 (OSS); run-only fixture, our client is plain HTTP
+    image: cyberark/conjur
+    command: server
+    environment:
+      DATABASE_URL: postgres://postgres@conjur-db/postgres
+      CONJUR_DATA_KEY: "bJe7B7Rq4C/QTSylEd/0HZ5yGTi8s5Tw64LPVmrPC4k="   # throwaway local test key
+      CONJUR_AUTHENTICATORS: authn
+    depends_on: ["conjur-db"]
+    ports: ["8083:80"]                          # API: http://localhost:8083
+    profiles: ["conjur"]                        # opt-in (needs conjurctl provisioning — see test-env/conjur/setup.sh)
+
   # ---- PHASE 8: Azure Blob (emulator) ----
   azurite:                                      # MIT
     image: mcr.microsoft.com/azure-storage/azurite

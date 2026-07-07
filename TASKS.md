@@ -118,6 +118,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-jms | `JmsLiveIT` | ActiveMQ Artemis (send/receive + non-consuming browse) |
 | protocol-secrets | `VaultLiveIT` | HashiCorp Vault dev (health, KV v2 CRUD, AppRole login) |
 | protocol-secrets | `SecretsManagerLiveIT` | LocalStack Secrets Manager (create/read/put/versions/delete) |
+| protocol-secrets | `ConjurLiveIT` | CyberArk Conjur OSS (authenticate + read secret; `--profile conjur`) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -1041,7 +1042,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       version) / `listVersions` / `deleteSecret` (force or recovery-window). **`SecretsManagerLiveIT` 1/1
       green** vs LocalStack (`secretsmanager` added to `SERVICES`) — create→read→put(v2)→list-versions→
       force-delete. _(Static creds here; real IAM-role/rotation flows need a live AWS account.)_
-- [ ] CyberArk Conjur: machine identity
+- [x] **CyberArk Conjur: machine identity** — `ConjurService` over the JDK HTTP client:
+      `authenticate(url, account, login, apiKey)` (asks Conjur to return the access token base64-encoded,
+      sent back as `Authorization: Token token="…"`) + `getSecret(variableId)` + `ping`. Pure `ConjurPaths`
+      builds/encodes the authenticate + secret routes (identifiers percent-encoded as one segment) —
+      **5/5 unit tests**. **`ConjurLiveIT` green** vs a `cyberark/conjur` OSS container (authenticate as
+      admin → read a policy-declared variable); provisioned by `test-env/conjur/setup.sh` (account + policy +
+      value) since Conjur needs one-off `conjurctl` bootstrapping a healthcheck can't do (behind the `conjur`
+      compose profile; admin key passed via `-Dconjur.apiKey`).
 - _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._
 
 ### 9.5 Code Generation (Global)

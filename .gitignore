@@ -30,5 +30,8 @@ hs_err_pid*
 # App-local data (runtime, not source)
 .nexuslink/
 
+# Locally-generated test-fixture secret (Conjur admin API key from setup.sh)
+test-env/conjur/.admin-api-key
+
 # Claude Code workspace
 .claude/
