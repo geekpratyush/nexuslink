@@ -49,4 +49,47 @@ class JdbcLiveIT {
         roundTrip("jdbc:mariadb://localhost:3306/nexus", "nexus", "nexus",
                 "INT AUTO_INCREMENT PRIMARY KEY");
     }
+
+    /**
+     * Proves the HikariCP pool works end-to-end against a live server: acquire a pooled connection,
+     * write, release it back to the pool, then reacquire from the same pool and read the row back.
+     */
+    private void pooledRoundTrip(String url, String user, String pw, String autoIncr) throws Exception {
+        try (JdbcConnectionPool pool = new JdbcConnectionPool()) {
+            JdbcPoolConfig cfg = JdbcPoolConfig.builder().maxPoolSize(4).minIdle(1).build();
+
+            // Acquire → write → release.
+            try (JdbcService svc = new JdbcService()) {
+                svc.connectPooled(pool, url, user, pw, java.util.Map.of(), cfg);
+                assertTrue(svc.isConnected());
+                assertTrue(svc.isPooled());
+                svc.execute("DROP TABLE IF EXISTS nexus_pool_it");
+                QueryResult ddl = svc.execute("CREATE TABLE nexus_pool_it (id " + autoIncr + ", name VARCHAR(64))");
+                assertFalse(ddl.failed(), ddl.errorMessage());
+                assertFalse(svc.execute("INSERT INTO nexus_pool_it (name) VALUES ('bob')").failed());
+            }
+
+            assertEquals(1, pool.poolCount(), "pool survives the released session");
+
+            // Reacquire from the same pool → read.
+            try (JdbcService svc = new JdbcService()) {
+                svc.connectPooled(pool, url, user, pw, java.util.Map.of(), cfg);
+                QueryResult sel = svc.execute("SELECT name FROM nexus_pool_it ORDER BY id");
+                assertTrue(sel.isResultSet());
+                assertEquals("bob", sel.rows().get(0).get(0));
+                svc.execute("DROP TABLE nexus_pool_it");
+            }
+        }
+    }
+
+    @Test
+    void postgresPooled() throws Exception {
+        pooledRoundTrip("jdbc:postgresql://localhost:5432/nexus", "nexus", "nexus", "SERIAL PRIMARY KEY");
+    }
+
+    @Test
+    void mariadbPooled() throws Exception {
+        pooledRoundTrip("jdbc:mariadb://localhost:3306/nexus", "nexus", "nexus",
+                "INT AUTO_INCREMENT PRIMARY KEY");
+    }
 }
