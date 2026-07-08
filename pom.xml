@@ -581,10 +581,10 @@
                 <version>${jakarta.jms.version}</version>
             </dependency>
 
-            <!-- MQTT -->
+            <!-- MQTT (Eclipse Paho v5 client) -->
             <dependency>
                 <groupId>org.eclipse.paho</groupId>
-                <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+                <artifactId>org.eclipse.paho.mqttv5.client</artifactId>
                 <version>${paho.version}</version>
             </dependency>
 
