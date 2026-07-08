@@ -560,7 +560,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (subscribe → publish → received the message back at QoS 1). _v5.0 TODO._
 - [x] `MqttView` — broker URL, client ID, auth, QoS selector, topic subscribe/publish, live
       message log; wired into the shell (File menu + sidebar + HiveMQ public sample)
-- [ ] v5 properties: user properties, message expiry, content type, correlation data
+- [x] v5 properties: user properties, message expiry, content type, correlation data — migrated Paho v3→v5 client; `MqttMessageProperties` (Paho-free record) mapped both directions in `MqttService.publish(...)`/`Incoming`; gated `MqttLiveIT` round-trip
 - [x] **Broker URI parser** — pure `MqttBrokerUri` parses `tcp`/`mqtt` (1883), `ssl`/`tls`/`mqtts` (8883),
       `ws` (80), `wss` (443) with scheme-default ports, `tls`/`websocket` flags, WS path (default `/mqtt`),
       percent-decoded userinfo, IPv6 hosts, round-tripping `normalized()`/`toString()` + `redacted()`;
@@ -840,7 +840,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `setHistoryRecorder` hook (like REST): `HistoryEntry.newSql(summary, durationMs, detailJson)` with a
       replayable `{url, sql}` detail blob; MainWindow wires it at both SQL tab sites and routes `sql`-protocol
       replays back into a SQL tab (`loadQuery`) instead of a REST tab.
-- [ ] HikariCP connection pooling
+- [x] HikariCP connection pooling — `JdbcConnectionPool` (per-profile `HikariDataSource`, keyed `user@url`) + `JdbcPoolConfig` (tunable size/timeout/keepalive); `JdbcService.connectPooled()`; dynamic-driver-safe (no `driverClassName` → resolves `DriverShim` via `DriverManager`); gated pooled `JdbcLiveIT` round-trips
 
 #### 8.1.1 JDBC Driver Strategy — **bundle the light ones, load the rest on demand**
 > Decision (see Decisions Log #9): do NOT bundle every driver. Bundle small + permissively
@@ -892,7 +892,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       buffer throw `RespIncompleteException` on a partial reply; the stream overload leaves pipelined bytes).
       Binary-safe bulk strings, UTF-8 text; 41 tests. _(raw-command console + pipeline UI can build on this.)_
 - [x] `RedisExplorer` + `RedisView` (key browser with lazy value-on-select + console); wired into the shell
-- [ ] Pub/Sub subscriber panel
+- [x] Pub/Sub subscriber panel — backend done: `RedisSubscriber` (dedicated blocking conn, `SUBSCRIBE`/`PSUBSCRIBE`/`UNSUBSCRIBE`, RESP2/3 push framing, `AutoCloseable`) + `RedisMessage`/`RedisPubSubEvent` records; gated `RedisPubSubLiveIT` verified live. _(JavaFX panel wiring in `ui/redis` pending Wave 2.)_
 
 ### 8.3 MongoDB Client (separate driver — not JDBC)
 > **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.
