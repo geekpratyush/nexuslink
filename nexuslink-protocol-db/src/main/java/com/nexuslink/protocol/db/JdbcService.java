@@ -20,6 +20,12 @@ public final class JdbcService implements AutoCloseable {
     private Connection connection;
     private String url;
 
+    // Pooled-session state: when connected via a HikariCP pool, the borrowed connection is held for
+    // the session (preserving the single-connection model used by the SQL editor/explorer) and simply
+    // returned to the pool on close(). The pool itself is owned by the caller — we never close it.
+    private JdbcConnectionPool pool;
+    private String poolKey;
+
     /** Opens a connection. Optional username/password may be blank for embedded DBs. */
     public void connect(String url, String user, String password) throws SQLException {
         connect(url, user, password, Map.of());
@@ -47,6 +53,30 @@ public final class JdbcService implements AutoCloseable {
             if (password != null) props.setProperty("password", password);
         }
         this.connection = DriverManager.getConnection(url, props);
+    }
+
+    /**
+     * Opens a pooled connection for this session through a caller-owned {@link JdbcConnectionPool}.
+     * The pool (a {@link com.zaxxer.hikari.HikariDataSource} keyed on URL + user) is created on first
+     * use and shared with any other service pointed at the same profile; this call borrows a single
+     * connection and holds it for the session, so the SQL editor/explorer behaviour is unchanged.
+     * {@link #close()} returns the connection to the pool but leaves the pool itself running.
+     *
+     * @param config pool tuning (size/timeouts/validation); {@code null} uses {@link JdbcPoolConfig#defaults()}
+     */
+    public void connectPooled(JdbcConnectionPool pool, String url, String user, String password,
+                              Map<String, String> extraProps, JdbcPoolConfig config) throws SQLException {
+        java.util.Objects.requireNonNull(pool, "pool");
+        close();
+        this.url = url;
+        this.pool = pool;
+        this.poolKey = JdbcConnectionPool.keyFor(url, user);
+        this.connection = pool.getConnection(poolKey, url, user, password, extraProps, config);
+    }
+
+    /** True if the current session is backed by a HikariCP pool. */
+    public boolean isPooled() {
+        return pool != null;
     }
 
     public boolean isConnected() {
@@ -317,8 +347,12 @@ public final class JdbcService implements AutoCloseable {
     @Override
     public void close() {
         if (connection != null) {
+            // For a pooled session this returns the connection to the pool rather than closing the
+            // physical socket; the pool stays alive for reuse and is shut down by its owner.
             try { connection.close(); } catch (SQLException ignored) {}
             connection = null;
         }
+        pool = null;
+        poolKey = null;
     }
 }
