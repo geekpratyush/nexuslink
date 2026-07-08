@@ -185,13 +185,15 @@ public final class MainWindow {
         environments.setOnAction(e -> openEnvironmentsTab());
         MenuItem metrics = new MenuItem("Metrics Dashboard…");
         metrics.setOnAction(e -> openMetricsTab());
+        MenuItem connState = new MenuItem("Connection State…");
+        connState.setOnAction(e -> openConnectionStateTab());
         MenuItem secretVaults = new MenuItem("Secret Vaults…");
         secretVaults.setOnAction(e -> openSecretVaultsTab());
         MenuItem preferences = new MenuItem("Preferences…");
         preferences.setAccelerator(KeyCombination.keyCombination("Shortcut+,"));
         preferences.setOnAction(e -> PreferencesDialog.open(owner()));
         tools.getItems().addAll(unlockVault, lockVault, new SeparatorMenuItem(),
-                certManager, environments, metrics, secretVaults, new SeparatorMenuItem(), preferences);
+                certManager, environments, metrics, connState, secretVaults, new SeparatorMenuItem(), preferences);
 
         Menu help = new Menu("Help", Icons.of("help", 14));
         MenuItem helpIndex = new MenuItem("Help Index  (F1)", Icons.of("help", 14));
@@ -504,6 +506,12 @@ public final class MainWindow {
     private com.nexuslink.ui.metrics.MetricsView openMetricsTab() {
         com.nexuslink.ui.metrics.MetricsView view = new com.nexuslink.ui.metrics.MetricsView();
         addTab("Metrics " + (++newTabCounter), view);
+        return view;
+    }
+
+    private com.nexuslink.ui.connections.ConnectionStatePanel openConnectionStateTab() {
+        com.nexuslink.ui.connections.ConnectionStatePanel view = new com.nexuslink.ui.connections.ConnectionStatePanel();
+        addTab("Connections " + (++newTabCounter), view);
         return view;
     }
 

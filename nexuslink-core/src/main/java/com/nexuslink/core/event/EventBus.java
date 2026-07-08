@@ -23,7 +23,7 @@ public final class EventBus {
     private final Executor asyncExecutor =
             Executors.newVirtualThreadPerTaskExecutor();
 
-    private EventBus() {}
+    EventBus() {} // package-private: singleton via get(), isolated instances for tests
 
     public static EventBus get() {
         return INSTANCE;

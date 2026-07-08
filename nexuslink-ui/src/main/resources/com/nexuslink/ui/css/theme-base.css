@@ -461,3 +461,21 @@
 .onboarding-body { -fx-font-size: 13px; -fx-text-fill: -nl-text; }
 .onboarding-progress { -fx-font-size: 11px; -fx-text-fill: -nl-text-faint; }
 .onboarding-learn-more { -fx-text-fill: -nl-accent; -fx-font-size: 12px; }
+
+/* Connection-state panel (§9.1) */
+.conn-tile {
+    -fx-background-color: -nl-surface-2;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-border-color: -nl-border;
+}
+.conn-tile-value { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: -nl-text-strong; }
+.conn-tile-caption { -fx-font-size: 10px; -fx-text-fill: -nl-text-muted; -fx-font-family: "JetBrains Mono", monospace; }
+.conn-tile-active { -fx-border-color: -nl-ok; }
+.conn-tile-active .conn-tile-value { -fx-text-fill: -nl-ok; }
+.conn-tile-idle { -fx-border-color: -nl-warn; }
+.conn-tile-idle .conn-tile-value { -fx-text-fill: -nl-warn; }
+.conn-tile-failed { -fx-border-color: -nl-danger; }
+.conn-tile-failed .conn-tile-value { -fx-text-fill: -nl-danger; }
+.conn-section-header { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -nl-text-strong; }

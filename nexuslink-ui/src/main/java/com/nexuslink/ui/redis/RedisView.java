@@ -111,6 +111,8 @@ public final class RedisView extends BorderPane {
                 return service.dbSize();
             }
         };
+        String connKey = "Redis@" + uri;
+        String connTarget = uri.replaceAll(":[^:@/]+@", ":***@");
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + task.getValue() + " key(s)");
@@ -118,12 +120,14 @@ public final class RedisView extends BorderPane {
             explorer.setExplorer(new RedisExplorer(service));
             explorer.load();
             connectBtn.setDisable(false);
+            com.nexuslink.core.event.ConnectionRegistry.global().idle(connKey, "Redis", connTarget);
         });
         task.setOnFailed(e -> {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("Connect failed: " + task.getException().getMessage());
             logger.accept("Redis connect FAILED: " + task.getException().getMessage());
             connectBtn.setDisable(false);
+            com.nexuslink.core.event.ConnectionRegistry.global().failed(connKey, "Redis", connTarget);
         });
         runBg(task);
     }

@@ -65,6 +65,8 @@ public final class RestExecutionService {
         long start = System.nanoTime();
         long startEpochMicros = System.currentTimeMillis() * 1_000L;
         String traceparent = resolveTraceparent(req);   // null when tracing is off or the user set their own
+        String connHost = hostOf(req);
+        com.nexuslink.core.event.ConnectionRegistry.global().active("REST@" + connHost, "REST", connHost);
         try {
             HttpClient.Builder clientBuilder = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofMillis(req.getConnectTimeoutMs()))
@@ -129,6 +131,7 @@ public final class RestExecutionService {
                 captureSpan(req, traceparent, startEpochMicros, now - start, resp.statusCode());
             }
 
+            com.nexuslink.core.event.ConnectionRegistry.global().idle("REST@" + connHost, "REST", connHost);
             return new RestResponse(
                     resp.statusCode(),
                     statusText(resp.statusCode()),
@@ -141,6 +144,7 @@ public final class RestExecutionService {
                     null);
 
         } catch (Exception e) {
+            com.nexuslink.core.event.ConnectionRegistry.global().failed("REST@" + connHost, "REST", connHost);
             long totalMs = nanosToMs(System.nanoTime() - start);
             String msg = e.getClass().getSimpleName() + ": "
                     + (e.getMessage() == null ? "(no detail)" : e.getMessage());
@@ -294,6 +298,16 @@ public final class RestExecutionService {
 
     private static long nanosToMs(long nanos) {
         return Math.round(nanos / 1_000_000.0);
+    }
+
+    /** Best-effort host label for connection-state tracking; falls back to a placeholder. */
+    private static String hostOf(RestRequest req) {
+        try {
+            String h = URI.create(req.requestUri()).getHost();
+            return (h == null || h.isBlank()) ? "(unknown)" : h;
+        } catch (Exception e) {
+            return "(unknown)";
+        }
     }
 
     private static String statusText(int code) {

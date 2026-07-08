@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~72%** — 234 done · 46 in-progress · 41 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI). `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~74%** — 221 done · 43 in-progress · 36 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -1004,7 +1004,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       metrics keyed by endpoint via pure `EndpointLabel.forRest` (method + host/path, query/fragment/scheme
       stripped, so calls to one endpoint aggregate; 8 tests) instead of a flat "REST" channel — the
       dashboard table becomes a per-endpoint breakdown and the throughput chart still sums across channels.
-- [ ] Connection state panel (active/idle/failed counts)
+- [x] Connection state panel (active/idle/failed counts) — pure `ConnectionRegistry` (core/event) tracks
+      connections by `ConnState` (ACTIVE/IDLE/FAILED/CLOSED), keyed per connection, posting a
+      `ConnectionEvent` on the `EventBus` on each real transition; `counts()` + `byProtocol()` snapshots
+      (7 tests). UI `ConnectionStatePanel` (Tools ▸ Connection State…) shows active/idle/failed tiles + a
+      per-protocol breakdown table, refreshed live off the bus (weak-listener-safe). Fed by the REST
+      execution path (active→idle/failed per host) and the Redis view (idle/failed on connect).
 
 ### 9.2 Distributed Tracing
 - [x] W3C Trace Context injection/parsing (`traceparent`, `tracestate`) — pure `TraceContext` (Level 1):
