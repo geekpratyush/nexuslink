@@ -78,6 +78,7 @@ public final class RestClientView extends BorderPane {
     private TextArea responseTests;
     private Tab responseTestsTab;
     private TimelineView responseTimeline;
+    private final com.nexuslink.ui.trace.TraceTreeView traceTree = new com.nexuslink.ui.trace.TraceTreeView();
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
@@ -900,6 +901,7 @@ public final class RestClientView extends BorderPane {
                 new Tab("Headers", responseHeaders),
                 new Tab("Cookies", responseCookies),
                 new Tab("Timeline", responseTimeline),
+                new Tab("Trace", traceTree),
                 responseTestsTab);
 
         BorderPane pane = new BorderPane(respTabs);
@@ -1043,6 +1045,7 @@ public final class RestClientView extends BorderPane {
         responseCookies.setText(formatCookies());
         renderTestResults(resp);
         responseTimeline.setTiming(resp.timing());
+        traceTree.setSpans(executor.capturedSpans());
         if (resp.failed()) {
             statusLabel.getStyleClass().setAll("status-err");
             statusLabel.setText("✖ " + resp.errorMessage());

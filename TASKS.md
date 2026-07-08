@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~74%** — 223 done · 43 in-progress · 34 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel** + **§4.8 Kafka throughput chart & lag heatmap complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~75%** — 224 done · 43 in-progress · 33 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel** + **§4.8 Kafka throughput chart & lag heatmap** + **§9.2 distributed-trace tree view complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -1032,7 +1032,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       captures one CLIENT span per request (traceId/spanId from the sent `traceparent`, http.method/url/
       status tags) into a session buffer; a **Trace** button in the REST URL bar exports the buffer as a
       Zipkin `.json`. Service-level tests (4) verify inject + capture + user-traceparent passthrough + clear.
-- [ ] Trace tree view in response panel
+- [x] Trace tree view in response panel — pure `SpanTree` (protocol-http/rest) arranges captured
+      Zipkin spans into a parent→child forest grouped by traceId (dangling parents → roots, children
+      time-ordered; 7 tests). UI `TraceTreeView` renders it as an expandable **Trace** tab in the REST
+      response panel (name · duration · HTTP status per node), refreshed from the session span buffer
+      on each response. JavaFX render test verifies nesting.
 
 ### 9.3 Team Collaboration
 - [x] Profile export as encrypted JSON bundle — `ProfileImportExport` (AES-256-GCM + PBKDF2, 8 tests)
