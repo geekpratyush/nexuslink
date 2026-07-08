@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~74%** — 221 done · 43 in-progress · 36 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~74%** — 223 done · 43 in-progress · 34 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel** + **§4.8 Kafka throughput chart & lag heatmap complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -519,8 +519,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       headline rows (connections, request/response rates, byte throughput, latency, I/O wait; 5 tests);
       `KafkaService.metricValues()` flattens `admin.metrics()` to plain doubles. Wired as a **Metrics…**
       button on the Consumer Lag tab (fetches off-FX → a metric/value table dialog). _(JMX + 10s polling still TODO.)_
-- [ ] Throughput chart (msgs/sec, bytes/sec), error rate, partition count
-- [ ] Consumer lag summary heatmap
+- [x] Throughput chart (msgs/sec, bytes/sec), partition count — the **Metrics…** dialog is now a live
+      2 s-poll panel: curated metric table + a rolling `RollingLineChart` of incoming/outgoing bytes/s,
+      plus a msgs/s (request+response rate) + tracked-partition-count line. _(AdminClient metrics don't
+      expose a clean per-topic error rate, so error-rate is omitted.)_
+- [x] Consumer lag summary heatmap — reusable `LagHeatmap` (topic rows × partition columns, cells shaded
+      by log-scaled lag intensity, cool→hot ramp + legend + per-cell tooltips), fed from the same lag
+      rows; toggled by a **Heatmap** checkbox on the Consumer Lag tab. Pure `intensity`/`heatColor` math
+      unit-tested (6 tests) + a JavaFX render test (grid populates/clears).
 
 ---
 

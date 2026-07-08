@@ -96,8 +96,10 @@ public final class KafkaView extends BorderPane {
     private final Label lagTotal = new Label("Total lag: 0");
     private final Label lagStatus = new Label();
     private final CheckBox lagShowChart = new CheckBox("Live chart");
+    private final CheckBox lagShowHeatmap = new CheckBox("Heatmap");
     private final com.nexuslink.ui.chart.RollingLineChart lagChart =
             new com.nexuslink.ui.chart.RollingLineChart("Lag", 60);
+    private final com.nexuslink.ui.chart.LagHeatmap lagHeatmap = new com.nexuslink.ui.chart.LagHeatmap();
     private Timeline lagTimeline;
     /** Guards against overlapping refreshes when a poll fires before the previous one finishes. */
     private boolean lagRefreshing = false;
@@ -337,10 +339,19 @@ public final class KafkaView extends BorderPane {
             if (!lagShowChart.isSelected()) lagChart.reset();
         });
 
+        lagHeatmap.setPrefHeight(200);
+        lagHeatmap.setMinHeight(140);
+        lagHeatmap.managedProperty().bind(lagHeatmap.visibleProperty());
+        lagHeatmap.setVisible(false);
+        lagShowHeatmap.setOnAction(e -> {
+            lagHeatmap.setVisible(lagShowHeatmap.isSelected());
+            if (lagShowHeatmap.isSelected()) lagHeatmap.setData(lagRows);
+        });
+
         HBox top = new HBox(8, label("Group:"), lagGroupCombo, loadGroups, refresh, reset, metrics,
-                lagAutoRefresh, lagShowChart, lagTotal, lagStatus);
+                lagAutoRefresh, lagShowChart, lagShowHeatmap, lagTotal, lagStatus);
         top.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, top, lagTable, lagChart);
+        VBox box = new VBox(8, top, lagTable, lagChart, lagHeatmap);
         box.setPadding(new Insets(8));
         VBox.setVgrow(lagTable, Priority.ALWAYS);
         return box;
@@ -672,6 +683,7 @@ public final class KafkaView extends BorderPane {
             lagTotal.setText("Total lag: " + ConsumerLagCalculator.totalLag(rows));
             lagStatus.setText(rows.size() + " partition(s) · " + LocalTime.now().format(TIME));
             recordLagChart(rows);
+            if (lagShowHeatmap.isSelected()) lagHeatmap.setData(rows);
         });
         task.setOnFailed(e -> {
             lagRefreshing = false;
@@ -704,44 +716,85 @@ public final class KafkaView extends BorderPane {
     }
 
     /**
-     * Fetches the broker client's AdminClient metrics off the FX thread and shows the curated
-     * {@link KafkaMetricsSummary} rows in a simple table dialog. Needs an active connection.
+     * Opens a live metrics dialog: the curated {@link KafkaMetricsSummary} table plus a rolling
+     * throughput chart (incoming/outgoing bytes/s) and a msgs/s + partition-count line, all polled
+     * every 2 s off the FX thread from the broker client's AdminClient metrics. Needs a connection.
      */
     private void showMetrics() {
-        Task<List<KafkaMetricsSummary.Metric>> task = new Task<>() {
-            @Override protected List<KafkaMetricsSummary.Metric> call() {
-                return KafkaMetricsSummary.summarize(service.metricValues());
-            }
+        if (!service.isConnected()) {
+            lagStatus.getStyleClass().setAll("status-err");
+            lagStatus.setText("✖ metrics: not connected");
+            return;
+        }
+        ObservableList<KafkaMetricsSummary.Metric> metricRows = FXCollections.observableArrayList();
+        TableView<KafkaMetricsSummary.Metric> tv = new TableView<>(metricRows);
+        tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        tv.setPlaceholder(new Label("No metrics available"));
+        TableColumn<KafkaMetricsSummary.Metric, String> mName = new TableColumn<>("Metric");
+        mName.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().label()));
+        TableColumn<KafkaMetricsSummary.Metric, String> mVal = new TableColumn<>("Value");
+        mVal.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().value()));
+        mVal.setStyle("-fx-alignment: CENTER-RIGHT;");
+        tv.getColumns().add(mName);
+        tv.getColumns().add(mVal);
+        tv.setPrefSize(380, 200);
+
+        com.nexuslink.ui.chart.RollingLineChart throughput =
+                new com.nexuslink.ui.chart.RollingLineChart("bytes/s", 60);
+        throughput.setPrefHeight(200);
+        Label rateLabel = new Label("—");
+        rateLabel.getStyleClass().add("meta-label");
+        Label chartTitle = new Label("Throughput (bytes/s)");
+        chartTitle.getStyleClass().add("conn-section-header");
+
+        VBox content = new VBox(8, tv, chartTitle, throughput, rateLabel);
+        content.setPadding(new Insets(4));
+        content.setPrefWidth(460);
+        VBox.setVgrow(throughput, Priority.ALWAYS);
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Kafka metrics");
+        dialog.setHeaderText("Live AdminClient metrics (2 s poll)");
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
+            if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
+        });
+
+        Timeline poll = new Timeline(new KeyFrame(Duration.seconds(2),
+                e -> pollMetricsOnce(metricRows, throughput, rateLabel)));
+        poll.setCycleCount(Timeline.INDEFINITE);
+        dialog.setOnShown(e -> { pollMetricsOnce(metricRows, throughput, rateLabel); poll.play(); });
+        dialog.setOnHidden(e -> poll.stop());
+        dialog.show();
+    }
+
+    /** One metrics poll: fetch off-FX, then update the table, throughput chart and rate line. */
+    private void pollMetricsOnce(ObservableList<KafkaMetricsSummary.Metric> rows,
+                                 com.nexuslink.ui.chart.RollingLineChart throughput, Label rateLabel) {
+        Task<Map<String, Double>> task = new Task<>() {
+            @Override protected Map<String, Double> call() { return service.metricValues(); }
         };
         task.setOnSucceeded(e -> {
-            TableView<KafkaMetricsSummary.Metric> tv = new TableView<>(FXCollections.observableArrayList(task.getValue()));
-            tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-            tv.setPlaceholder(new Label("No metrics available"));
-            TableColumn<KafkaMetricsSummary.Metric, String> mName = new TableColumn<>("Metric");
-            mName.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().label()));
-            TableColumn<KafkaMetricsSummary.Metric, String> mVal = new TableColumn<>("Value");
-            mVal.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().value()));
-            mVal.setStyle("-fx-alignment: CENTER-RIGHT;");
-            tv.getColumns().add(mName);
-            tv.getColumns().add(mVal);
-            tv.setPrefSize(360, 280);
-
-            Dialog<Void> dialog = new Dialog<>();
-            dialog.setTitle("Kafka metrics");
-            dialog.setHeaderText("Live AdminClient metrics");
-            if (getScene() != null) dialog.initOwner(getScene().getWindow());
-            dialog.getDialogPane().setContent(tv);
-            dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-            dialog.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
-                if (sc != null) com.nexuslink.ui.theme.ThemeManager.get().register(sc);
-            });
-            dialog.showAndWait();
+            Map<String, Double> raw = task.getValue();
+            rows.setAll(KafkaMetricsSummary.summarize(raw));
+            double in = numeric(raw.get("incoming-byte-rate"));
+            double out = numeric(raw.get("outgoing-byte-rate"));
+            Map<String, Number> point = new java.util.LinkedHashMap<>();
+            point.put("in", in);
+            point.put("out", out);
+            throughput.tick(point);
+            double reqRate = numeric(raw.get("request-rate")) + numeric(raw.get("response-rate"));
+            rateLabel.setText(String.format("%.1f msgs/s (req+resp) · in %s · out %s · %d partition(s) tracked",
+                    reqRate, KafkaMetricsSummary.humanRate(in), KafkaMetricsSummary.humanRate(out), lagRows.size()));
         });
-        task.setOnFailed(e -> {
-            lagStatus.getStyleClass().setAll("status-err");
-            lagStatus.setText("✖ metrics: " + task.getException().getMessage());
-        });
+        task.setOnFailed(e -> rateLabel.setText("✖ " + task.getException().getMessage()));
         runBg(task, "kafka-metrics");
+    }
+
+    private static double numeric(Double d) {
+        return (d == null || d.isNaN()) ? 0.0 : d;
     }
 
     /** Starts or stops the 5-second auto-refresh poll based on the checkbox state. */

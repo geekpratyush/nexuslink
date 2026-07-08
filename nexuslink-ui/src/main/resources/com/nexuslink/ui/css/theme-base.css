@@ -479,3 +479,17 @@
 .conn-tile-failed { -fx-border-color: -nl-danger; }
 .conn-tile-failed .conn-tile-value { -fx-text-fill: -nl-danger; }
 .conn-section-header { -fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: -nl-text-strong; }
+
+/* Kafka consumer-lag heatmap (§4.8) */
+.heatmap-header {
+    -fx-text-fill: -nl-text-muted;
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 10px;
+    -fx-background-color: -nl-surface-2;
+    -fx-background-radius: 3;
+}
+.heatmap-cell {
+    -fx-font-family: "JetBrains Mono", monospace;
+    -fx-font-size: 10px;
+    -fx-background-radius: 3;
+}

@@ -57,7 +57,7 @@ public final class KafkaMetricsSummary {
     }
 
     /** Formats a byte/second rate, e.g. {@code "1.5 MB/s"}. */
-    static String humanRate(double bytesPerSecond) {
+    public static String humanRate(double bytesPerSecond) {
         double s = Math.max(0, bytesPerSecond);
         String[] units = {"B/s", "KB/s", "MB/s", "GB/s"};
         int u = 0;
