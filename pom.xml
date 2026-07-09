@@ -31,6 +31,7 @@
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-gcs</module>
+        <module>nexuslink-protocol-pubsub</module>
         <module>nexuslink-protocol-grpc</module>
         <module>nexuslink-protocol-sftp</module>
         <module>nexuslink-protocol-ftp</module>
@@ -114,6 +115,8 @@
         <lettuce.version>6.3.2.RELEASE</lettuce.version>
         <azure.storage.version>12.27.0</azure.storage.version>
         <gcs.version>2.43.2</gcs.version>
+        <!-- Aligned with google-cloud-libraries-bom 26.50.0 (same set as storage 2.43.2 / grpc 1.67.1 / protobuf 3.25.5) -->
+        <pubsub.version>1.134.0</pubsub.version>
         <grpc.version>1.67.1</grpc.version>
         <protobuf.version>3.25.5</protobuf.version>
         <testcontainers.version>1.20.4</testcontainers.version>
@@ -264,6 +267,17 @@
                 <groupId>com.google.cloud</groupId>
                 <artifactId>google-cloud-storage</artifactId>
                 <version>${gcs.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-pubsub</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Google Cloud Pub/Sub -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>google-cloud-pubsub</artifactId>
+                <version>${pubsub.version}</version>
             </dependency>
 
             <dependency>

@@ -226,6 +226,11 @@ services:
     command: "-scheme http -port 4443 -external-url http://localhost:4443"
     ports: ["4443:4443"]
 
+  pubsub:                                        # Google Cloud Pub/Sub emulator (Apache-2.0 SDK image)
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: "gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=nexus-it"
+    ports: ["8085:8085"]                         # PUBSUB_EMULATOR_HOST=localhost:8085
+
   # ---- PHASE 3: HTTP (REST) target ----
   httpbin:                                       # mccutchen/go-httpbin, MIT
     image: mccutchen/go-httpbin:latest

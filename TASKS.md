@@ -102,7 +102,7 @@ protocol module so the clients can be exercised end-to-end on a laptop — no cl
 licences. Each module ships a `*LiveIT` gated on `-Dnexuslink.it=true`, so the default `mvn test`
 stays green without the stack. See `test-env/README.md`; one-shot runner: `test-env/run-live-its.sh`.
 
-**End-to-end verified against the local stack** (13 protocol families):
+**End-to-end verified against the local stack** (14 protocol families):
 
 | Module | LiveIT | Server (open-source image) |
 |---|---|---|
@@ -121,6 +121,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-secrets | `ConjurLiveIT` | CyberArk Conjur OSS (authenticate + read secret; `--profile conjur`) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
+| protocol-pubsub | `PubSubLiveIT` | Google Pub/Sub emulator (topic/sub/publish/pull round-trip) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
 | protocol-ftp | `FtpLiveIT` | vsftpd (upload/list/read/delete) |
 | protocol-http | `RestLiveIT` | go-httpbin (GET/POST/basic-auth) |
@@ -614,7 +615,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (subject+message), list subscriptions. **Live-verified** (create→publish→list) vs LocalStack. **UI:**
       `SqsSnsView` Topics tab — topic list, create/delete, publish, per-topic subscriptions table.
 - [ ] Azure Service Bus: queue/topic/subscription, sessions, DLQ
-- [ ] Google Pub/Sub: publish, pull subscription
+- [-] Google Pub/Sub: publish, pull subscription — **backend done + live-verified.** New
+      `nexuslink-protocol-pubsub` module: `PubSubService` (emulator-aware via `PUBSUB_EMULATOR_HOST`, plaintext
+      gRPC + no-creds) — create/list/delete topics & subscriptions, publish, synchronous pull-with-ack. 4 unit
+      tests + `PubSubLiveIT` green vs the `gcloud beta emulators pubsub` container (create→publish→pull→ack
+      round-trip). _UI panel (PubSubView) TODO._
 
 ---
 
