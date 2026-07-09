@@ -1715,10 +1715,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
   single-table + PK detection (`JdbcService.primaryKeyColumns`).
 - ✅ `1e14a86` **structure editing** — ALTER add / rename / drop column (right-click table/column).
 - ✅ `e861a71` **EXPLAIN plan** (dialect-aware) + themed **result charting** (bar chart).
+- ✅ **Visual query builder** — pure `SqlQueryBuilder` (table/columns/WHERE-AND/ORDER BY/LIMIT, quoted
+  idents + escaped literals; 18 tests) behind `QueryBuilderDialog`, wired to the toolbar **Builder** button.
+- ✅ **Row insert** — pure `SqlInsertBuilder` (column→value pairs, omitted columns left to the DB default so
+  auto-increment PKs are untouched, explicit NULL, escaped literals; 13 tests). "Insert row…" opens a
+  per-column form (PK columns unticked by default) → `INSERT` through the `previewAndApply` gate → the
+  SELECT re-runs to show the new row. Round-trip verified end-to-end vs SQLite in `JdbcServiceTest`.
 
 **SQL workbench — still open:**
-- **Visual query builder** (pick table/columns/filters → generated SQL); inline editor error markers;
-  row insert (blank-row append → INSERT); multi-column / line charts.
+- Inline editor error markers; multi-column / line charts.
 
 **Then the broader roadmap** (verify each against `git log` first — the list below is from Session 40
 and much has since landed: `TransferGovernor` throttling, REST NTLM/HMAC/Digest/OAuth, Kafka browser/metrics):

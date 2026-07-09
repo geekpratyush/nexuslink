@@ -85,6 +85,30 @@ class JdbcServiceTest {
     }
 
     @Test
+    void insertBuilderOutputExecutesAndOmittedPkAutoIncrements() throws Exception {
+        // End-to-end proof for the "Insert row" form: the SQL SqlInsertBuilder emits is valid, the
+        // omitted primary key is filled by SQLite's rowid auto-increment, and the row is queryable.
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, note TEXT)");
+
+            String sql = new SqlInsertBuilder().table("users")
+                    .value("name", "O'Brien")   // PK "id" deliberately omitted
+                    .valueNull("note")
+                    .build();
+            QueryResult insert = svc.execute(sql);
+            assertFalse(insert.failed(), sql);
+            assertEquals(1, insert.updateCount());
+
+            QueryResult select = svc.execute("SELECT id, name, note FROM users");
+            assertEquals(1, select.rowCount());
+            assertEquals("1", select.rows().get(0).get(0));      // auto-incremented PK
+            assertEquals("O'Brien", select.rows().get(0).get(1)); // escaped quote round-tripped
+            assertEquals("NULL", select.rows().get(0).get(2));    // explicit NULL
+        }
+    }
+
+    @Test
     void rendersNullsAndReportsErrors() throws Exception {
         try (JdbcService svc = new JdbcService()) {
             svc.connect("jdbc:sqlite::memory:", null, null);

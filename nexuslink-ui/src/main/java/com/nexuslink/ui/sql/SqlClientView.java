@@ -12,6 +12,7 @@ import com.nexuslink.protocol.db.JdbcTlsParams;
 import com.nexuslink.protocol.db.JdbcTlsSpec;
 import com.nexuslink.protocol.db.QueryResult;
 import com.nexuslink.protocol.db.ResultGridExporter;
+import com.nexuslink.protocol.db.SqlInsertBuilder;
 import com.nexuslink.protocol.db.SslMode;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
@@ -85,6 +86,8 @@ public final class SqlClientView extends BorderPane {
     private String editTable;
     private final java.util.List<String> editPk = new java.util.ArrayList<>();
     private final java.util.List<String> currentColumns = new java.util.ArrayList<>();
+    // The single-table SELECT behind the current editable grid, kept so a row insert can re-run it.
+    private String editStmt;
 
     // Result row model: master → filter (live text search) → sort (column headers).
     private final ObservableList<List<String>> masterRows = FXCollections.observableArrayList();
@@ -485,6 +488,10 @@ public final class SqlClientView extends BorderPane {
         HBox.setHgrow(filterField, Priority.ALWAYS);
         filterField.textProperty().addListener((o, ov, text) -> applyRowFilter(text));
 
+        Button insertBtn = new Button("Insert row…");
+        insertBtn.getStyleClass().add("btn-secondary");
+        insertBtn.setOnAction(e -> insertRow());
+
         Button exportJson = new Button("Export JSON…");
         exportJson.getStyleClass().add("btn-secondary");
         exportJson.setOnAction(e -> exportResults(true));
@@ -492,7 +499,7 @@ public final class SqlClientView extends BorderPane {
         exportCsv.getStyleClass().add("btn-secondary");
         exportCsv.setOnAction(e -> exportResults(false));
 
-        HBox gridTools = new HBox(8, filterField, exportJson, exportCsv);
+        HBox gridTools = new HBox(8, filterField, insertBtn, exportJson, exportCsv);
         gridTools.setAlignment(Pos.CENTER_LEFT);
         gridTools.setPadding(new Insets(0, 0, 6, 0));
 
@@ -786,6 +793,7 @@ public final class SqlClientView extends BorderPane {
      */
     private void setEditContext(String statement) {
         editTable = null;
+        editStmt = null;
         editPk.clear();
         if (statement == null) return;
         String s = statement.strip();
@@ -800,7 +808,7 @@ public final class SqlClientView extends BorderPane {
         };
         pkTask.setOnSucceeded(e -> {
             List<String> pk = pkTask.getValue();
-            if (!pk.isEmpty() && currentColumns.containsAll(pk)) { editTable = table; editPk.addAll(pk); }
+            if (!pk.isEmpty() && currentColumns.containsAll(pk)) { editTable = table; editStmt = s; editPk.addAll(pk); }
         });
         runBg(pkTask);
     }
@@ -821,6 +829,86 @@ public final class SqlClientView extends BorderPane {
         }
         previewAndApply("DELETE FROM " + quoteIdent(editTable) + " WHERE " + String.join(" AND ", conds) + ";",
                 "Delete 1 row from “" + editTable + "”?");
+    }
+
+    /**
+     * Opens a blank-row form for the current editable table (one field per column) and, on OK, builds
+     * an {@code INSERT} through the preview-then-apply gate. Each column has a "Set" toggle — off means
+     * the column is omitted so the database supplies its default (primary-key columns start off, so
+     * auto-increment / serial keys are left alone). After a successful insert the SELECT re-runs so the
+     * new row appears in the grid.
+     */
+    private void insertRow() {
+        if (editTable == null || currentColumns.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("Can't insert here — run a simple SELECT from one table that has a primary key first");
+            return;
+        }
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Insert row");
+        d.setHeaderText("New row in “" + editTable + "”\nUntick a column to leave it to the database default.");
+        ButtonType next = new ButtonType("Preview SQL…", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(next, ButtonType.CANCEL);
+
+        GridPane form = new GridPane();
+        form.setHgap(10);
+        form.setVgap(6);
+        form.setPadding(new Insets(6));
+        List<CheckBox> include = new ArrayList<>(currentColumns.size());
+        List<TextField> fields = new ArrayList<>(currentColumns.size());
+        for (int i = 0; i < currentColumns.size(); i++) {
+            String col = currentColumns.get(i);
+            CheckBox set = new CheckBox();
+            set.setSelected(!editPk.contains(col));   // leave PKs to the DB by default
+            Label name = new Label(col);
+            TextField value = new TextField();
+            value.setPromptText(set.isSelected() ? "" : "(database default)");
+            value.setDisable(!set.isSelected());
+            value.setPrefColumnCount(24);
+            set.selectedProperty().addListener((o, was, on) -> {
+                value.setDisable(!on);
+                value.setPromptText(on ? "" : "(database default)");
+            });
+            include.add(set);
+            fields.add(value);
+            form.addRow(i, set, name, value);
+        }
+        ScrollPane scroll = new ScrollPane(form);
+        scroll.setFitToWidth(true);
+        scroll.setPrefSize(420, Math.min(360, 40 + currentColumns.size() * 34));
+        d.getDialogPane().setContent(scroll);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != next) return;
+
+        SqlInsertBuilder ins = new SqlInsertBuilder().table(editTable);
+        int chosen = 0;
+        for (int i = 0; i < currentColumns.size(); i++) {
+            if (!include.get(i).isSelected()) continue;
+            ins.value(currentColumns.get(i), fields.get(i).getText());
+            chosen++;
+        }
+        if (chosen == 0) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("Tick at least one column to insert a row");
+            return;
+        }
+        previewAndApply(ins.build() + ";", "Insert 1 row into “" + editTable + "”?", this::rerunLastSelect);
+    }
+
+    /** Re-runs the SELECT behind the current editable grid (off-thread) and re-renders the result. */
+    private void rerunLastSelect() {
+        if (editStmt == null) return;
+        final String stmt = editStmt;
+        Task<QueryResult> task = new Task<>() {
+            @Override protected QueryResult call() { return service.execute(stmt); }
+        };
+        task.setOnSucceeded(e -> { renderResult(task.getValue()); setEditContext(stmt); });
+        runBg(task);
     }
 
     /** Renders a cell value as a SQL literal: NULL, a bare number, or a single-quoted, escaped string. */
