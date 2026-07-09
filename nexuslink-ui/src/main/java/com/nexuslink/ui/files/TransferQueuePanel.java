@@ -10,6 +10,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -84,6 +85,19 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         autoRetry.setOnAction(e -> queue.setAutoRetry(
                 autoRetry.isSelected() ? RetryPolicy.defaultPolicy() : RetryPolicy.none()));
 
+        Label parallelLbl = new Label("Parallel:");
+        parallelLbl.getStyleClass().add("meta-label");
+        Spinner<Integer> parallel = new Spinner<>(1, 8, queue.concurrency());
+        parallel.setPrefWidth(64);
+        parallel.setTooltip(new Tooltip("Number of files to transfer at once. Changing it restarts the queue workers "
+                + "(in-flight transfers finish first)."));
+        parallel.valueProperty().addListener((o, was, now) -> {
+            if (now == null || now.equals(queue.concurrency())) return;
+            queue.stopWorker();               // in-flight transfers finish; workers wind down
+            queue.setConcurrency(now);
+            queue.startWorker();              // respawn the pool at the new width
+        });
+
         Button retryFailed = new Button("Retry failed");
         retryFailed.getStyleClass().add("btn-secondary");
         retryFailed.setOnAction(e -> queue.retryAllFailed());
@@ -92,7 +106,8 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.getStyleClass().add("btn-secondary");
         clear.setOnAction(e -> queue.clearCompleted());
 
-        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, verify, autoRetry, retryFailed, clear);
+        HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, parallelLbl, parallel,
+                verify, autoRetry, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 

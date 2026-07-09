@@ -136,7 +136,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Create root `pom.xml` with all dependency versions in `<dependencyManagement>`
 - [x] Create module POMs: `core`, `ui`, `security`, `protocol-http`, `protocol-messaging`, `protocol-file`, `protocol-db`, `protocol-enterprise`, `plugin-api`
 - [x] Configure packaging — `fatjar` (uber JAR) + `jpackage` (native app-image) profiles in `nexuslink-app` (see §9.6 + PACKAGING.md)
-- [ ] Add `.gitignore`, `README.md` skeleton
+- [x] Add `.gitignore`, `README.md` skeleton
 
 ### 0.2 Core Module (`nexuslink.core`)
 - [ ] `module-info.java` for `nexuslink.core`
@@ -352,7 +352,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
   - [x] Body text editor with JSON format button
   - [x] **Response body JSON syntax highlighting** — `ui.util.JsonView` (RichTextFX `CodeArea`) colours keys/strings/numbers/bool/null in the REST response body (Pretty/Raw modes; content-aware so XML/hex/errors stay plain). Same viewer reused in the **gRPC** and **GraphQL** response panes.
   - [ ] Form-Data table with file picker per row
-- [ ] `PreRequestTab` — JavaScript/Groovy script editor
+- [x] `PreRequestTab` — script editor (pure `PreRequestScript` runner + "Pre-request Script" tab in `RestClientView`)
 - [x] `SettingsTab` — UI tab wiring connect/read timeouts + follow-redirects to the request (honored per-call by `RestExecutionService`) _(TLS/cert selection TODO)_
 - [-] Response panel:
   - [x] Status badge (color-coded: 2xx green, 3xx blue, 4xx amber, 5xx red, err red)
@@ -737,7 +737,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       count, injectable backoff sleeper, off by default) behind an **Auto-retry** toggle in the queue
       footer. 13 tests (4 RetryPolicy, 5 TransferErrors, 4 queue). _(offset-based resume of a partial file
       still TODO — needs append/offset support in `FileTransfer`.)_
-- [ ] Parallel/background transfers (configurable concurrency)
+- [x] Parallel/background transfers (configurable concurrency) — `TransferQueue.setConcurrency(n)` runs a pool
+      of N worker threads, each claiming the next item atomically (no double-take); **Parallel** spinner (1–8) in
+      the queue-panel footer restarts the pool live. 3 tests incl. a barrier-based proof of true 4-way concurrency.
 - [-] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
       verifier done: compares source vs landed destination — byte count always, plus a checksum when the
       caller can hash both sides (case-insensitive, whitespace-trimmed) — returning a `Report` with a

@@ -7,9 +7,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
- * Sequentially drives the existing {@link FileTransfer} copy logic for a batch of {@link TransferItem}s,
- * exposing observable per-item and overall progress. The mechanics of moving bytes are NOT
- * re-implemented here — each item is dispatched to {@link FileTransfer#upload}/{@link FileTransfer#download}.
+ * Drives the existing {@link FileTransfer} copy logic for a batch of {@link TransferItem}s, exposing
+ * observable per-item and overall progress. The mechanics of moving bytes are NOT re-implemented here —
+ * each item is dispatched to {@link FileTransfer#upload}/{@link FileTransfer#download}. Transfers run
+ * one at a time by default; {@link #setConcurrency(int)} lets several run in parallel across a pool of
+ * worker threads (each item is claimed atomically so no two workers take the same file).
  *
  * <p>This class is JavaFX-free and therefore unit-testable: tests drive it synchronously via
  * {@link #runPending()} with a {@link LocalFileSystem} on both sides, while the UI calls
@@ -39,7 +41,8 @@ public final class TransferQueue {
     private volatile boolean verifyIntegrity;   // when set, each completed file is size-checked on the destination
     private volatile RetryPolicy retryPolicy = RetryPolicy.none();   // auto-retry on transient errors (off by default)
     private java.util.function.LongConsumer backoffSleeper = TransferQueue::sleepMillis;
-    private Thread worker;
+    private volatile int concurrency = 1;   // number of files transferred in parallel (>=1)
+    private final List<Thread> workers = new ArrayList<>();
 
     public TransferQueue(FileSystem local, FileSystem remote, FileTransfer transfer) {
         this.local = local;
@@ -269,20 +272,30 @@ public final class TransferQueue {
         drain();
     }
 
-    /** Starts a daemon worker that drains the queue as items arrive. Idempotent. */
+    /**
+     * Starts {@link #concurrency()} daemon workers that drain the queue as items arrive, so up to that
+     * many files transfer in parallel. Idempotent — the worker count is fixed at start; call
+     * {@link #stopWorker()} then {@code startWorker()} again to apply a new concurrency.
+     */
     public synchronized void startWorker() {
         if (workerRunning) return;
         workerRunning = true;
-        worker = new Thread(this::workerLoop, "transfer-queue");
-        worker.setDaemon(true);
-        worker.start();
+        int n = Math.max(1, concurrency);
+        workers.clear();
+        for (int i = 0; i < n; i++) {
+            Thread t = new Thread(this::workerLoop, "transfer-queue-" + i);
+            t.setDaemon(true);
+            t.start();
+            workers.add(t);
+        }
     }
 
-    /** Stops the background worker (already-running transfers complete first). */
+    /** Stops the background workers (already-running transfers complete first). */
     public synchronized void stopWorker() {
         workerRunning = false;
         governor.resume();   // release any paused in-flight transfer so it can wind down
         synchronized (lock) { lock.notifyAll(); }
+        workers.clear();
     }
 
     // ---- pause / resume + bandwidth throttle (applied to the in-flight transfer) ----
@@ -319,6 +332,17 @@ public final class TransferQueue {
 
     public RetryPolicy autoRetryPolicy() { return retryPolicy; }
 
+    /**
+     * Sets how many files transfer in parallel ({@code >= 1}; clamped up to 1). The default of 1
+     * preserves the original sequential behaviour. Takes effect the next time the worker starts
+     * ({@link #startWorker()}); a running queue must be stopped and restarted to change it. Note the
+     * bandwidth throttle ({@link #setMaxBytesPerSecond}) measures rate per active file, so with
+     * concurrency &gt; 1 the effective cap is approximate.
+     */
+    public void setConcurrency(int parallelTransfers) { this.concurrency = Math.max(1, parallelTransfers); }
+
+    public int concurrency() { return concurrency; }
+
     /** Test seam: replaces the backoff sleeper (default {@link Thread#sleep}). */
     void setBackoffSleeper(java.util.function.LongConsumer sleeper) {
         this.backoffSleeper = sleeper == null ? TransferQueue::sleepMillis : sleeper;
@@ -334,30 +358,43 @@ public final class TransferQueue {
             drain();
             synchronized (lock) {
                 if (!workerRunning) return;
-                if (nextQueued() == null) {
+                if (!hasQueued()) {
                     try { lock.wait(); } catch (InterruptedException e) { return; }
                 }
             }
         }
     }
 
-    /** Processes queued items one at a time until none are left QUEUED. */
+    /** Processes queued items until none are left QUEUED. Safe for several workers to run at once. */
     private void drain() {
         while (true) {
-            TransferItem next;
-            synchronized (lock) { next = nextQueued(); }
+            TransferItem next = claimNext();
             if (next == null) return;
             process(next);
         }
     }
 
-    private TransferItem nextQueued() {
-        for (TransferItem i : items) if (i.status() == TransferStatus.QUEUED) return i;
-        return null;
+    /**
+     * Atomically claims the next QUEUED item by flipping it to ACTIVE under the lock, so with several
+     * parallel workers no two ever grab the same item. Returns null when nothing is left to claim.
+     */
+    private TransferItem claimNext() {
+        TransferItem claimed = null;
+        synchronized (lock) {
+            for (TransferItem i : items) {
+                if (i.status() == TransferStatus.QUEUED) { i.setStatus(TransferStatus.ACTIVE); claimed = i; break; }
+            }
+        }
+        if (claimed != null) fireChanged();
+        return claimed;
+    }
+
+    private boolean hasQueued() {
+        for (TransferItem i : items) if (i.status() == TransferStatus.QUEUED) return true;
+        return false;
     }
 
     private void process(TransferItem item) {
-        item.setStatus(TransferStatus.ACTIVE);
         item.beginAttempt();
         item.markStarted(System.nanoTime());
         fireChanged();

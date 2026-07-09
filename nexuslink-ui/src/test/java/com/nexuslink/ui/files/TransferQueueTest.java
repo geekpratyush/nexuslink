@@ -608,4 +608,59 @@ class TransferQueueTest {
         assertEquals(TransferStatus.FAILED, item.status());
         assertEquals(1, item.attempts());
     }
+
+    @Test
+    void concurrencyDefaultsToOne() {
+        assertEquals(1, new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CopyTransfer()).concurrency());
+    }
+
+    @Test
+    void setConcurrencyClampsToAtLeastOne() {
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CopyTransfer());
+        q.setConcurrency(4);
+        assertEquals(4, q.concurrency());
+        q.setConcurrency(0);
+        assertEquals(1, q.concurrency());
+        q.setConcurrency(-3);
+        assertEquals(1, q.concurrency());
+    }
+
+    /**
+     * Proves the workers actually run in parallel: each transfer waits on a barrier that only trips
+     * once N of them are simultaneously in flight. With concurrency N all N arrive and the barrier
+     * releases; with fewer workers the barrier would time out and the transfers would fail. So all-DONE
+     * is a deterministic witness of true concurrency (no reliance on sleep timing).
+     */
+    @Test
+    void parallelWorkersRunTransfersConcurrently(@TempDir Path local, @TempDir Path remote) throws Exception {
+        int n = 4;
+        java.util.concurrent.CyclicBarrier barrier = new java.util.concurrent.CyclicBarrier(n);
+        FileTransfer barriered = new FileTransfer() {
+            @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+                try {
+                    barrier.await(3, java.util.concurrent.TimeUnit.SECONDS);   // only trips when n are active together
+                } catch (Exception e) {
+                    throw new Exception("transfers did not run concurrently", e);
+                }
+                Files.copy(localFile, Path.of(remoteDir).resolve(localFile.getFileName()),
+                        StandardCopyOption.REPLACE_EXISTING);
+                progress.accept(Files.size(localFile));
+            }
+            @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) {}
+        };
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), barriered);
+        q.setConcurrency(n);
+
+        java.util.List<FileItem> sources = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) sources.add(fileItemFor(Files.writeString(local.resolve("f" + i + ".txt"), "x")));
+        q.enqueue(TransferItem.Direction.UPLOAD, sources, remote.toString(), OverwriteResolver.alwaysOverwrite());
+
+        q.startWorker();
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (q.hasPending() && System.nanoTime() < deadline) Thread.sleep(20);
+        q.stopWorker();
+
+        assertEquals(n, q.count(TransferStatus.DONE), "all files should transfer in parallel and complete");
+        for (int i = 0; i < n; i++) assertTrue(Files.exists(remote.resolve("f" + i + ".txt")));
+    }
 }
