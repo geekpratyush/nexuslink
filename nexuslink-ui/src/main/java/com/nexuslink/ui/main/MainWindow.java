@@ -133,6 +133,7 @@ public final class MainWindow {
             installTabMenu(tab);
             workspace.getTabs().add(tab);
             javafx.application.Platform.runLater(sql::runDemo);
+            openPubSubTab();
             openSecretVaultsTab();
         }
 
@@ -371,6 +372,13 @@ public final class MainWindow {
         com.nexuslink.ui.sqs.SqsSnsView view = new com.nexuslink.ui.sqs.SqsSnsView();
         view.setLogger(this::log);
         addTab("SQS/SNS " + (++newTabCounter), view);
+        return view;
+    }
+
+    private com.nexuslink.ui.pubsub.PubSubView openPubSubTab() {
+        com.nexuslink.ui.pubsub.PubSubView view = new com.nexuslink.ui.pubsub.PubSubView();
+        view.setLogger(this::log);
+        addTab("Pub/Sub " + (++newTabCounter), view);
         return view;
     }
 
@@ -759,6 +767,7 @@ public final class MainWindow {
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
                 new ProtocolDef("jms", "JMS (ActiveMQ/Artemis)", "New JMS Client", "topic", this::openJmsTab),
                 new ProtocolDef("sqs", "AWS SQS / SNS", "New SQS / SNS Client", "topic", this::openSqsTab),
+                new ProtocolDef("pubsub", "Google Pub/Sub", "New Google Pub/Sub Client", "topic", this::openPubSubTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),
                 new ProtocolDef("snmp", "SNMP Browser", "New SNMP Browser", "server", this::openSnmpTab),

@@ -615,11 +615,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (subject+message), list subscriptions. **Live-verified** (create→publish→list) vs LocalStack. **UI:**
       `SqsSnsView` Topics tab — topic list, create/delete, publish, per-topic subscriptions table.
 - [ ] Azure Service Bus: queue/topic/subscription, sessions, DLQ
-- [-] Google Pub/Sub: publish, pull subscription — **backend done + live-verified.** New
-      `nexuslink-protocol-pubsub` module: `PubSubService` (emulator-aware via `PUBSUB_EMULATOR_HOST`, plaintext
-      gRPC + no-creds) — create/list/delete topics & subscriptions, publish, synchronous pull-with-ack. 4 unit
-      tests + `PubSubLiveIT` green vs the `gcloud beta emulators pubsub` container (create→publish→pull→ack
-      round-trip). _UI panel (PubSubView) TODO._
+- [x] Google Pub/Sub: publish, pull subscription — new `nexuslink-protocol-pubsub` module: `PubSubService`
+      (emulator-aware via `PUBSUB_EMULATOR_HOST`, plaintext gRPC + no-creds) — create/list/delete topics &
+      subscriptions, publish, synchronous pull-with-ack. 4 unit tests + `PubSubLiveIT` green vs the
+      `gcloud beta emulators pubsub` container (create→publish→pull→ack round-trip). `PubSubView` (Topics +
+      Subscriptions tabs) wired into the shell (ProtocolDef "pubsub"); launch-smoke-verified.
 
 ---
 
