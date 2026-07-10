@@ -549,16 +549,37 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Message properties editor (JMS standard + custom string properties, editable key/value table)
 
 ### 5.2 IBM MQ
-- [ ] `MQConnectionProfile` — QM, channel, host, port, TLS, AMS
-- [ ] `MQNativeService` — com.ibm.mq.allclient
-- [ ] Queue browser (peek), put/get, DLQ inspection
-- [ ] RFH2 header parser + display
+- [x] `MqConnectionProfile` (`nexuslink-protocol-ibmmq`) — QM, channel, host, port, credentials,
+      independent TLS (CipherSuite + JSSE trust store, per-connection SSLSocketFactory rather than
+      JVM-global system props) and AMS (`keystore.conf`; connect fails fast if `MQS_KEYSTORE_CONF`
+      doesn't match) layers; `plain`/`withTls`/`withAms` factories, `redacted()`. 9 tests.
+- [x] `MqNativeService` — base-Java **MQI** client (not JMS) on `com.ibm.mq.jakarta.client` (jakarta.jms
+      3.1.0, matches the 10.0.0.0 dev QM); CLIENT-binding connect, put/get/browse with CCSID 1208 +
+      `MQGMO_CONVERT`, surfaces MQMD fields (msg/correlation id hex, format, priority, persistence, put
+      time, backout count). Gated `MqNativeServiceLiveIT`.
+- [x] Queue browser (peek), put/get, queue depth, DLQ inspection (`deadLetterQueueName` +
+      `browseDeadLetterQueue`)
+- [x] RFH2 header parser + display — `Rfh2Header` record parses/flattens `usr`/`jms`/`mcd`/… folders to
+      dotted `folder.path.field → value` (`fields()`); put writes a `usr` folder from the properties
+      editor. 13 tests.
+- [x] `MqView` — QM/channel/host/port/auth connect bar, Put tab (body + editable usr-property table →
+      RFH2), Browse & Get tab (browse/depth/DLQ + timed get, MQMD + RFH2 detail pane), activity log;
+      wired into the shell (File menu + sidebar). Env `${VAR}` resolution throughout.
+- [x] test-env: `ibmmq` service behind an opt-in `proprietary` compose profile (dev license, QM1,
+      DEV.APP/ADMIN.SVRCONN), never started by a bare `up -d`.
 
 ### 5.3 Solace PubSub+
-- [ ] `SolaceConnectionProfile` — VPN, host list, auth
-- [ ] `SolaceJcsmpService` — JCSMP session + guaranteed/direct messaging
-- [ ] Topic/queue browser, publish/subscribe UI
-- [ ] Replay from log cache
+- [x] `SolaceConnectionProfile` (`nexuslink-protocol-solace`) — VPN, host **list** (HA, comma-joined
+      for JCSMP), username/password, `single(...)` factory, `redacted()`. 7 tests.
+- [x] `SolaceJcsmpService` — JCSMP (native SMF) session with reapply-subscriptions; Direct
+      publish/subscribe on topics (wildcard filters) and Guaranteed publish/browse on queues, plus
+      `provisionQueue`. Gated `SolaceJcsmpServiceLiveIT`.
+- [x] Topic/queue browser, publish/subscribe UI — `SolaceView`: Direct tab (subscribe stream into a
+      table + publish Direct) and Guaranteed tab (provision/publish/browse queue); wired into the shell
+      (File menu + sidebar). Env `${VAR}` resolution; subscription callbacks hopped to the FX thread.
+- [x] Replay from log cache — `replayFromQueue` (replay-start-location = beginning) + Replay button.
+- [x] test-env: `solace` service behind the same opt-in `proprietary` compose profile (1GB shm, raised
+      nofile ulimit, smallest scaling tier).
 
 ### 5.4 MQTT
 - [x] `MqttService` — Eclipse Paho **v3.1.1** (`nexuslink-protocol-mqtt`): connect

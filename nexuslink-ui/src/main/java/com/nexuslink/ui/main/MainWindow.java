@@ -382,6 +382,20 @@ public final class MainWindow {
         return view;
     }
 
+    private com.nexuslink.ui.ibmmq.MqView openMqTab() {
+        com.nexuslink.ui.ibmmq.MqView view = new com.nexuslink.ui.ibmmq.MqView();
+        view.setLogger(this::log);
+        addTab("IBM MQ " + (++newTabCounter), view);
+        return view;
+    }
+
+    private com.nexuslink.ui.solace.SolaceView openSolaceTab() {
+        com.nexuslink.ui.solace.SolaceView view = new com.nexuslink.ui.solace.SolaceView();
+        view.setLogger(this::log);
+        addTab("Solace " + (++newTabCounter), view);
+        return view;
+    }
+
     private KafkaView openKafkaTab() {
         KafkaView view = new KafkaView();
         view.setLogger(this::log);
@@ -766,6 +780,8 @@ public final class MainWindow {
                 new ProtocolDef("mqtt", "MQTT", "New MQTT Client", "topic", this::openMqttTab),
                 new ProtocolDef("rabbitmq", "RabbitMQ", "New RabbitMQ Client", "topic", this::openRabbitMqTab),
                 new ProtocolDef("jms", "JMS (ActiveMQ/Artemis)", "New JMS Client", "topic", this::openJmsTab),
+                new ProtocolDef("ibmmq", "IBM MQ", "New IBM MQ Client", "topic", this::openMqTab),
+                new ProtocolDef("solace", "Solace PubSub+", "New Solace Client", "topic", this::openSolaceTab),
                 new ProtocolDef("sqs", "AWS SQS / SNS", "New SQS / SNS Client", "topic", this::openSqsTab),
                 new ProtocolDef("pubsub", "Google Pub/Sub", "New Google Pub/Sub Client", "topic", this::openPubSubTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),

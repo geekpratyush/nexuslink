@@ -58,6 +58,14 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-ibmmq</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-solace</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-protocol-secrets</artifactId>
         </dependency>
         <dependency>
