@@ -1,13 +1,18 @@
-# NexusLink local test environment — all open-source services, one per protocol module.
+# NexusLink local test environment — one service per protocol module.
 #
 # Licensing note: this file only *references* upstream images to run them as local test
 # fixtures. It does not redistribute them, and NexusLink links to each service only through
-# its permissively licensed client library (Apache/MIT/BSD JDBC & SDK drivers), never the
-# server. So none of these images' licenses (incl. SSPL/AGPL) attach to the NexusLink code.
+# its client library, never the server. So none of these images' licenses (incl. SSPL/AGPL)
+# attach to the NexusLink code.
+#
+# Everything in the default profile is open source. The `proprietary` profile holds the two
+# free-for-development-only brokers (ibmmq, solace) that have no OSS equivalent; they are
+# opt-in and never started by a bare `up -d`.
 #
 # Usage:
-#   docker compose -f test-env/docker-compose.yml up -d          # core + heavy services
+#   docker compose -f test-env/docker-compose.yml up -d          # core + heavy services (all OSS)
 #   docker compose -f test-env/docker-compose.yml --profile extra up -d   # + schema registry
+#   docker compose -f test-env/docker-compose.yml up -d ibmmq solace      # opt into the two proprietary brokers
 #   docker compose -f test-env/docker-compose.yml down -v        # stop + wipe volumes
 #
 # Every credential here is a throwaway local test value (nexus/nexus, admin/admin, etc.).
@@ -122,6 +127,50 @@ services:
       interval: 10s
       timeout: 10s
       retries: 20
+
+  # ---- PHASE 5: IBM MQ ----
+  # Not open source: "IBM MQ Advanced for Developers", free for development use only.
+  # Behind the `proprietary` profile so the default `up -d` stays all-OSS. Start it with
+  #   docker compose -f test-env/docker-compose.yml up -d ibmmq
+  # Naming the service explicitly activates its profile.
+  ibmmq:                                       # IBM International License Agreement for Non-Warranted Programs
+    image: icr.io/ibm-messaging/mq:latest      # 10.0.0.0 (ibm-mqadvanced-server-dev)
+    profiles: ["proprietary"]
+    environment:
+      LICENSE: accept                          # dev-only license acceptance, local fixture
+      MQ_QMGR_NAME: QM1
+      MQ_APP_PASSWORD: nexus123                # user "app" over DEV.APP.SVRCONN
+      MQ_ADMIN_PASSWORD: nexus123              # user "admin" over DEV.ADMIN.SVRCONN
+    ports: ["1414:1414", "9443:9443"]          # MQI channel + web console/REST
+    healthcheck:
+      test: ["CMD-SHELL", "chkmqready || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  # ---- PHASE 5: Solace PubSub+ ----
+  # Not open source: "Solace PubSub+ Standard", free (unlimited) but proprietary. Same profile
+  # treatment as ibmmq above:  docker compose -f test-env/docker-compose.yml up -d solace
+  solace:                                      # Solace Software License Agreement
+    image: solace/solace-pubsub-standard:latest
+    profiles: ["proprietary"]
+    shm_size: "1gb"                            # required by the broker's shared-memory transport
+    ulimits:
+      core: -1
+      # SolOS 10.26 hard-fails its start-up POST check below a 1048576 hard nofile limit
+      # ("Required system resource missing ... 6592 detected"). The 2448:6592 pair in Solace's
+      # older docs is stale — don't lower these.
+      nofile: { soft: 1048576, hard: 1048576 }
+    environment:
+      username_admin_globalaccesslevel: admin
+      username_admin_password: nexus123
+      system_scaling_maxconnectioncount: "100"  # smallest tier — starts fast, low RAM
+    ports: ["55555:55555", "8008:8008", "8081:8080"]  # SMF (JCSMP) + web-messaging + admin SEMP/UI
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
 
   # ---- PHASE 5: MQTT ----
   mosquitto:                                   # EPL-2.0 / EDL-1.0

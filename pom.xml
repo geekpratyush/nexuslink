@@ -23,6 +23,8 @@
         <module>nexuslink-protocol-s3</module>
         <module>nexuslink-protocol-sqs</module>
         <module>nexuslink-protocol-jms</module>
+        <module>nexuslink-protocol-ibmmq</module>
+        <module>nexuslink-protocol-solace</module>
         <module>nexuslink-protocol-kafka</module>
         <module>nexuslink-protocol-mqtt</module>
         <module>nexuslink-protocol-rabbitmq</module>
@@ -112,6 +114,11 @@
         <mongodb.version>5.1.4</mongodb.version>
         <aws.sdk.version>2.27.21</aws.sdk.version>
         <artemis.version>2.31.2</artemis.version>
+        <!-- IBM MQ: the *jakarta* client (not allclient, which is javax.jms) to match jakarta.jms 3.1.0.
+             Matches the 10.0.0.0 queue manager in test-env. IBM license, redistributable as a client. -->
+        <ibmmq.version>10.0.0.0</ibmmq.version>
+        <!-- Solace JCSMP wire API. Solace Software License Agreement. -->
+        <solace.version>10.30.1</solace.version>
         <lettuce.version>6.3.2.RELEASE</lettuce.version>
         <azure.storage.version>12.27.0</azure.storage.version>
         <gcs.version>2.43.2</gcs.version>
@@ -197,6 +204,16 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-jms</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-ibmmq</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-solace</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -408,6 +425,20 @@
                 <groupId>org.apache.activemq</groupId>
                 <artifactId>artemis-jakarta-client</artifactId>
                 <version>${artemis.version}</version>
+            </dependency>
+
+            <!-- IBM MQ client (base Java/MQI + headers + jakarta JMS) -->
+            <dependency>
+                <groupId>com.ibm.mq</groupId>
+                <artifactId>com.ibm.mq.jakarta.client</artifactId>
+                <version>${ibmmq.version}</version>
+            </dependency>
+
+            <!-- Solace PubSub+ JCSMP -->
+            <dependency>
+                <groupId>com.solacesystems</groupId>
+                <artifactId>sol-jcsmp</artifactId>
+                <version>${solace.version}</version>
             </dependency>
 
             <!-- MongoDB driver -->
