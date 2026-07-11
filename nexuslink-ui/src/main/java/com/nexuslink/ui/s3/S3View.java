@@ -4,6 +4,8 @@ import com.nexuslink.protocol.s3.S3Explorer;
 import com.nexuslink.protocol.s3.S3Service;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
+import com.nexuslink.ui.files.DualPaneBrowser;
+import com.nexuslink.ui.files.LocalFileSystem;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,6 +23,7 @@ public final class S3View extends BorderPane {
 
     private final S3Service service = new S3Service();
     private final ResourceExplorerView explorer = new ResourceExplorerView("Buckets");
+    private final DualPaneBrowser commander;
 
     private final TextField endpointField = new TextField("https://play.min.io");
     private final TextField accessKeyField = new TextField();
@@ -35,12 +38,22 @@ public final class S3View extends BorderPane {
     public S3View() {
         getStyleClass().add("s3-view");
         setTop(buildBar());
-        setCenter(explorer);
+        // Tree explorer + a WinSCP-style commander (local ↔ S3) sharing the same transfer queue / DnD.
+        S3FileSystem s3fs = new S3FileSystem(service);
+        commander = new DualPaneBrowser(new LocalFileSystem(), s3fs, s3fs);
+        commander.startLocal();
+        commander.disconnectRemote();
+        TabPane tabs = new TabPane(
+                new Tab("Explorer", explorer),
+                new Tab("Commander", commander));
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        setCenter(tabs);
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
         explorer.setLogger(this.logger);
+        commander.setLogger(this.logger);
     }
 
     /** Pre-fills connection details (used when opening a saved/sample connection). */
@@ -114,6 +127,7 @@ public final class S3View extends BorderPane {
             logger.accept("S3 connected — " + task.getValue() + " buckets");
             explorer.setExplorer(new S3Explorer(service));
             explorer.load();
+            commander.connectRemote();   // the S3 pane now lists buckets as the root
             connectBtn.setDisable(false);
         });
         task.setOnFailed(e -> {

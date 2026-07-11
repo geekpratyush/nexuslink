@@ -15,8 +15,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.LongConsumer;
 
 /**
  * S3 / S3-compatible object-storage client (AWS, MinIO, Wasabi, …) over the AWS SDK v2 with the
@@ -64,6 +67,61 @@ public final class S3Service implements AutoCloseable {
                 o.lastModified() == null ? "" : o.lastModified().toString(),
                 o.eTag(), o.storageClassAsString())));
         return items;
+    }
+
+    /** A single directory-level listing under a prefix: sub-"folders" (common prefixes) and objects. */
+    public record S3Listing(List<String> folders, List<S3Item> files) {}
+
+    /**
+     * Lists one directory level of {@code bucket} under {@code prefix} using the {@code /} delimiter, so
+     * common prefixes come back as sub-folders and only the immediate objects as files. The folder-marker
+     * object equal to the prefix itself is skipped. This is what the object-storage commander navigates.
+     */
+    public S3Listing listChildren(String bucket, String prefix) {
+        String p = prefix == null ? "" : prefix;
+        ListObjectsV2Response resp = client.listObjectsV2(ListObjectsV2Request.builder()
+                .bucket(bucket).prefix(p).delimiter("/").maxKeys(1000).build());
+        List<String> folders = new ArrayList<>();
+        resp.commonPrefixes().forEach(cp -> folders.add(cp.prefix()));
+        List<S3Item> files = new ArrayList<>();
+        resp.contents().forEach(o -> {
+            if (o.key().equals(p)) return; // the zero-byte folder marker for this prefix — not a file
+            files.add(new S3Item(o.key(), o.size() == null ? 0 : o.size(),
+                    o.lastModified() == null ? "" : o.lastModified().toString(),
+                    o.eTag(), o.storageClassAsString()));
+        });
+        return new S3Listing(folders, files);
+    }
+
+    /** Fetches up to {@code maxBytes} of an object as raw bytes (quick-view / edit-in-place). */
+    public byte[] getObjectBytes(String bucket, String key, int maxBytes) {
+        byte[] bytes = client.getObjectAsBytes(GetObjectRequest.builder()
+                .bucket(bucket).key(key).build()).asByteArray();
+        if (bytes.length <= maxBytes) return bytes;
+        byte[] trimmed = new byte[maxBytes];
+        System.arraycopy(bytes, 0, trimmed, 0, maxBytes);
+        return trimmed;
+    }
+
+    /** Downloads an object to a local file, reporting the byte count once on completion. */
+    public void downloadToFile(String bucket, String key, Path localTarget, LongConsumer progress) throws Exception {
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        client.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build(), localTarget);
+        if (progress != null && Files.exists(localTarget)) progress.accept(Files.size(localTarget));
+    }
+
+    /** Uploads a local file to {@code bucket}/{@code key}, reporting the byte count once on completion. */
+    public void uploadFile(String bucket, String key, Path localSource, LongConsumer progress) throws Exception {
+        client.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                RequestBody.fromFile(localSource));
+        if (progress != null) progress.accept(Files.size(localSource));
+    }
+
+    /** Creates a zero-byte "folder marker" object ({@code prefix/}) so an empty folder is browsable. */
+    public void createFolder(String bucket, String prefix) {
+        String key = prefix.endsWith("/") ? prefix : prefix + "/";
+        client.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                RequestBody.empty());
     }
 
     /** Uploads {@code bytes} to {@code bucket}/{@code key}; {@code contentType} may be null. */
