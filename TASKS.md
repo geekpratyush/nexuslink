@@ -125,6 +125,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-pubsub | `PubSubLiveIT` | Google Pub/Sub emulator (topic/sub/publish/pull round-trip) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
+| protocol-sftp | `SftpScpEmbeddedTest` | embedded MINA SSHD (SFTP subsystem + SCP): SCP upload→SFTP read→SCP download; no Docker |
+| protocol-s3 | `S3CommanderLiveIT` | LocalStack S3 commander (folder upload/list/download/delete round-trip) |
 | protocol-ftp | `FtpLiveIT` | vsftpd (upload/list/read/delete) |
 | protocol-http | `RestLiveIT` | go-httpbin (GET/POST/basic-auth) |
 | protocol-mongo | `MongoServiceTest` | MongoDB via Testcontainers (`-DrunMongoIT=true`) |
@@ -789,14 +791,22 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       "integrity check failed: …" note. 4 added queue tests (24 in `TransferQueueTest`). _(Hash computation still TODO.)_
 
 **Drag & drop**
-- [ ] **External DnD** — drag files in from the OS file manager (upload) and out to the desktop (download)
+- [x] **External DnD** — drag files in from the OS file manager and out to the desktop. Dropping OS files
+      on the remote pane uploads them through the transfer queue (wrapped as local `FileItem`s, folders
+      expand recursively); on the local pane they copy in (recursive, off the FX thread). Local files are
+      also put on the dragboard as OS files (`ClipboardContent.putFiles`) so a selection can be dragged out
+      to the desktop / another app (no-op for remote paths that don't resolve on disk).
 - [-] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local —
       cross-pane **move** done: `TransferItem` carries a `moveMode` flag, `TransferQueue.enqueue(…, moveMode)`
       deletes each source only after its copy succeeds (a skipped/failed copy leaves the source intact);
       **Move →** / **← Move** buttons (confirmed) in `DualPaneBrowser`, both panes refresh after. 3 added
       queue tests (27 in `TransferQueueTest`). _(modifier-key DnD + same-side/server-side move via rename still TODO.)_
-- [ ] Drop directly onto a **target folder row** (not only the pane's current directory)
-- [ ] Drag-over highlight / drop-target affordance for the above _(cross-pane highlight already done)_
+- [x] Drop directly onto a **target folder row** (not only the pane's current directory) — row-level
+      drag handlers route a drop into that folder's path; non-folder rows fall through to the current
+      directory (drop routing unified behind `acceptsDrag`/`handleDrop`; `enqueue` gained an explicit-
+      destDir overload so both cross-pane and external drops can target any folder).
+- [x] Drag-over highlight / drop-target affordance — the hovered folder row highlights
+      (`.file-pane .table-row-cell.drop-target` CSS) while a drag is over it _(cross-pane table highlight already done)_
 
 **File operations**
 - [-] Batch/multi-file rename; duplicate; **copy-path** — copy-path done (context menu + Ctrl+Shift+C copies
@@ -811,7 +821,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Properties dialog (size, permissions, owner, timestamps) — a **Properties…** context-menu item opens a
       read-only name/type/path/size/modified/permissions grid built from the pure `FileDetails.of(FileItem)`;
       includes symbolic→octal permission conversion (`permissionsOctal`, handles the type prefix + setuid/sticky). 6 tests.
-- [ ] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on save)
+- [x] Quick view/preview (text/image) and **edit-in-place** for remote files (download → edit → upload on
+      save) — pure `QuickView` classifier (text/image/unsupported by extension + size cap; 8 tests) +
+      `QuickViewDialog` (background read, editable `TextArea` for text with **Save → `writeFile`**, `ImageView`
+      for images). `FileSystem` gains optional `readFile`/`writeFile` content access, implemented for Local,
+      SFTP (`SftpService.readBytes/writeBytes`), FTP (`FtpService.readBytes/writeBytes`) and S3
+      (`getObjectBytes`/`putObject`). "Quick view / Edit…" context item, shown only when the FS supports it.
 - [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
       compare of two listings, matching by name (case-sensitive by default, optional case-insensitive for
       Windows FS), classifying each entry LEFT_ONLY / RIGHT_ONLY / DIFFERENT (size, mtime, or file-vs-dir
@@ -829,9 +844,21 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Norton-Commander keyboard shortcuts (F5 copy · F6 rename · F7 mkdir · F8 delete · Tab switches panes) —
       handled at the `DualPaneBrowser` level over the active (last-focused) pane, with a matching clickable
       function-key bar along the bottom; text-field edits are not hijacked. _(F6 is rename; true move TODO.)_
-- [ ] Embedded SSH terminal alongside SFTP ("Open terminal here") — depends on 8.5 SSH Terminal
-- [ ] SCP transfer mode in addition to SFTP
-- [ ] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) once their upload/put lands (7.3)
+- [x] Embedded SSH terminal alongside SFTP ("Open terminal here") — the SFTP remote pane's context menu
+      opens an SSH terminal (§8.5) prefilled with the same host/credentials and `cd`'d into the browsed
+      folder (`FileBrowserPane.setOnOpenTerminal` → `DualPaneBrowser.setOnOpenRemoteTerminal` →
+      `SftpView.setOnOpenTerminal` → `MainWindow` opens a `TerminalView` via `openSessionAt(...)`).
+- [x] SCP transfer mode in addition to SFTP — `SftpService.uploadScp/downloadScp` over MINA's `ScpClient`
+      (new `sshd-scp` dep), reusing the open SSH session; a **SCP transfers** checkbox on the SFTP bar routes
+      transfers through SCP while listing/navigation stay on SFTP. `SftpScpEmbeddedTest` proves an SCP
+      upload → SFTP list/read → SCP download → delete round-trip against an embedded MINA SSHD server (no Docker).
+- [-] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) — **done for S3:**
+      `S3FileSystem` adapts `S3Service` to the `FileSystem`/`FileTransfer` contracts (buckets = root, common
+      prefixes = folders, objects = files) so S3 drives the same `DualPaneBrowser` (transfer queue, DnD,
+      quick-view) as SFTP/FTP; pure `S3Path` bucket/key math (9 tests) + new `S3Service` listChildren/
+      getObjectBytes/downloadToFile/uploadFile/createFolder (`S3CommanderLiveIT` round-trip green vs
+      LocalStack); S3View gains a **Commander** tab beside the tree explorer. _(Azure/GCS follow once their
+      upload/put lands — still `[-]` in 7.3.)_
 
 ### 7.x Connection-type visibility (per-user)
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
