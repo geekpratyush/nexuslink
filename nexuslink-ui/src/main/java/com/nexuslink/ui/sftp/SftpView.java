@@ -32,6 +32,8 @@ public final class SftpView extends BorderPane {
     private final Label statusLabel = new Label("Not connected");
 
     private final DualPaneBrowser browser;
+    private final SftpFileSystem remote = new SftpFileSystem(service);
+    private final CheckBox scpToggle = new CheckBox("SCP transfers");
     private Consumer<String> logger = s -> {};
 
     public SftpView() {
@@ -39,7 +41,6 @@ public final class SftpView extends BorderPane {
         setTop(buildBar());
         // The remote pane wraps the long-lived service, so the commander can be built up-front: the
         // local pane is browsable straight away and the remote side stays "not connected" until connect.
-        SftpFileSystem remote = new SftpFileSystem(service);
         browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
         browser.startLocal();
         browser.disconnectRemote();
@@ -118,8 +119,14 @@ public final class SftpView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
+        scpToggle.setTooltip(new Tooltip("Transfer files over SCP instead of SFTP (same SSH session; listing still uses SFTP)"));
+        scpToggle.setOnAction(e -> {
+            remote.setScpMode(scpToggle.isSelected());
+            logger.accept("SFTP: transfers now use " + (scpToggle.isSelected() ? "SCP" : "SFTP"));
+        });
+
         HBox row = new HBox(8, lbl("Host:"), hostField, lbl("Port:"), portField, lbl("User:"), userField,
-                passField, connectBtn, disconnectBtn, diagnoseBtn, helpBtn);
+                passField, connectBtn, disconnectBtn, diagnoseBtn, scpToggle, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10, 10, 4, 10));
 

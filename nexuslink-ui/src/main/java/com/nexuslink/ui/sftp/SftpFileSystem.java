@@ -16,8 +16,12 @@ import java.util.function.LongConsumer;
 final class SftpFileSystem implements FileSystem, FileTransfer {
 
     private final SftpService service;
+    private volatile boolean scpMode;   // route transfers over SCP instead of SFTP (listing stays SFTP)
 
     SftpFileSystem(SftpService service) { this.service = service; }
+
+    /** Switches file transfers between SFTP (false) and SCP (true) over the same SSH session. */
+    void setScpMode(boolean scp) { this.scpMode = scp; }
 
     @Override public String name() { return "SFTP"; }
 
@@ -66,10 +70,14 @@ final class SftpFileSystem implements FileSystem, FileTransfer {
     // ---- FileTransfer ----
 
     @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
-        service.upload(localFile, join(remoteDir, localFile.getFileName().toString()), progress);
+        String remotePath = join(remoteDir, localFile.getFileName().toString());
+        if (scpMode) service.uploadScp(localFile, remotePath, progress);
+        else service.upload(localFile, remotePath, progress);
     }
 
     @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
-        service.download(remoteFile.path(), localDir.resolve(remoteFile.name()), progress);
+        Path target = localDir.resolve(remoteFile.name());
+        if (scpMode) service.downloadScp(remoteFile.path(), target, progress);
+        else service.download(remoteFile.path(), target, progress);
     }
 }

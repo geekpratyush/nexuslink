@@ -569,6 +569,11 @@
                 <artifactId>sshd-sftp</artifactId>
                 <version>${mina.sshd.version}</version>
             </dependency>
+            <dependency>
+                <groupId>org.apache.sshd</groupId>
+                <artifactId>sshd-scp</artifactId>
+                <version>${mina.sshd.version}</version>
+            </dependency>
 
             <!-- Jackson -->
             <dependency>

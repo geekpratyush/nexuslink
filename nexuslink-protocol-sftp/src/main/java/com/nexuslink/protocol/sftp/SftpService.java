@@ -112,6 +112,35 @@ public final class SftpService implements AutoCloseable {
         }
     }
 
+    // ---- SCP transfer mode (same SSH session, different file-copy protocol than SFTP) ----
+
+    /**
+     * Uploads {@code localSource} to {@code remotePath} over SCP rather than SFTP, reusing the open SSH
+     * session. SCP has no incremental progress callback, so {@code progress} is invoked once with the
+     * final byte count on success.
+     */
+    public void uploadScp(Path localSource, String remotePath, LongConsumer progress) throws Exception {
+        scpClient().upload(localSource, remotePath,
+                java.util.Collections.<org.apache.sshd.scp.client.ScpClient.Option>emptySet());
+        if (progress != null) progress.accept(Files.size(localSource));
+    }
+
+    /**
+     * Downloads {@code remotePath} to {@code localTarget} over SCP rather than SFTP. Like
+     * {@link #uploadScp}, {@code progress} is reported once at completion.
+     */
+    public void downloadScp(String remotePath, Path localTarget, LongConsumer progress) throws Exception {
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        scpClient().download(remotePath, localTarget,
+                java.util.Collections.<org.apache.sshd.scp.client.ScpClient.Option>emptySet());
+        if (progress != null && Files.exists(localTarget)) progress.accept(Files.size(localTarget));
+    }
+
+    private org.apache.sshd.scp.client.ScpClient scpClient() {
+        if (session == null || !session.isOpen()) throw new IllegalStateException("not connected");
+        return org.apache.sshd.scp.client.ScpClientCreator.instance().createScpClient(session);
+    }
+
     private static void copy(InputStream in, OutputStream out, LongConsumer progress) throws Exception {
         byte[] buf = new byte[64 * 1024];
         long total = 0;
