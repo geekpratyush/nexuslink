@@ -478,6 +478,9 @@ public final class MainWindow {
     private SftpView openSftpTab() {
         SftpView view = new SftpView();
         view.setLogger(this::log);
+        // "Open terminal here" on the remote pane launches an SSH terminal cd'd into that folder.
+        view.setOnOpenTerminal((host, port, user, password, keyPath, dir) ->
+                openSshTab().openSessionAt(host, port, user, password, keyPath, dir));
         addTab("SFTP " + (++newTabCounter), view);
         return view;
     }

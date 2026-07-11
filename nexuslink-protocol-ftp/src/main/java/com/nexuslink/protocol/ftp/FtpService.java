@@ -78,6 +78,27 @@ public final class FtpService implements AutoCloseable {
         return new String(bytes, 0, len, java.nio.charset.StandardCharsets.UTF_8);
     }
 
+    /** Downloads a file's first {@code maxBytes} raw bytes (for the quick-view / edit-in-place dialog). */
+    public byte[] readBytes(String path, int maxBytes) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ftp.retrieveFile(path, out);
+        byte[] bytes = out.toByteArray();
+        int len = Math.min(bytes.length, maxBytes);
+        if (len == bytes.length) return bytes;
+        byte[] trimmed = new byte[len];
+        System.arraycopy(bytes, 0, trimmed, 0, len);
+        return trimmed;
+    }
+
+    /** Stores {@code data} to {@code path}, creating or overwriting it (edit-in-place save). */
+    public void writeBytes(String path, byte[] data) throws Exception {
+        try (InputStream in = new java.io.ByteArrayInputStream(data)) {
+            if (!ftp.storeFile(path, in)) {
+                throw new IllegalStateException("Server refused upload: " + ftp.getReplyString().trim());
+            }
+        }
+    }
+
     /** The current remote working directory (used as the browser's start path). */
     public String pwd() throws Exception {
         String wd = ftp.printWorkingDirectory();

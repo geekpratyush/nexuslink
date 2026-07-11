@@ -49,6 +49,16 @@ final class FtpFileSystem implements FileSystem, FileTransfer {
         service.deleteRecursive(new FtpService.FtpEntry(item.name(), item.path(), item.directory(), item.size(), item.modified()));
     }
 
+    @Override public boolean supportsContentAccess() { return true; }
+
+    @Override public byte[] readFile(FileItem item, long maxBytes) throws Exception {
+        return service.readBytes(item.path(), (int) Math.min(maxBytes, Integer.MAX_VALUE));
+    }
+
+    @Override public void writeFile(String dir, String name, byte[] data) throws Exception {
+        service.writeBytes(join(dir, name), data);
+    }
+
     // ---- FileTransfer ----
 
     @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {

@@ -47,6 +47,16 @@ final class SftpFileSystem implements FileSystem, FileTransfer {
 
     @Override public void delete(FileItem item) throws Exception { service.deleteRecursive(item.path()); }
 
+    @Override public boolean supportsContentAccess() { return true; }
+
+    @Override public byte[] readFile(FileItem item, long maxBytes) throws Exception {
+        return service.readBytes(item.path(), (int) Math.min(maxBytes, Integer.MAX_VALUE));
+    }
+
+    @Override public void writeFile(String dir, String name, byte[] data) throws Exception {
+        service.writeBytes(join(dir, name), data);
+    }
+
     @Override public boolean supportsChmod() { return true; }
 
     @Override public void chmod(FileItem item, int octalPermissions) throws Exception {

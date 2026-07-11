@@ -51,6 +51,23 @@ public final class SftpView extends BorderPane {
         browser.setLogger(this.logger);
     }
 
+    /** A request to open an SSH terminal against this SFTP server, cd'd into {@code dir}. */
+    @FunctionalInterface
+    public interface TerminalRequest {
+        void open(String host, int port, String user, String password, String keyPath, String dir);
+    }
+
+    /**
+     * Wires the commander's "Open terminal here" (remote pane) to open an SSH terminal with these
+     * connection details and the folder being browsed. Passing {@code null} removes the action.
+     */
+    public void setOnOpenTerminal(TerminalRequest request) {
+        browser.setOnOpenRemoteTerminal(request == null ? null : dir -> request.open(
+                Env.resolve(hostField.getText().trim()), parsePort(),
+                Env.resolve(userField.getText().trim()), Env.resolve(passField.getText()),
+                Env.resolve(keyField.getText().trim()), dir));
+    }
+
     /** Pre-fills connection details (used when opening a saved/sample connection). */
     public void prefill(String target, String user, String password) {
         if (target != null && !target.isBlank()) {

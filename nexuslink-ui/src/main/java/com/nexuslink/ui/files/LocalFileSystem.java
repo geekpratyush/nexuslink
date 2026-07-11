@@ -57,6 +57,18 @@ public final class LocalFileSystem implements FileSystem {
         return Files.exists(Path.of(dir).resolve(name));
     }
 
+    @Override public boolean supportsContentAccess() { return true; }
+
+    @Override public byte[] readFile(FileItem item, long maxBytes) throws IOException {
+        try (var in = Files.newInputStream(Path.of(item.path()))) {
+            return in.readNBytes((int) Math.min(maxBytes, Integer.MAX_VALUE));
+        }
+    }
+
+    @Override public void writeFile(String dir, String name, byte[] data) throws IOException {
+        Files.write(Path.of(dir).resolve(name), data);
+    }
+
     @Override public void mkdir(String path) throws IOException {
         Files.createDirectories(Path.of(path));
     }

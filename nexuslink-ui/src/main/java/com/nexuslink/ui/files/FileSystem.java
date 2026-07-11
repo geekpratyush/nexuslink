@@ -42,6 +42,23 @@ public interface FileSystem {
     /** Deletes a file or directory (recursively for directories). */
     void delete(FileItem item) throws Exception;
 
+    /**
+     * True if this file system can read/write whole file contents in memory (for the quick-view /
+     * edit-in-place dialog). Object stores and plain local/SFTP/FTP support it; a pane hides the
+     * quick-view action when this is false.
+     */
+    default boolean supportsContentAccess() { return false; }
+
+    /** Reads up to {@code maxBytes} of {@code item}'s content. Optional (see {@link #supportsContentAccess()}). */
+    default byte[] readFile(FileItem item, long maxBytes) throws Exception {
+        throw new UnsupportedOperationException("content access not supported by " + name());
+    }
+
+    /** Writes {@code data} to the file named {@code name} in directory {@code dir} (create/overwrite). Optional. */
+    default void writeFile(String dir, String name, byte[] data) throws Exception {
+        throw new UnsupportedOperationException("content access not supported by " + name());
+    }
+
     /** True if this file system supports changing POSIX permissions (chmod). */
     default boolean supportsChmod() { return false; }
 

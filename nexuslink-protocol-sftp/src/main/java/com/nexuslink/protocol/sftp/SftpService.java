@@ -81,6 +81,20 @@ public final class SftpService implements AutoCloseable {
         }
     }
 
+    /** Reads up to {@code maxBytes} of a file's raw bytes (for the quick-view / edit-in-place dialog). */
+    public byte[] readBytes(String path, int maxBytes) throws Exception {
+        try (InputStream in = sftp.read(path)) {
+            return in.readNBytes(maxBytes);
+        }
+    }
+
+    /** Writes {@code data} to {@code path}, creating or truncating it (edit-in-place save). */
+    public void writeBytes(String path, byte[] data) throws Exception {
+        try (OutputStream out = sftp.write(path)) {
+            out.write(data);
+        }
+    }
+
     /** Downloads a remote file to a local path, reporting bytes transferred to {@code progress}. */
     public void download(String remotePath, Path localTarget, LongConsumer progress) throws Exception {
         if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());

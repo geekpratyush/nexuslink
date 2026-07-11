@@ -106,6 +106,15 @@ public final class DualPaneBrowser extends BorderPane {
         remotePane.setLogger(this.logger);
     }
 
+    /**
+     * Enables an "Open terminal here" action on the remote pane, handing the pane's current remote
+     * directory to {@code handler} (the SFTP view opens an SSH terminal there). Passing {@code null}
+     * removes it. Only meaningful for a shell-capable remote (SFTP/SSH).
+     */
+    public void setOnOpenRemoteTerminal(Consumer<String> handler) {
+        remotePane.setOnOpenTerminal(handler);
+    }
+
     /** Loads the local home in the left pane and the remote home in the right pane. */
     public void start() {
         startLocal();

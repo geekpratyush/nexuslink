@@ -55,6 +55,8 @@ public final class FileBrowserPane extends VBox {
     private Runnable onChanged = () -> {};
     private Consumer<List<FileItem>> onDropFromOther = items -> {};
     private Runnable onFocused = () -> {};
+    private Consumer<String> onOpenTerminal = null;   // set → an "Open terminal here" context item appears
+    private final MenuItem openTerminalItem = new MenuItem("Open terminal here");
 
     public FileBrowserPane(FileSystem fs, String title) {
         this.fs = fs;
@@ -87,6 +89,15 @@ public final class FileBrowserPane extends VBox {
 
     /** Notified when this pane's table gains keyboard focus, so a container can track the active pane. */
     public void setOnFocused(Runnable handler) { this.onFocused = handler == null ? () -> {} : handler; }
+
+    /**
+     * Enables an "Open terminal here" context action that hands the current directory to {@code handler}
+     * (e.g. the SFTP view opening an SSH terminal cd'd to that path). Passing {@code null} hides it.
+     */
+    public void setOnOpenTerminal(Consumer<String> handler) {
+        this.onOpenTerminal = handler;
+        openTerminalItem.setVisible(handler != null);
+    }
 
     /** Moves keyboard focus to this pane's file table (used when switching panes with Tab). */
     public void focusTable() { table.requestFocus(); }
@@ -215,6 +226,8 @@ public final class FileBrowserPane extends VBox {
     private ContextMenu buildContextMenu() {
         MenuItem open = new MenuItem("Open / Transfer");
         open.setOnAction(e -> { FileItem s = table.getSelectionModel().getSelectedItem(); if (s != null) activate(s); });
+        MenuItem quickView = new MenuItem("Quick view / Edit…");
+        quickView.setOnAction(e -> quickViewSelected());
         MenuItem rename = new MenuItem("Rename…  (F2)");
         rename.setOnAction(e -> renameSelected());
         MenuItem batchRename = new MenuItem("Batch rename…");
@@ -229,7 +242,11 @@ public final class FileBrowserPane extends VBox {
         mkdir.setOnAction(e -> newFolder());
         MenuItem refresh = new MenuItem("Refresh");
         refresh.setOnAction(e -> refresh());
-        ContextMenu menu = new ContextMenu(open, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), properties, refresh);
+        openTerminalItem.setVisible(false);
+        openTerminalItem.setOnAction(e -> { if (onOpenTerminal != null) onOpenTerminal.accept(currentPath); });
+        ContextMenu menu = new ContextMenu(open, quickView, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), properties, refresh, openTerminalItem);
+        // Only offer quick view when this file system can read/write content in place.
+        quickView.setDisable(!fs.supportsContentAccess());
         if (fs.supportsChmod()) {
             MenuItem chmod = new MenuItem("Permissions (chmod)…");
             chmod.setOnAction(e -> chmodSelected());
@@ -415,6 +432,15 @@ public final class FileBrowserPane extends VBox {
     private java.nio.file.Path bookmarkFile() {
         String safe = fs.name().replaceAll("[^A-Za-z0-9_.-]", "_");
         return java.nio.file.Path.of(System.getProperty("user.home"), ".nexuslink", "bookmarks-" + safe + ".txt");
+    }
+
+    /** Opens the quick-view / edit-in-place dialog for the selected file (text editable, images preview). */
+    public void quickViewSelected() {
+        FileItem sel = table.getSelectionModel().getSelectedItem();
+        if (sel == null || sel.parent() || sel.directory()) return;
+        if (!fs.supportsContentAccess()) { statusLabel.setText(fs.name() + " has no quick view"); return; }
+        Window owner = getScene() == null ? null : getScene().getWindow();
+        QuickViewDialog.open(owner, fs, sel, logger, this::refresh);
     }
 
     /** Shows a read-only Properties dialog (name/type/path/size/modified/permissions) for the selection. */

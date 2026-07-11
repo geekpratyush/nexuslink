@@ -57,6 +57,7 @@ public final class TerminalView extends BorderPane {
     private long lastRevision = -1;
     private long frame;
     private AnimationTimer timer;
+    private String pendingInitialDir;   // cd'd into once connected (from "Open terminal here")
 
     private Consumer<String> logger = s -> {};
 
@@ -74,6 +75,27 @@ public final class TerminalView extends BorderPane {
     public void prefill(String host, String user) {
         if (host != null && !host.isBlank()) hostField.setText(host);
         if (user != null && !user.isBlank()) userField.setText(user);
+    }
+
+    /**
+     * Opens a terminal directly against {@code host} with the given credentials and, once connected,
+     * {@code cd}s into {@code initialDir}. Used by the SFTP commander's "Open terminal here" so the
+     * shell lands in the folder you were browsing.
+     */
+    public void openSessionAt(String host, int port, String user, String password,
+                              String keyPath, String initialDir) {
+        prefill(host, user);
+        portField.setText(Integer.toString(port));
+        if (keyPath != null && !keyPath.isBlank()) {
+            authMode.getSelectionModel().select("Private key");
+            keyPathField.setText(keyPath);
+        } else {
+            authMode.getSelectionModel().select("Password");
+            passwordField.setText(password == null ? "" : password);
+        }
+        updateAuthVisibility();
+        pendingInitialDir = (initialDir == null || initialDir.isBlank()) ? null : initialDir;
+        connect();
     }
 
     // ---- connect bar ----
@@ -271,6 +293,11 @@ public final class TerminalView extends BorderPane {
         setBarDisabled(true);
         canvas.requestFocus();
         logger.accept("SSH connected to " + host);
+        if (pendingInitialDir != null) {
+            // cd into the folder the SFTP pane was showing (single-quote-escaped for the shell).
+            send("cd '" + pendingInitialDir.replace("'", "'\\''") + "' && clear\n");
+            pendingInitialDir = null;
+        }
     }
 
     private void onRemoteClosed() {
