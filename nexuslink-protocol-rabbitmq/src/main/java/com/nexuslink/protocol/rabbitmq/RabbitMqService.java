@@ -10,6 +10,8 @@ import com.rabbitmq.client.MessageProperties;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -101,6 +103,15 @@ public final class RabbitMqService implements AutoCloseable {
         require().queueDeclare(queue, durable, false, false, null);
     }
 
+    /**
+     * Declares a queue with extra {@code x-arguments} — e.g. the dead-letter / TTL / max-length map from
+     * {@link DeadLetterArgs}. A null or empty map behaves like {@link #declareQueue(String, boolean)}.
+     */
+    public void declareQueue(String queue, boolean durable, Map<String, Object> args) throws IOException {
+        require().queueDeclare(queue, durable, false, false,
+                args == null || args.isEmpty() ? null : args);
+    }
+
     /** Declares an exchange of the given AMQP type ({@code direct}, {@code fanout}, {@code topic}, {@code headers}). */
     public void declareExchange(String exchange, String type, boolean durable) throws IOException {
         require().exchangeDeclare(exchange, BuiltinExchangeType.valueOf(type.trim().toUpperCase()), durable);
@@ -122,6 +133,35 @@ public final class RabbitMqService implements AutoCloseable {
     }
 
     /**
+     * Publishes {@code body} with an explicit {@code contentType}, {@code correlationId} and custom
+     * {@code headers} (any of which may be null/blank/empty to omit). Messages stay persistent. This is
+     * the message-properties-editor path; the pure {@link #buildProperties} builder is the tested seam.
+     */
+    public void publish(String exchange, String routingKey, String body,
+                        String contentType, String correlationId, Map<String, String> headers) throws IOException {
+        require().basicPublish(exchange == null ? "" : exchange, routingKey == null ? "" : routingKey,
+                buildProperties(contentType, correlationId, headers),
+                (body == null ? "" : body).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Builds AMQP {@link AMQP.BasicProperties} for a persistent message with an optional content type,
+     * correlation id and string headers. Package-visible + pure (no I/O) so it can be unit-tested.
+     */
+    static AMQP.BasicProperties buildProperties(String contentType, String correlationId,
+                                                Map<String, String> headers) {
+        AMQP.BasicProperties.Builder b = new AMQP.BasicProperties.Builder().deliveryMode(2); // persistent
+        if (contentType != null && !contentType.isBlank()) b.contentType(contentType.trim());
+        if (correlationId != null && !correlationId.isBlank()) b.correlationId(correlationId.trim());
+        if (headers != null && !headers.isEmpty()) {
+            Map<String, Object> h = new LinkedHashMap<>();
+            headers.forEach((k, v) -> { if (k != null && !k.isBlank()) h.put(k.trim(), v); });
+            if (!h.isEmpty()) b.headers(h);
+        }
+        return b.build();
+    }
+
+    /**
      * Publishes {@code body} like {@link #publish}, then waits for a publisher confirm from the
      * broker and reports whether it was {@link PublishConfirm#ACKED}, {@link PublishConfirm#NACKED}
      * or {@link PublishConfirm#TIMEOUT}. {@code confirmSelect()} is enabled once per channel (lazily,
@@ -132,11 +172,18 @@ public final class RabbitMqService implements AutoCloseable {
      */
     public PublishConfirm publishConfirmed(String exchange, String routingKey, String body, long timeoutMs)
             throws IOException, InterruptedException {
+        return publishConfirmed(exchange, routingKey, body, timeoutMs, null, null, null);
+    }
+
+    /** {@link #publishConfirmed(String, String, String, long)} with explicit message properties. */
+    public PublishConfirm publishConfirmed(String exchange, String routingKey, String body, long timeoutMs,
+                                           String contentType, String correlationId, Map<String, String> headers)
+            throws IOException, InterruptedException {
         Channel ch = require();
         enableConfirms(ch);
-        AMQP.BasicProperties props = MessageProperties.PERSISTENT_TEXT_PLAIN;
         ch.basicPublish(exchange == null ? "" : exchange, routingKey == null ? "" : routingKey,
-                props, (body == null ? "" : body).getBytes(StandardCharsets.UTF_8));
+                buildProperties(contentType, correlationId, headers),
+                (body == null ? "" : body).getBytes(StandardCharsets.UTF_8));
         try {
             return PublishConfirm.fromWaitForConfirms(ch.waitForConfirms(timeoutMs));
         } catch (TimeoutException e) {

@@ -1,8 +1,10 @@
 package com.nexuslink.ui.rabbitmq;
 
 import com.nexuslink.protocol.rabbitmq.BindingInfo;
+import com.nexuslink.protocol.rabbitmq.DeadLetterArgs;
 import com.nexuslink.protocol.rabbitmq.ExchangeInfo;
 import com.nexuslink.protocol.rabbitmq.OverviewInfo;
+import com.nexuslink.protocol.rabbitmq.PublishConfirm;
 import com.nexuslink.protocol.rabbitmq.QueueInfo;
 import com.nexuslink.protocol.rabbitmq.RabbitMqManagementClient;
 import com.nexuslink.protocol.rabbitmq.RabbitMqService;
@@ -19,6 +21,8 @@ import javafx.scene.layout.*;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -51,9 +55,26 @@ public final class RabbitMqView extends BorderPane {
     private final TextArea pubPayload = new TextArea();
     private final Label pubStatus = new Label();
 
+    // Publish message-properties editor + publisher confirms.
+    private final CheckBox pubConfirm = new CheckBox("Confirm");
+    private final TextField pubContentType = new TextField();
+    private final TextField pubCorrelationId = new TextField();
+    private final TextField pubHeaders = new TextField();   // "k=v, k2=v2"
+
+    // Dead-letter (DLX) arguments applied at queue-declare time.
+    private final TextField dlxExchange = new TextField();
+    private final TextField dlxRoutingKey = new TextField();
+    private final TextField dlxTtl = new TextField();
+
     private final TextField consumeQueue = new TextField();
     private final Button consumeBtn = new Button("Consume");
+    private final CheckBox manualAck = new CheckBox("Manual ack");
     private volatile String consumerTag;
+
+    // Manual-ack: unacknowledged deliveries awaiting Ack / Nack.
+    private final javafx.collections.ObservableList<RabbitMqService.Incoming> unacked =
+            FXCollections.observableArrayList();
+    private final TableView<RabbitMqService.Incoming> unackedTable = new TableView<>(unacked);
 
     private final TextArea messageLog = new TextArea();
 
@@ -162,6 +183,20 @@ public final class RabbitMqView extends BorderPane {
         exRow.setAlignment(Pos.CENTER_LEFT);
         HBox qRow = new HBox(8, label("Queue:"), queueName, durable, declQueue);
         qRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Dead-letter args applied when declaring the queue above.
+        dlxExchange.getStyleClass().add("nl-field");
+        dlxExchange.setPromptText("dead-letter exchange");
+        HBox.setHgrow(dlxExchange, Priority.ALWAYS);
+        dlxRoutingKey.getStyleClass().add("nl-field");
+        dlxRoutingKey.setPromptText("DLX routing key");
+        dlxRoutingKey.setPrefWidth(150);
+        dlxTtl.getStyleClass().add("nl-field");
+        dlxTtl.setPromptText("TTL ms");
+        dlxTtl.setPrefWidth(90);
+        HBox dlxRow = new HBox(8, label("DLX (optional):"), dlxExchange, dlxRoutingKey, dlxTtl);
+        dlxRow.setAlignment(Pos.CENTER_LEFT);
+
         HBox bindRow = new HBox(8, label("Bind queue→exchange w/ key:"), bindRoutingKey, bindBtn);
         bindRow.setAlignment(Pos.CENTER_LEFT);
 
@@ -175,11 +210,25 @@ public final class RabbitMqView extends BorderPane {
         pubPayload.setPromptText("message payload");
         pubPayload.setPrefRowCount(4);
         pubStatus.getStyleClass().add("meta-label");
+        pubConfirm.setTooltip(new Tooltip("Wait for a broker publisher-confirm (ACK / NACK / TIMEOUT)"));
         Button pubBtn = new Button("Publish");
         pubBtn.getStyleClass().add("btn-primary");
         pubBtn.setOnAction(e -> publish());
-        HBox pubRow = new HBox(8, label("Publish:"), pubExchange, pubRoutingKey, pubBtn, pubStatus);
+        HBox pubRow = new HBox(8, label("Publish:"), pubExchange, pubRoutingKey, pubConfirm, pubBtn, pubStatus);
         pubRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Message properties editor (content type / correlation id / headers).
+        pubContentType.getStyleClass().add("nl-field");
+        pubContentType.setPromptText("content-type (e.g. application/json)");
+        pubContentType.setPrefWidth(210);
+        pubCorrelationId.getStyleClass().add("nl-field");
+        pubCorrelationId.setPromptText("correlation-id");
+        pubCorrelationId.setPrefWidth(150);
+        pubHeaders.getStyleClass().add("nl-field");
+        pubHeaders.setPromptText("headers  k=v, k2=v2");
+        HBox.setHgrow(pubHeaders, Priority.ALWAYS);
+        HBox propsRow = new HBox(8, label("Properties:"), pubContentType, pubCorrelationId, pubHeaders);
+        propsRow.setAlignment(Pos.CENTER_LEFT);
 
         // Consume panel
         consumeQueue.getStyleClass().add("nl-field");
@@ -187,7 +236,8 @@ public final class RabbitMqView extends BorderPane {
         HBox.setHgrow(consumeQueue, Priority.ALWAYS);
         consumeBtn.getStyleClass().add("btn-secondary");
         consumeBtn.setOnAction(e -> toggleConsume());
-        HBox consumeRow = new HBox(8, label("Consume:"), consumeQueue, consumeBtn);
+        manualAck.setTooltip(new Tooltip("Deliver without auto-ack — Ack / Nack each message below"));
+        HBox consumeRow = new HBox(8, label("Consume:"), consumeQueue, manualAck, consumeBtn);
         consumeRow.setAlignment(Pos.CENTER_LEFT);
 
         // Message log
@@ -200,12 +250,48 @@ public final class RabbitMqView extends BorderPane {
         HBox logHeader = new HBox(8, label("Messages:"), clear);
         logHeader.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(8, exRow, qRow, bindRow, new Separator(),
-                pubRow, pubPayload, new Separator(), consumeRow, new Separator(),
+        VBox box = new VBox(8, exRow, qRow, dlxRow, bindRow, new Separator(),
+                pubRow, propsRow, pubPayload, new Separator(), consumeRow, buildUnackedPanel(), new Separator(),
                 logHeader, messageLog);
         box.setPadding(new Insets(10));
         VBox.setVgrow(messageLog, Priority.ALWAYS);
         return box;
+    }
+
+    /** The manual-ack panel: a table of unacknowledged deliveries with Ack / Nack (requeue / drop). */
+    private VBox buildUnackedPanel() {
+        TableColumn<RabbitMqService.Incoming, String> tagCol = new TableColumn<>("Tag");
+        tagCol.setCellValueFactory(c -> new ReadOnlyStringWrapper(Long.toString(c.getValue().deliveryTag())));
+        tagCol.setPrefWidth(60);
+        TableColumn<RabbitMqService.Incoming, String> rkCol = new TableColumn<>("Routing key");
+        rkCol.setCellValueFactory(c -> new ReadOnlyStringWrapper(describe(c.getValue().routingKey())));
+        rkCol.setPrefWidth(140);
+        TableColumn<RabbitMqService.Incoming, String> bodyCol = new TableColumn<>("Body");
+        bodyCol.setCellValueFactory(c -> new ReadOnlyStringWrapper(c.getValue().body()));
+        unackedTable.getColumns().setAll(java.util.List.of(tagCol, rkCol, bodyCol));
+        unackedTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        unackedTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        unackedTable.setPlaceholder(new Label("Unacknowledged deliveries appear here in manual-ack mode."));
+        unackedTable.setPrefHeight(130);
+        com.nexuslink.ui.util.TableContextMenus.installCopy(unackedTable);
+
+        Button ackBtn = new Button("Ack");
+        ackBtn.getStyleClass().add("btn-secondary");
+        ackBtn.setOnAction(e -> settleSelected(true, false));
+        Button requeueBtn = new Button("Nack + requeue");
+        requeueBtn.getStyleClass().add("btn-secondary");
+        requeueBtn.setOnAction(e -> settleSelected(false, true));
+        Button dropBtn = new Button("Nack + drop/DLX");
+        dropBtn.getStyleClass().add("btn-secondary");
+        dropBtn.setOnAction(e -> settleSelected(false, false));
+        HBox actions = new HBox(8, label("Unacked:"), ackBtn, requeueBtn, dropBtn);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox panel = new VBox(6, actions, unackedTable);
+        // Only relevant in manual-ack mode; hidden (and not laid out) otherwise.
+        panel.visibleProperty().bind(manualAck.selectedProperty());
+        panel.managedProperty().bind(manualAck.selectedProperty());
+        return panel;
     }
 
     // ------------------------------------------------------------------
@@ -489,13 +575,17 @@ public final class RabbitMqView extends BorderPane {
                 service.connect(broker, Env.resolve(userField.getText().trim()), Env.resolve(passField.getText()));
                 service.setListener(new RabbitMqService.MessageListener() {
                     @Override public void onMessage(RabbitMqService.Incoming m) {
-                        Platform.runLater(() -> append("◀ " + describe(m.exchange()) + " / "
-                                + describe(m.routingKey()) + "  " + m.body()));
+                        Platform.runLater(() -> {
+                            append("◀ " + describe(m.exchange()) + " / "
+                                    + describe(m.routingKey()) + "  " + m.body());
+                            if (manualAck.isSelected()) unacked.add(m);   // awaits Ack / Nack below
+                        });
                     }
                     @Override public void onCancelled(String tag) {
                         Platform.runLater(() -> {
                             consumerTag = null;
                             consumeBtn.setText("Consume");
+                            unacked.clear();
                             append("⚠ consumer cancelled by broker");
                         });
                     }
@@ -534,9 +624,29 @@ public final class RabbitMqView extends BorderPane {
         String name = Env.resolve(queueName.getText().trim());   // resolve ${VAR} in the queue name
         if (name.isEmpty() || !service.isConnected()) return;
         boolean dur = durable.isSelected();
-        runAction(() -> service.declareQueue(name, dur),
-                () -> append("⊕ queue " + name + (dur ? " (durable)" : "")),
+        Map<String, Object> args = deadLetterArgs();
+        runAction(() -> service.declareQueue(name, dur, args),
+                () -> append("⊕ queue " + name + (dur ? " (durable)" : "")
+                        + (args.isEmpty() ? "" : " → DLX " + describe(dlxExchange.getText().trim()))),
                 err -> append("⚠ declare queue failed: " + err.getMessage()));
+    }
+
+    /** Builds the dead-letter {@code x-args} from the DLX fields, or an empty map when no DLX is set. */
+    private Map<String, Object> deadLetterArgs() {
+        String dlx = Env.resolve(dlxExchange.getText().trim());
+        if (dlx.isEmpty()) return Map.of();
+        DeadLetterArgs args = DeadLetterArgs.builder().deadLetterExchange(dlx);
+        String rk = Env.resolve(dlxRoutingKey.getText().trim());
+        if (!rk.isEmpty()) args.deadLetterRoutingKey(rk);
+        String ttl = dlxTtl.getText().trim();
+        if (!ttl.isEmpty()) {
+            try {
+                args.messageTtl(Long.parseLong(ttl));
+            } catch (IllegalArgumentException ex) {   // NumberFormatException or messageTtl's range check
+                append("⚠ DLX TTL must be a non-negative number (ms) — ignored");
+            }
+        }
+        return args.build();
     }
 
     private void bind() {
@@ -558,19 +668,59 @@ public final class RabbitMqView extends BorderPane {
         String key = Env.resolve(pubRoutingKey.getText().trim());
         if (exchange.isEmpty() && key.isEmpty()) { pubStatus.setText("Enter an exchange or routing key"); return; }
         String payload = Env.resolve(pubPayload.getText());
+        String contentType = Env.resolve(pubContentType.getText().trim());
+        String correlationId = Env.resolve(pubCorrelationId.getText().trim());
+        Map<String, String> headers = parseHeaders(pubHeaders.getText());
+        boolean confirm = pubConfirm.isSelected();
         pubStatus.getStyleClass().setAll("meta-label");
-        pubStatus.setText("Publishing…");
-        runAction(() -> service.publish(exchange, key, payload),
-                () -> {
-                    pubStatus.getStyleClass().setAll("status-2xx");
-                    pubStatus.setText("✓ sent");
-                    append("▶ " + describe(exchange) + " / " + describe(key) + "  " + payload);
-                    logger.accept("RabbitMQ published → " + describe(exchange) + "/" + describe(key));
-                },
-                err -> {
-                    pubStatus.getStyleClass().setAll("status-err");
-                    pubStatus.setText("✖ " + err.getMessage());
-                });
+        pubStatus.setText(confirm ? "Publishing (awaiting confirm)…" : "Publishing…");
+
+        if (confirm) {
+            Task<PublishConfirm> task = new Task<>() {
+                @Override protected PublishConfirm call() throws Exception {
+                    return service.publishConfirmed(exchange, key, payload, 5000, contentType, correlationId, headers);
+                }
+            };
+            task.setOnSucceeded(e -> {
+                PublishConfirm c = task.getValue();
+                boolean ok = c == PublishConfirm.ACKED;
+                pubStatus.getStyleClass().setAll(ok ? "status-2xx" : "status-err");
+                pubStatus.setText((ok ? "✓ " : "✖ ") + c);
+                append("▶ " + describe(exchange) + " / " + describe(key) + "  " + payload + "  [" + c + "]");
+                logger.accept("RabbitMQ published (" + c + ") → " + describe(exchange) + "/" + describe(key));
+            });
+            task.setOnFailed(e -> {
+                pubStatus.getStyleClass().setAll("status-err");
+                pubStatus.setText("✖ " + task.getException().getMessage());
+            });
+            runBg(task, "rabbitmq-publish");
+        } else {
+            runAction(() -> service.publish(exchange, key, payload, contentType, correlationId, headers),
+                    () -> {
+                        pubStatus.getStyleClass().setAll("status-2xx");
+                        pubStatus.setText("✓ sent");
+                        append("▶ " + describe(exchange) + " / " + describe(key) + "  " + payload);
+                        logger.accept("RabbitMQ published → " + describe(exchange) + "/" + describe(key));
+                    },
+                    err -> {
+                        pubStatus.getStyleClass().setAll("status-err");
+                        pubStatus.setText("✖ " + err.getMessage());
+                    });
+        }
+    }
+
+    /** Parses a {@code "k=v, k2=v2"} string into an ordered header map; blank entries/keys are skipped. */
+    private Map<String, String> parseHeaders(String raw) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        if (raw == null || raw.isBlank()) return headers;
+        for (String pair : raw.split(",")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;   // needs a non-empty key before '='
+            String k = pair.substring(0, eq).trim();
+            String v = Env.resolve(pair.substring(eq + 1).trim());   // resolve ${VAR} in header values
+            if (!k.isEmpty()) headers.put(k, v);
+        }
+        return headers;
     }
 
     private void toggleConsume() {
@@ -578,23 +728,46 @@ public final class RabbitMqView extends BorderPane {
         if (consumerTag != null) {
             String tag = consumerTag;
             runAction(() -> service.cancel(tag),
-                    () -> { consumerTag = null; consumeBtn.setText("Consume"); append("⊖ stopped consuming"); },
+                    () -> { consumerTag = null; consumeBtn.setText("Consume"); unacked.clear(); append("⊖ stopped consuming"); },
                     err -> append("⚠ cancel failed: " + err.getMessage()));
             return;
         }
         String queue = Env.resolve(consumeQueue.getText().trim());   // resolve ${VAR} in the queue name
         if (queue.isEmpty()) { append("⚠ enter a queue to consume"); return; }
+        boolean manual = manualAck.isSelected();
         Task<String> task = new Task<>() {
-            @Override protected String call() throws Exception { return service.consume(queue, false); }
+            @Override protected String call() throws Exception {
+                return manual ? service.consumeManual(queue) : service.consume(queue, false);
+            }
         };
         task.setOnSucceeded(e -> {
             consumerTag = task.getValue();
             consumeBtn.setText("Stop");
-            append("⊕ consuming " + queue);
+            append("⊕ consuming " + queue + (manual ? " (manual ack)" : ""));
             logger.accept("RabbitMQ consuming ← " + queue);
         });
         task.setOnFailed(e -> append("⚠ consume failed: " + task.getException().getMessage()));
         runBg(task, "rabbitmq-consume");
+    }
+
+    /** Acks, or nacks (requeue / drop-or-DLX), the selected unacked deliveries, then drops them from the table. */
+    private void settleSelected(boolean ackIt, boolean requeue) {
+        if (!service.isConnected()) { append("⚠ connect first"); return; }
+        java.util.List<RabbitMqService.Incoming> selected =
+                new java.util.ArrayList<>(unackedTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) { append("⚠ select one or more unacked deliveries first"); return; }
+        runAction(() -> {
+                    for (RabbitMqService.Incoming m : selected) {
+                        if (ackIt) service.ack(m.deliveryTag());
+                        else service.nack(m.deliveryTag(), requeue);
+                    }
+                },
+                () -> {
+                    unacked.removeAll(selected);
+                    String verb = ackIt ? "ack" : (requeue ? "nack+requeue" : "nack+drop/DLX");
+                    append("✓ " + verb + " " + selected.size() + " delivery(ies)");
+                },
+                err -> append("⚠ settle failed: " + err.getMessage()));
     }
 
     private String describe(String value) {
