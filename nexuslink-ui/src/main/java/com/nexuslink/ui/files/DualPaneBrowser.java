@@ -18,6 +18,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -65,9 +68,13 @@ public final class DualPaneBrowser extends BorderPane {
         localPane.setOnActivateFile(f -> upload(List.of(f)));
         remotePane.setOnActivateFile(f -> download(List.of(f)));
 
-        // Drag-and-drop: drop local files onto the remote pane to upload, and vice versa.
-        remotePane.setOnDropFromOther(this::upload);
-        localPane.setOnDropFromOther(this::download);
+        // Drag-and-drop: drop files onto the remote pane to upload, onto the local pane to download,
+        // each into the folder row under the cursor (or the pane's current directory).
+        remotePane.setOnDropFromOther((items, dir) -> enqueue(items, TransferItem.Direction.UPLOAD, false, dir));
+        localPane.setOnDropFromOther((items, dir) -> enqueue(items, TransferItem.Direction.DOWNLOAD, false, dir));
+        // External drag-and-drop from the OS file manager: upload onto the remote side, copy on the local side.
+        remotePane.setOnExternalDrop(this::uploadExternal);
+        localPane.setOnExternalDrop(this::copyLocalExternal);
 
         // Synchronized browsing: when one pane navigates, mirror the relative move onto the other.
         localPane.setOnChanged(() -> onPaneNavigated(true));
@@ -379,8 +386,15 @@ public final class DualPaneBrowser extends BorderPane {
         enqueue(items, direction, false);
     }
 
-    /** Enqueues the selection (files and whole folders) toward the opposite pane's directory. */
-    private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction, boolean moveMode) {
+    /** Enqueues the selection toward the opposite pane's <em>current</em> directory. */
+    private void enqueue(List<FileItem> items, TransferItem.Direction direction, boolean moveMode) {
+        String destDir = direction == TransferItem.Direction.UPLOAD
+                ? remotePane.currentPath() : localPane.currentPath();
+        enqueue(items, direction, moveMode, destDir);
+    }
+
+    /** Enqueues the selection (files and whole folders) into an explicit destination directory. */
+    private void enqueue(List<FileItem> itemsRaw, TransferItem.Direction direction, boolean moveMode, String destDir) {
         if (!remoteConnected) {
             messageLabel.setText("Connect to a remote server before transferring files");
             return;
@@ -390,8 +404,6 @@ public final class DualPaneBrowser extends BorderPane {
             messageLabel.setText("Select one or more files or folders to transfer");
             return;
         }
-        String destDir = direction == TransferItem.Direction.UPLOAD
-                ? remotePane.currentPath() : localPane.currentPath();
         // Each batch gets its own resolver so "Overwrite all / Skip all" applies only to this batch.
         OverwriteResolver resolver = new OverwriteResolver(this::promptOverwrite);
         queuePanel.setExpanded(true);
@@ -423,6 +435,60 @@ public final class DualPaneBrowser extends BorderPane {
         String verb = direction == TransferItem.Direction.UPLOAD ? "upload" : "download";
         messageLabel.setText("Queued " + count + " " + verb + "(s)");
         logger.accept("Queued " + count + " " + verb + "(s)");
+    }
+
+    /**
+     * Uploads files dragged in from the OS file manager into remote directory {@code remoteDir}. The
+     * dropped local paths are wrapped as local {@link FileItem}s and flow through the normal transfer
+     * queue (folders expand recursively), so progress, throttling and overwrite prompts all apply.
+     */
+    private void uploadExternal(List<Path> paths, String remoteDir) {
+        List<FileItem> items = paths.stream().map(DualPaneBrowser::toLocalItem)
+                .filter(java.util.Objects::nonNull).toList();
+        if (items.isEmpty()) return;
+        enqueue(items, TransferItem.Direction.UPLOAD, false, remoteDir);
+    }
+
+    /** Copies files dragged in from the OS file manager into local directory {@code destDir}. */
+    private void copyLocalExternal(List<Path> paths, String destDir) {
+        Path dest = Path.of(destDir);
+        messageLabel.setText("Copying " + paths.size() + " item(s)…");
+        Thread t = new Thread(() -> {
+            int done = 0;
+            for (Path src : paths) {
+                try { copyRecursively(src, dest.resolve(src.getFileName().toString())); done++; }
+                catch (IOException ex) { logger.accept("Copy failed for " + src + ": " + ex.getMessage()); }
+            }
+            int finalDone = done;
+            Platform.runLater(() -> {
+                messageLabel.setText("Copied " + finalDone + " of " + paths.size() + " item(s)");
+                localPane.refresh();
+            });
+        }, "external-copy");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void copyRecursively(Path src, Path dst) throws IOException {
+        if (Files.isDirectory(src)) {
+            Files.createDirectories(dst);
+            try (var children = Files.list(src)) {
+                for (Path child : children.sorted().toList()) {
+                    copyRecursively(child, dst.resolve(child.getFileName().toString()));
+                }
+            }
+        } else {
+            if (dst.getParent() != null) Files.createDirectories(dst.getParent());
+            Files.copy(src, dst, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static FileItem toLocalItem(Path p) {
+        if (p == null || !Files.exists(p)) return null;
+        boolean dir = Files.isDirectory(p);
+        long size = 0;
+        try { size = dir ? 0 : Files.size(p); } catch (IOException ignored) { }
+        return FileItem.of(p.getFileName().toString(), p.toAbsolutePath().toString(), dir, size, "", "");
     }
 
     /**

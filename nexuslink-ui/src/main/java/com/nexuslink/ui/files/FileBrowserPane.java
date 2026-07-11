@@ -18,7 +18,10 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -53,7 +56,10 @@ public final class FileBrowserPane extends VBox {
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
     private Runnable onChanged = () -> {};
-    private Consumer<List<FileItem>> onDropFromOther = items -> {};
+    // (items dragged from the other pane, target directory) → transfer into that directory.
+    private BiConsumer<List<FileItem>, String> onDropFromOther = (items, dir) -> {};
+    // (files dragged in from the OS file manager, target directory) → upload/copy into that directory.
+    private BiConsumer<List<Path>, String> onExternalDrop = (paths, dir) -> {};
     private Runnable onFocused = () -> {};
     private Consumer<String> onOpenTerminal = null;   // set → an "Open terminal here" context item appears
     private final MenuItem openTerminalItem = new MenuItem("Open terminal here");
@@ -82,9 +88,20 @@ public final class FileBrowserPane extends VBox {
     /** Notified after a successful navigation/refresh (so the container can refresh the other pane). */
     public void setOnChanged(Runnable handler) { this.onChanged = handler == null ? () -> {} : handler; }
 
-    /** Notified when files dragged from the <em>other</em> pane are dropped onto this one (transfer). */
-    public void setOnDropFromOther(Consumer<List<FileItem>> handler) {
-        this.onDropFromOther = handler == null ? items -> {} : handler;
+    /**
+     * Notified when files dragged from the <em>other</em> pane are dropped onto this one: the items and
+     * the destination directory (a folder row under the cursor, else this pane's current directory).
+     */
+    public void setOnDropFromOther(BiConsumer<List<FileItem>, String> handler) {
+        this.onDropFromOther = handler == null ? (items, dir) -> {} : handler;
+    }
+
+    /**
+     * Notified when files are dragged in from the OS file manager and dropped onto this pane: the local
+     * paths and the destination directory (a folder row under the cursor, else the current directory).
+     */
+    public void setOnExternalDrop(BiConsumer<List<Path>, String> handler) {
+        this.onExternalDrop = handler == null ? (paths, dir) -> {} : handler;
     }
 
     /** Notified when this pane's table gains keyboard focus, so a container can track the active pane. */
@@ -203,11 +220,16 @@ public final class FileBrowserPane extends VBox {
                 ClipboardContent content = new ClipboardContent();
                 content.put(FILE_DRAG, sel.size());
                 content.putString(sel.size() + " file(s)");
+                // Local files exist on disk → also expose them as OS files so they can be dragged out
+                // to the desktop / another app. Remote paths don't resolve, so this is a no-op there.
+                List<File> realFiles = sel.stream().map(f -> new File(f.path())).filter(File::exists).toList();
+                if (!realFiles.isEmpty()) content.putFiles(realFiles);
                 db.setContent(content);
                 draggedItems = sel;
                 dragSource = FileBrowserPane.this;
                 e.consume();
             });
+            wireRowDropTarget(row);
             return row;
         });
         wireDropTarget();
@@ -255,32 +277,83 @@ public final class FileBrowserPane extends VBox {
         return menu;
     }
 
-    /** Accepts drops of files dragged from the other pane; highlights while hovering. */
+    /**
+     * Table-level drop target: accepts files dragged from the other pane <em>or</em> from the OS file
+     * manager, dropping them into this pane's current directory (drops onto a folder row are handled at
+     * the row level and never reach here). Highlights the whole table while hovering over empty space.
+     */
     private void wireDropTarget() {
         table.setOnDragOver(e -> {
-            if (dragSource != null && dragSource != this && e.getDragboard().hasContent(FILE_DRAG)) {
-                e.acceptTransferModes(TransferMode.COPY);
-            }
+            if (acceptsDrag(e.getDragboard())) e.acceptTransferModes(TransferMode.COPY);
             e.consume();
         });
         table.setOnDragEntered(e -> {
-            if (dragSource != null && dragSource != this && e.getDragboard().hasContent(FILE_DRAG)) {
-                if (!table.getStyleClass().contains("drop-target")) table.getStyleClass().add("drop-target");
+            if (acceptsDrag(e.getDragboard()) && !table.getStyleClass().contains("drop-target")) {
+                table.getStyleClass().add("drop-target");
             }
             e.consume();
         });
         table.setOnDragExited(e -> { table.getStyleClass().remove("drop-target"); e.consume(); });
         table.setOnDragDropped(e -> {
-            boolean ok = false;
-            if (dragSource != null && dragSource != this && draggedItems != null) {
-                onDropFromOther.accept(List.copyOf(draggedItems));
-                ok = true;
-            }
+            boolean ok = handleDrop(e.getDragboard(), currentPath);
             table.getStyleClass().remove("drop-target");
             e.setDropCompleted(ok);
             e.consume();
         });
         table.setOnDragDone(e -> { draggedItems = null; dragSource = null; e.consume(); });
+    }
+
+    /**
+     * Row-level drop target so files can be dropped directly onto a <em>folder row</em> (not only the
+     * pane's current directory). Non-folder rows don't consume the drag, so it falls through to the
+     * table-level handler and lands in the current directory.
+     */
+    private void wireRowDropTarget(TableRow<FileItem> row) {
+        row.setOnDragOver(e -> {
+            if (isFolderDropTarget(row) && acceptsDrag(e.getDragboard())) {
+                e.acceptTransferModes(TransferMode.COPY);
+                e.consume();
+            }
+        });
+        row.setOnDragEntered(e -> {
+            if (isFolderDropTarget(row) && acceptsDrag(e.getDragboard())) {
+                if (!row.getStyleClass().contains("drop-target")) row.getStyleClass().add("drop-target");
+                e.consume();
+            }
+        });
+        row.setOnDragExited(e -> { row.getStyleClass().remove("drop-target"); });
+        row.setOnDragDropped(e -> {
+            if (!isFolderDropTarget(row)) return;   // let the table-level handler take it
+            boolean ok = handleDrop(e.getDragboard(), row.getItem().path());
+            row.getStyleClass().remove("drop-target");
+            e.setDropCompleted(ok);
+            e.consume();
+        });
+    }
+
+    /** A real directory row (not empty, not the ".." row) that a drop can target. */
+    private boolean isFolderDropTarget(TableRow<FileItem> row) {
+        return !row.isEmpty() && row.getItem() != null
+                && row.getItem().directory() && !row.getItem().parent();
+    }
+
+    /** True if the dragboard carries files from the other pane or from the OS. */
+    private boolean acceptsDrag(Dragboard db) {
+        boolean fromOtherPane = dragSource != null && dragSource != this && db.hasContent(FILE_DRAG);
+        return fromOtherPane || db.hasFiles();
+    }
+
+    /** Routes a drop of {@code destDir}: cross-pane items to the transfer handler, OS files to upload/copy. */
+    private boolean handleDrop(Dragboard db, String destDir) {
+        if (dragSource != null && dragSource != this && db.hasContent(FILE_DRAG) && draggedItems != null) {
+            onDropFromOther.accept(List.copyOf(draggedItems), destDir);
+            return true;
+        }
+        if (db.hasFiles()) {
+            List<Path> paths = db.getFiles().stream().map(File::toPath).toList();
+            if (!paths.isEmpty()) { onExternalDrop.accept(paths, destDir); return true; }
+        }
+        return false;
     }
 
     private void activate(FileItem item) {

@@ -420,6 +420,12 @@
     -fx-border-width: 2;
     -fx-background-color: -nl-accent-soft;
 }
+/* Highlight a folder row while files are dragged over it (drop-into-folder affordance). */
+.file-pane .table-row-cell.drop-target {
+    -fx-background-color: -nl-accent-soft;
+    -fx-border-color: -nl-accent;
+    -fx-border-width: 1 0 1 0;
+}
 
 /* ---------- Contextual help & onboarding (hint package) ---------- */
 .help-button {
