@@ -110,6 +110,10 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-ssh</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-security</artifactId>
         </dependency>
         <dependency>

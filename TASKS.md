@@ -120,6 +120,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | protocol-secrets | `SecretsManagerLiveIT` | LocalStack Secrets Manager (create/read/put/versions/delete) |
 | protocol-secrets | `ConjurLiveIT` | CyberArk Conjur OSS (authenticate + read secret; `--profile conjur`) |
 | protocol-azure | `AzureLiveIT` | Azurite (list containers/blobs) |
+| protocol-servicebus | `ServiceBusLiveIT` | Service Bus emulator send/receive (`SERVICEBUS_CONNECTION_STRING`; `--profile proprietary`) |
+| protocol-ssh | `SshTerminalLiveIT` | embedded MINA SSHD + real `/bin/sh` (connect→shell→echo→read); no Docker |
 | protocol-gcs | `GcsLiveIT` | fake-gcs-server (emulator-aware `GcsService`) |
 | protocol-pubsub | `PubSubLiveIT` | Google Pub/Sub emulator (topic/sub/publish/pull round-trip) |
 | protocol-sftp | `SftpLiveIT` | atmoz/sftp (upload/list/read/delete) |
@@ -985,9 +987,26 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `LdapLiveIT` searches use RFC-4515 filters against the local OpenLDAP.
 
 ### 8.5 SSH Terminal
-- [ ] `SshTerminalService` — Apache MINA SSHD
-- [ ] `TerminalView` — xterm emulation (JediTerm or custom VT100 renderer)
-- [ ] Multi-tab sessions, local port forwarding config
+- [x] `SshTerminalService` — Apache MINA SSHD (new `nexuslink-protocol-ssh` module). Opens a PTY-backed
+      interactive shell channel (password **or** OpenSSH private-key auth), pumps remote output to a byte
+      consumer on a reader thread, `write(...)` sends keystrokes, `resize(cols,rows)` forwards a
+      window-change so curses apps reflow. **Live E2E verified** by `SshTerminalLiveIT` — an embedded MINA
+      SSHD server (same JVM, real `/bin/sh` shell) driven through connect→auth→shell→`echo`→read-output
+      (gated `-Dnexuslink.it=true`, POSIX-only; needs no Docker/host).
+- [x] `TerminalView` — **custom VT100/xterm renderer** (no JediTerm dep). Pure `VtScreen` screen-buffer
+      model is the offline-tested core (**22 tests**): printable + auto-wrap (deferred wrap at last
+      column), CR/LF/BS/TAB/BEL, cursor movement (CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP/HVP/VPA), erase
+      (ED/EL/ECH), insert/delete char + line (ICH/DCH/IL/DL), scroll region (DECSTBM) with index/
+      reverse-index, save/restore cursor, SGR (16-colour + bright + **xterm-256** + truecolour→256
+      collapse, bold/inverse/reset), cursor visibility (DECTCEM), and the **alternate screen buffer**
+      (?1049/?1047/?47); OSC titles + unknown sequences parsed-and-ignored, never throws. `TerminalView`
+      renders it onto a JavaFX `Canvas` in a monospace font with the `AnsiPalette` (xterm-256 → `Color`),
+      a reader-thread→queue→`AnimationTimer` drain-feed-repaint loop (all screen mutations on the FX
+      thread), full keystroke encoding (arrows/Home/End/PgUp-Dn/Del/Ins/F1-F4/Ctrl-combos), and reflows
+      both the local model and the remote PTY on resize. Wired into the shell (ProtocolDef "ssh"); the tab
+      `dispose()`s its session + render loop on close.
+- [x] Multi-tab sessions (each shell opens its own tab), local port forwarding config
+      (`localPort:remoteHost:remotePort` field → `SshTerminalService.startLocalForward`).
 
 ### 8.6 SNMP Browser
 - [x] `SnmpService` — SNMP4J community **v1/v2c** GET + WALK (GETNEXT subtree loop w/ end-of-MIB +

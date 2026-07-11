@@ -30,6 +30,7 @@
         <module>nexuslink-protocol-rabbitmq</module>
         <module>nexuslink-protocol-ldap</module>
         <module>nexuslink-protocol-snmp</module>
+        <module>nexuslink-protocol-ssh</module>
         <module>nexuslink-protocol-redis</module>
         <module>nexuslink-protocol-azure</module>
         <module>nexuslink-protocol-servicebus</module>
@@ -254,6 +255,12 @@
             <dependency>
                 <groupId>com.nexuslink</groupId>
                 <artifactId>nexuslink-protocol-snmp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.nexuslink</groupId>
+                <artifactId>nexuslink-protocol-ssh</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

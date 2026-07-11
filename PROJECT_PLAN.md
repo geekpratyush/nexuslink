@@ -133,7 +133,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (live) + **RabbitMQ** (dashboard + DLX) + **AWS SQS/SNS** (full UI + DLQ redrive, live vs LocalStack) + **JMS** (service live vs Artemis, UI pending) + **IBM MQ** + **Solace** + **Google Pub/Sub** + **Azure Service Bus** (queues + topics/subs + DLQ, emulator-aware) done; MQTT v5 pending (all Docker-doable) |
 | **6** | Advanced HTTP (gRPC, GraphQL) | ✅ **gRPC** (reflection, unary, **pure `.proto` parser**) + **GraphQL** (query/introspection + **schema explorer**) done; streaming/subscription panels pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟡 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·recursive·integrity-verify·auto-retry), move, batch-rename, dir-compare + sync, bookmarks, properties**; resume/parallel/external-DnD/SSH-terminal pending |
-| **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export + **visual query builder + EXPLAIN + in-grid/structure editing**) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF + DIT tree) + **SNMP** (v1/v2c/v3 USM on the wire + MIB names + trap/inform receiver) done; SSH terminal pending |
+| **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export + **visual query builder + EXPLAIN + in-grid/structure editing**) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF + DIT tree) + **SNMP** (v1/v2c/v3 USM on the wire + MIB names + trap/inform receiver) + **SSH terminal** (MINA SSHD PTY shell + custom VT100/xterm renderer with xterm-256 + alt-screen + local port forwarding) done |
 | **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** + **External Secret Vaults** (HashiCorp Vault KV v2 + AWS Secrets Manager + CyberArk Conjur + `SecretVaultsView` UI, all live-verified) done; charts + jlink pending. _Cloud sync, RBAC, Azure Key Vault, auto-updater, cross-OS signed installers → **out of scope** (see TASKS.md)._ |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
@@ -156,12 +156,12 @@ the local Docker stack:
 
 1. **Docker-verified brokers** (add-dep → service → gated `*LiveIT` → compose service → UI): JMS UI (service
    already live vs Artemis) · HashiCorp Vault · AWS Secrets Manager (LocalStack) · CyberArk Conjur · IBM MQ ·
-   Solace · Google Pub/Sub · Azure Service Bus (preview emulator) · MQTT v5 (Paho v5 lib swap).
+   Solace · ✅ Google Pub/Sub · ✅ Azure Service Bus (emulator) · MQTT v5 (Paho v5 lib swap).
 2. **Chart / dashboard UI** (verify by launching) — Kafka live lag chart + JMX + heatmap; distributed-tracing
    tree view; connection-state panel. (Underlying pure summaries/models already exist.)
 3. **File-commander depth** — resume interrupted transfers (offset), parallel transfers, external-OS
    drag-and-drop, quick-view/edit-in-place, SCP mode, object-storage commander reuse.
-4. **SSH terminal** — MINA SSHD service vs `openssh-server` (Docker) + a VT100 renderer UI.
+4. ✅ **SSH terminal** — MINA SSHD PTY shell + a custom VT100/xterm renderer UI (done).
 5. **Help/onboarding UI** — `HelpButton`, tooltip-plus, `ErrorHelpLink`, empty-state, first-run overlay.
 6. **`jlink`** runtime slimming (the only in-scope packaging item left).
 

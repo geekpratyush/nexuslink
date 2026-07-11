@@ -445,6 +445,15 @@ public final class MainWindow {
         return view;
     }
 
+    private com.nexuslink.ui.terminal.TerminalView openSshTab() {
+        com.nexuslink.ui.terminal.TerminalView view = new com.nexuslink.ui.terminal.TerminalView();
+        view.setLogger(this::log);
+        addTab("SSH " + (++newTabCounter), view);
+        // Tear down the SSH session + render loop whenever the tab closes (native X or the tab menu).
+        workspace.getTabs().get(workspace.getTabs().size() - 1).setOnClosed(e -> view.dispose());
+        return view;
+    }
+
     private RedisView openRedisTab() {
         RedisView view = new RedisView();
         view.setLogger(this::log);
@@ -795,6 +804,7 @@ public final class MainWindow {
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),
                 new ProtocolDef("snmp", "SNMP Browser", "New SNMP Browser", "server", this::openSnmpTab),
+                new ProtocolDef("ssh", "SSH Terminal", "New SSH Terminal", "server", this::openSshTab),
                 new ProtocolDef("mcp", "MCP Inspector", "New MCP Inspector", "mcp", this::openMcpTab),
                 new ProtocolDef("llm", "AI / LLM Tester", "New AI / LLM Tester", "ai", this::openLlmTab),
                 new ProtocolDef("agent", "AI Agent (MCP tools)", "New AI Agent", "ai", this::openAgentTab));
