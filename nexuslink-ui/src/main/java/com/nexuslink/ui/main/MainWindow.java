@@ -396,6 +396,13 @@ public final class MainWindow {
         return view;
     }
 
+    private com.nexuslink.ui.servicebus.ServiceBusView openServiceBusTab() {
+        com.nexuslink.ui.servicebus.ServiceBusView view = new com.nexuslink.ui.servicebus.ServiceBusView();
+        view.setLogger(this::log);
+        addTab("Service Bus " + (++newTabCounter), view);
+        return view;
+    }
+
     private KafkaView openKafkaTab() {
         KafkaView view = new KafkaView();
         view.setLogger(this::log);
@@ -784,6 +791,7 @@ public final class MainWindow {
                 new ProtocolDef("solace", "Solace PubSub+", "New Solace Client", "topic", this::openSolaceTab),
                 new ProtocolDef("sqs", "AWS SQS / SNS", "New SQS / SNS Client", "topic", this::openSqsTab),
                 new ProtocolDef("pubsub", "Google Pub/Sub", "New Google Pub/Sub Client", "topic", this::openPubSubTab),
+                new ProtocolDef("servicebus", "Azure Service Bus", "New Azure Service Bus Client", "topic", this::openServiceBusTab),
                 new ProtocolDef("redis", "Redis", "New Redis Client", "database", this::openRedisTab),
                 new ProtocolDef("ldap", "LDAP / Active Directory", "New LDAP Browser", "server", this::openLdapTab),
                 new ProtocolDef("snmp", "SNMP Browser", "New SNMP Browser", "server", this::openSnmpTab),

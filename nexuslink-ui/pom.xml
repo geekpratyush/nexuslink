@@ -86,6 +86,10 @@
         </dependency>
         <dependency>
             <groupId>com.nexuslink</groupId>
+            <artifactId>nexuslink-protocol-servicebus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.nexuslink</groupId>
             <artifactId>nexuslink-protocol-gcs</artifactId>
         </dependency>
         <dependency>

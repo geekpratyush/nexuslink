@@ -635,7 +635,19 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] AWS SNS: publish, subscription listing — `SnsService` (same module): create/list/delete topics, publish
       (subject+message), list subscriptions. **Live-verified** (create→publish→list) vs LocalStack. **UI:**
       `SqsSnsView` Topics tab — topic list, create/delete, publish, per-topic subscriptions table.
-- [ ] Azure Service Bus: queue/topic/subscription, sessions, DLQ
+- [x] Azure Service Bus: queue/topic/subscription, DLQ — new `nexuslink-protocol-servicebus` module:
+      `ServiceBusService` (Azure Messaging SDK) manages queues + topics/subscriptions via the
+      administration API and sends / peek-lock-receives-and-completes on the data plane, including each
+      entity's **dead-letter sub-queue** (`SubQueue.DEAD_LETTER_QUEUE`). Emulator-aware: a connection
+      string with `UseDevelopmentEmulator=true` targets the local emulator (AMQP data plane only — its
+      entities are pre-provisioned, no HTTP admin), a real `*.servicebus.windows.net` namespace gets full
+      management. Pure driver-free `ServiceBusConnectionString.parse(...)` (Endpoint/keys/EntityPath/dev
+      flag, first-`=` split so SAS padding survives, derived namespace host) — **13 tests**. `ServiceBusView`
+      (Queues + Topics tabs, DLQ checkbox on both receive panels) wired into the shell (ProtocolDef
+      "servicebus"). `ServiceBusLiveIT` (gated on `-Dnexuslink.it=true` + `SERVICEBUS_CONNECTION_STRING`)
+      + emulator added to `test-env` `proprietary` profile (`servicebus` + backing `servicebus-sql`,
+      `servicebus/config.json` provisioning queue.1 / topic.1·subscription.1). _Sessions TODO; LiveIT not
+      yet run — needs the emulator container up._
 - [x] Google Pub/Sub: publish, pull subscription — new `nexuslink-protocol-pubsub` module: `PubSubService`
       (emulator-aware via `PUBSUB_EMULATOR_HOST`, plaintext gRPC + no-creds) — create/list/delete topics &
       subscriptions, publish, synchronous pull-with-ack. 4 unit tests + `PubSubLiveIT` green vs the

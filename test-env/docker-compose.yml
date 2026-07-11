@@ -172,6 +172,33 @@ services:
       timeout: 10s
       retries: 30
 
+  # Not open source: the "Azure Service Bus emulator" (free for development only, proprietary). It has
+  # no management/HTTP admin API — its queues/topics/subscriptions are pre-provisioned from
+  # ./servicebus/config.json — and it needs a backing SQL Edge container. Same profile treatment as the
+  # brokers above:  docker compose -f test-env/docker-compose.yml --profile proprietary up -d servicebus
+  # App/LiveIT connection string:
+  #   Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;
+  servicebus:                                  # Microsoft Azure Service Bus emulator EULA (dev-only)
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    profiles: ["proprietary"]
+    depends_on:
+      - servicebus-sql
+    environment:
+      SQL_SERVER: servicebus-sql
+      MSSQL_SA_PASSWORD: "Nexus_123_dev"        # must match the SQL Edge container below
+      ACCEPT_EULA: "Y"                          # accepts the emulator's dev-only EULA
+    ports: ["5672:5672"]                        # AMQP data plane (sb://localhost)
+    volumes:
+      - ./servicebus/config.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+
+  servicebus-sql:                              # backing store the emulator requires
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    profiles: ["proprietary"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Nexus_123_dev"
+    # No published port — reached only by the emulator over the compose network.
+
   # ---- PHASE 5: MQTT ----
   mosquitto:                                   # EPL-2.0 / EDL-1.0
     image: eclipse-mosquitto:2
