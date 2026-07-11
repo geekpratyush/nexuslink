@@ -730,10 +730,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Keep the connect bar **and** the dual pane visible together (the body is no longer swapped for a placeholder)
 
 **Per-pane navigation**
-- [-] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history —
-      **done:** editable address field + a clickable **breadcrumb trail** (pure `PathCrumbs` helper walks
-      up via the FileSystem's parent fn, works for POSIX + local paths; 5 tests) + Up button. _(back/forward
-      history still TODO)_
+- [x] Address/path bar with manual path entry + breadcrumb; **Up**, **Home**, back/forward history —
+      editable address field + a clickable **breadcrumb trail** (pure `PathCrumbs` helper walks
+      up via the FileSystem's parent fn, works for POSIX + local paths; 5 tests) + Up button.
+      **back/forward history done:** pure JavaFX-free `NavHistory` (browser-style visited-path stack with a
+      movable cursor — `visit` truncates the forward branch on a new nav, `back`/`forward` walk without
+      recording, re-visiting the current path is a no-op so refresh never pollutes it; 5 tests) wired into
+      `FileBrowserPane` as ‹ / › toolbar buttons that enable/disable off the cursor and reset on disconnect.
 - [x] Default listing order: ".." first, directories before files, case-insensitive name (pure `FileOrder`
       comparator) — **interactive click-to-sort columns done:** clicking a Name/Size/Modified/Permissions
       header picks the sort key + direction through a single `TableView` sort policy while the ".." row and

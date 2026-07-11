@@ -43,6 +43,9 @@ public final class FileBrowserPane extends VBox {
     private final TextField filterField = new TextField();
     private final ToggleButton showHidden = new ToggleButton("• Hidden");
     private final MenuButton bookmarksButton = new MenuButton("★");
+    private final Button backButton = new Button("‹");
+    private final Button forwardButton = new Button("›");
+    private final NavHistory history = new NavHistory();
     private final PathBookmarks bookmarks;
     private final javafx.scene.layout.FlowPane breadcrumbBar = new javafx.scene.layout.FlowPane();
     private final TableView<FileItem> table = new TableView<>();
@@ -133,6 +136,15 @@ public final class FileBrowserPane extends VBox {
     }
 
     private HBox buildAddressBar() {
+        backButton.getStyleClass().add("btn-secondary");
+        backButton.setTooltip(new Tooltip("Back"));
+        backButton.setOnAction(e -> goBack());
+        forwardButton.getStyleClass().add("btn-secondary");
+        forwardButton.setTooltip(new Tooltip("Forward"));
+        forwardButton.setOnAction(e -> goForward());
+        backButton.setDisable(true);
+        forwardButton.setDisable(true);
+
         Button up = new Button("↑ Up");
         up.getStyleClass().add("btn-secondary");
         up.setOnAction(e -> navigateTo(fs.parent(currentPath)));
@@ -163,7 +175,8 @@ public final class FileBrowserPane extends VBox {
         bookmarksButton.setTooltip(new Tooltip("Bookmark folders and jump back to them"));
         bookmarksButton.setOnShowing(e -> rebuildBookmarksMenu());
 
-        HBox bar = new HBox(6, up, refresh, addressField, filterField, showHidden, bookmarksButton, mkdir);
+        HBox bar = new HBox(6, backButton, forwardButton, up, refresh, addressField,
+                filterField, showHidden, bookmarksButton, mkdir);
         bar.setAlignment(Pos.CENTER_LEFT);
         return bar;
     }
@@ -367,6 +380,15 @@ public final class FileBrowserPane extends VBox {
     }
 
     public void navigateTo(String path) {
+        navigateTo(path, true);
+    }
+
+    /**
+     * Lists {@code path} and renders it. When {@code record} is true the successful navigation is pushed
+     * onto the back/forward {@link NavHistory}; {@link #goBack()}/{@link #goForward()} pass false so that
+     * replaying a history entry doesn't itself rewrite the history.
+     */
+    private void navigateTo(String path, boolean record) {
         runBg("list " + path, () -> {
             List<FileItem> items = fs.list(path);
             return new Object[]{path, items};
@@ -375,6 +397,8 @@ public final class FileBrowserPane extends VBox {
             currentPath = (String) r[0];
             addressField.setText(currentPath);
             updateBreadcrumbs();
+            if (record) history.visit(currentPath);
+            updateNavButtons();
             @SuppressWarnings("unchecked")
             List<FileItem> items = (List<FileItem>) r[1];
             var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
@@ -384,6 +408,22 @@ public final class FileBrowserPane extends VBox {
             applyView();
             onChanged.run();
         });
+    }
+
+    private void goBack() {
+        String p = history.back();
+        if (p != null) navigateTo(p, false);
+    }
+
+    private void goForward() {
+        String p = history.forward();
+        if (p != null) navigateTo(p, false);
+    }
+
+    /** Enables/disables the back/forward buttons to match the current history cursor. */
+    private void updateNavButtons() {
+        backButton.setDisable(!history.canGoBack());
+        forwardButton.setDisable(!history.canGoForward());
     }
 
     /**
@@ -452,6 +492,8 @@ public final class FileBrowserPane extends VBox {
         filterField.clear();
         listing = List.of();
         breadcrumbBar.getChildren().clear();
+        history.clear();
+        updateNavButtons();
         table.setItems(FXCollections.observableArrayList());
         table.setPlaceholder(new Label(message));
         statusLabel.setText(message);
