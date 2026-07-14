@@ -164,4 +164,45 @@ class JdbcServiceTest {
             assertTrue(svc.primaryKeyColumns("nopk").isEmpty());
         }
     }
+
+    @Test
+    void rollbackDiscardsUncommittedWork() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)");
+            assertTrue(svc.isAutoCommit());
+
+            svc.setAutoCommit(false);
+            assertFalse(svc.isAutoCommit());
+            svc.execute("INSERT INTO t (id, v) VALUES (1, 'a')");
+            svc.rollback();
+            assertEquals(0, svc.execute("SELECT * FROM t").rowCount());
+
+            svc.execute("INSERT INTO t (id, v) VALUES (2, 'b')");
+            svc.commit();
+            assertEquals(1, svc.execute("SELECT * FROM t").rowCount());
+        }
+    }
+
+    @Test
+    void executeAllIsAtomicAndRollsBackOnError() throws Exception {
+        try (JdbcService svc = new JdbcService()) {
+            svc.connect("jdbc:sqlite::memory:", null, null);
+            svc.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)");
+
+            int n = svc.executeAll(java.util.List.of(
+                    "INSERT INTO t (id, v) VALUES (1, 'a')",
+                    "INSERT INTO t (id, v) VALUES (2, 'b')"));
+            assertEquals(2, n);
+            assertEquals(2, svc.execute("SELECT * FROM t").rowCount());
+            assertTrue(svc.isAutoCommit(), "auto-commit restored after executeAll");
+
+            // Second statement violates the PK: the whole batch must roll back, leaving 2 rows.
+            assertThrows(java.sql.SQLException.class, () -> svc.executeAll(java.util.List.of(
+                    "INSERT INTO t (id, v) VALUES (3, 'c')",
+                    "INSERT INTO t (id, v) VALUES (1, 'dup')")));
+            assertEquals(2, svc.execute("SELECT * FROM t").rowCount());
+            assertTrue(svc.isAutoCommit(), "auto-commit restored after a failed executeAll");
+        }
+    }
 }

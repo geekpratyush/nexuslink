@@ -3,6 +3,8 @@ package com.nexuslink.ui.sql;
 import com.nexuslink.core.connection.AuthMethod;
 import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.plugin.ResourceNode;
+import com.nexuslink.protocol.db.CsvImportPlanner;
+import com.nexuslink.protocol.db.CsvReader;
 import com.nexuslink.protocol.db.DriverInfo;
 import com.nexuslink.protocol.db.ExternalDriverLoader;
 import com.nexuslink.protocol.db.JdbcDriverRegistry;
@@ -75,6 +77,12 @@ public final class SqlClientView extends BorderPane {
     private final Label statRows = new Label("0");
     private final Label statCols = new Label("0");
     private final Label statMs = new Label("0");
+
+    // Transaction control: when auto-commit is off, edits/DML buffer into an open transaction that
+    // the user ends with Commit or Rollback (both disabled in auto-commit mode / while disconnected).
+    private final CheckBox autoCommitBox = new CheckBox("Auto-commit");
+    private final Button commitBtn = new Button("Commit");
+    private final Button rollbackBtn = new Button("Rollback");
 
     // Autocomplete: SQL vocabulary plus schema words (tables + columns) cached on connect/refresh.
     private final java.util.List<String> schemaWords = new java.util.ArrayList<>();
@@ -455,9 +463,12 @@ public final class SqlClientView extends BorderPane {
         chartBtn.setTooltip(new Tooltip("Plot two columns of the current result as a bar chart"));
         chartBtn.setOnAction(e -> chartDialog());
         resultStatus.getStyleClass().add("meta-label");
+        wireTransactionControls();
         Region runSpacer = new Region();
         HBox.setHgrow(runSpacer, Priority.ALWAYS);
-        HBox runRow = new HBox(8, runBtn, runSelBtn, formatBtn, explainBtn, chartBtn, runSpacer, statsStrip(), resultStatus);
+        HBox runRow = new HBox(8, runBtn, runSelBtn, formatBtn, explainBtn, chartBtn,
+                new Separator(javafx.geometry.Orientation.VERTICAL), autoCommitBox, commitBtn, rollbackBtn,
+                runSpacer, statsStrip(), resultStatus);
         runRow.setAlignment(Pos.CENTER_LEFT);
         runRow.setPadding(new Insets(6, 0, 6, 0));
 
@@ -492,6 +503,11 @@ public final class SqlClientView extends BorderPane {
         insertBtn.getStyleClass().add("btn-secondary");
         insertBtn.setOnAction(e -> insertRow());
 
+        Button importCsvBtn = new Button("Import CSV…");
+        importCsvBtn.getStyleClass().add("btn-secondary");
+        importCsvBtn.setTooltip(new Tooltip("Load a CSV file into the table behind this result"));
+        importCsvBtn.setOnAction(e -> importCsv());
+
         Button exportJson = new Button("Export JSON…");
         exportJson.getStyleClass().add("btn-secondary");
         exportJson.setOnAction(e -> exportResults(true));
@@ -499,7 +515,7 @@ public final class SqlClientView extends BorderPane {
         exportCsv.getStyleClass().add("btn-secondary");
         exportCsv.setOnAction(e -> exportResults(false));
 
-        HBox gridTools = new HBox(8, filterField, insertBtn, exportJson, exportCsv);
+        HBox gridTools = new HBox(8, filterField, insertBtn, importCsvBtn, exportJson, exportCsv);
         gridTools.setAlignment(Pos.CENTER_LEFT);
         gridTools.setPadding(new Insets(0, 0, 6, 0));
 
@@ -751,6 +767,64 @@ public final class SqlClientView extends BorderPane {
         runWrite(sql.endsWith(";") ? sql.substring(0, sql.length() - 1) : sql, onApplied);
     }
 
+    // ---- transaction control -----------------------------------------------------------------
+
+    /** Wires the auto-commit toggle and Commit/Rollback buttons. All start disabled until connected. */
+    private void wireTransactionControls() {
+        autoCommitBox.setSelected(true);
+        autoCommitBox.setDisable(true);
+        autoCommitBox.setTooltip(new Tooltip("Off: edits buffer into a transaction you Commit or Rollback"));
+        commitBtn.getStyleClass().add("btn-secondary");
+        rollbackBtn.getStyleClass().add("btn-secondary");
+        updateTxnButtons();
+
+        autoCommitBox.setOnAction(e -> {
+            boolean auto = autoCommitBox.isSelected();
+            Task<Void> t = new Task<>() {
+                @Override protected Void call() throws Exception { service.setAutoCommit(auto); return null; }
+            };
+            t.setOnSucceeded(ev -> {
+                updateTxnButtons();
+                statusLabel.getStyleClass().setAll("meta-label");
+                statusLabel.setText(auto ? "Auto-commit on — statements commit immediately"
+                        : "Auto-commit off — Commit or Rollback ends the transaction");
+            });
+            t.setOnFailed(ev -> {
+                autoCommitBox.setSelected(!auto);   // revert the toggle
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("Couldn't change auto-commit: " + t.getException().getMessage());
+            });
+            runBg(t);
+        });
+        commitBtn.setOnAction(e -> endTransaction(true));
+        rollbackBtn.setOnAction(e -> endTransaction(false));
+    }
+
+    /** Commit/Rollback are usable only while connected with auto-commit switched off. */
+    private void updateTxnButtons() {
+        boolean manual = !autoCommitBox.isDisabled() && !autoCommitBox.isSelected();
+        commitBtn.setDisable(!manual);
+        rollbackBtn.setDisable(!manual);
+    }
+
+    private void endTransaction(boolean commit) {
+        Task<Void> t = new Task<>() {
+            @Override protected Void call() throws Exception { if (commit) service.commit(); else service.rollback(); return null; }
+        };
+        t.setOnSucceeded(ev -> {
+            statusLabel.getStyleClass().setAll(commit ? "status-2xx" : "meta-label");
+            statusLabel.setText(commit ? "Transaction committed" : "Transaction rolled back");
+            messagesArea.setText((commit ? "✔ COMMIT" : "↩ ROLLBACK") + "\n" + messagesArea.getText());
+            refreshExplorer();
+            if (editStmt != null) rerunLastSelect();   // reflect the committed/rolled-back state
+        });
+        t.setOnFailed(ev -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText((commit ? "Commit" : "Rollback") + " failed: " + t.getException().getMessage());
+        });
+        runBg(t);
+    }
+
     /** Runs a confirmed mutation off-thread; on success refreshes the schema tree, logs, and fires onApplied. */
     private void runWrite(String sql, Runnable onApplied) {
         statusLabel.getStyleClass().setAll("meta-label");
@@ -908,6 +982,160 @@ public final class SqlClientView extends BorderPane {
             @Override protected QueryResult call() { return service.execute(stmt); }
         };
         task.setOnSucceeded(e -> { renderResult(task.getValue()); setEditContext(stmt); });
+        runBg(task);
+    }
+
+    // ---- CSV import --------------------------------------------------------------------------
+
+    private static final String CSV_IGNORE = "(ignore)";
+
+    /**
+     * Loads a CSV file into the table behind the current editable grid. Only enabled when a single
+     * table is being browsed (same guard as {@link #insertRow}); the user maps CSV columns to table
+     * columns, then the rows are inserted as one transaction and the grid refreshes.
+     */
+    private void importCsv() {
+        if (editTable == null || currentColumns.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("Can't import here — browse a single table (SELECT * FROM one table) first");
+            return;
+        }
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Import CSV into " + editTable);
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV files", "*.csv"));
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("All files", "*.*"));
+        File file = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        Task<List<List<String>>> task = new Task<>() {
+            @Override protected List<List<String>> call() throws Exception {
+                return CsvReader.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+            }
+        };
+        task.setOnSucceeded(e -> {
+            List<List<String>> rows = task.getValue();
+            if (rows.isEmpty()) { statusLabel.setText("CSV is empty — nothing to import"); return; }
+            showImportDialog(rows);
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Couldn't read CSV: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Column-mapping dialog for a parsed CSV, then hands the built INSERTs to {@link #runImport}. */
+    private void showImportDialog(List<List<String>> rows) {
+        int width = rows.get(0).size();
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Import CSV");
+        d.setHeaderText("Load " + rows.size() + " CSV line(s) into “" + editTable + "”.\nMap each CSV column to a table column.");
+        ButtonType next = new ButtonType("Preview…", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(next, ButtonType.CANCEL);
+
+        CheckBox headerBox = new CheckBox("First row is a header");
+        headerBox.setSelected(true);
+        CheckBox nullBox = new CheckBox("Insert blank cells as NULL (otherwise use the column default)");
+
+        GridPane form = new GridPane();
+        form.setHgap(10); form.setVgap(6); form.setPadding(new Insets(6));
+        List<ComboBox<String>> maps = new ArrayList<>();
+        List<Label> csvLabels = new ArrayList<>();
+        for (int i = 0; i < width; i++) {
+            Label lbl = new Label();
+            ComboBox<String> cb = new ComboBox<>();
+            cb.getItems().add(CSV_IGNORE);
+            cb.getItems().addAll(currentColumns);
+            csvLabels.add(lbl);
+            maps.add(cb);
+            form.addRow(i, lbl, new Label("→"), cb);
+        }
+        Runnable relabel = () -> {
+            boolean hasHeader = headerBox.isSelected();
+            for (int i = 0; i < width; i++) {
+                String name = hasHeader && i < rows.get(0).size() ? rows.get(0).get(i) : "Column " + (i + 1);
+                csvLabels.get(i).setText(name);
+                String match = CSV_IGNORE;
+                for (String col : currentColumns) if (col.equalsIgnoreCase(name.trim())) { match = col; break; }
+                if (CSV_IGNORE.equals(match) && !hasHeader && i < currentColumns.size()) match = currentColumns.get(i);
+                maps.get(i).setValue(match);
+            }
+        };
+        relabel.run();
+        headerBox.setOnAction(e -> relabel.run());
+
+        ScrollPane scroll = new ScrollPane(form);
+        scroll.setFitToWidth(true);
+        scroll.setPrefSize(440, Math.min(340, 40 + width * 36));
+        VBox content = new VBox(10, headerBox, nullBox, new Separator(), scroll);
+        content.setPadding(new Insets(6));
+        d.getDialogPane().setContent(content);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != next) return;
+
+        List<String> targets = new ArrayList<>();
+        for (ComboBox<String> cb : maps) targets.add(CSV_IGNORE.equals(cb.getValue()) ? null : cb.getValue());
+        List<List<String>> data = headerBox.isSelected() ? rows.subList(1, rows.size()) : rows;
+        List<String> inserts;
+        try {
+            inserts = CsvImportPlanner.toInserts(editTable, targets, data, nullBox.isSelected());
+        } catch (IllegalArgumentException ex) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText(ex.getMessage());
+            return;
+        }
+        if (inserts.isEmpty()) { statusLabel.setText("No rows to import"); return; }
+        runImport(inserts);
+    }
+
+    /** Previews the INSERTs, then runs them as one transaction and refreshes the grid. */
+    private void runImport(List<String> inserts) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("Confirm import");
+        d.setHeaderText("Import " + inserts.size() + " row(s) into “" + editTable + "” as one transaction?");
+        ButtonType apply = new ButtonType("Import", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(apply, ButtonType.CANCEL);
+        CodeArea preview = SqlHighlighter.area();
+        int shown = Math.min(8, inserts.size());
+        String sample = String.join(";\n", inserts.subList(0, shown)) + ";"
+                + (inserts.size() > shown ? "\n-- … " + (inserts.size() - shown) + " more" : "");
+        preview.replaceText(sample);
+        preview.setEditable(false);
+        VirtualizedScrollPane<CodeArea> scroll = new VirtualizedScrollPane<>(preview);
+        scroll.setPrefSize(560, 200);
+        d.getDialogPane().setContent(scroll);
+        d.setOnShown(ev -> {
+            if (d.getDialogPane().getScene() != null)
+                com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());
+        });
+        Platform.runLater(() -> {
+            var b = d.getDialogPane().lookupButton(apply);
+            if (b != null) b.getStyleClass().add("btn-primary");
+        });
+        if (d.showAndWait().orElse(ButtonType.CANCEL) != apply) { statusLabel.setText("Import cancelled"); return; }
+
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Importing " + inserts.size() + " row(s)…");
+        Task<Integer> task = new Task<>() {
+            @Override protected Integer call() throws Exception { return service.executeAll(inserts); }
+        };
+        task.setOnSucceeded(e -> {
+            int n = task.getValue();
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Imported " + n + " row(s) into " + editTable);
+            messagesArea.setText("✔ Imported " + n + " row(s) into " + editTable + "\n" + messagesArea.getText());
+            refreshExplorer();
+            rerunLastSelect();
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Import failed (rolled back): " + task.getException().getMessage());
+            selectTab("Messages");
+        });
         runBg(task);
     }
 
@@ -1215,6 +1443,10 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Connected: " + task.getValue());
             logger.accept("JDBC connected: " + task.getValue());
             connectBtn.setDisable(false);
+            // A fresh connection is in auto-commit mode; reset the controls to match.
+            autoCommitBox.setDisable(false);
+            autoCommitBox.setSelected(true);
+            updateTxnButtons();
             refreshExplorer();
         });
         task.setOnFailed(e -> {

@@ -910,7 +910,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       MariaDB (`serverSslCert`/`trustStore`/`keyStore`), SQL Server (`encrypt`/`trustServerCertificate`);
       SQL view has a collapsible **TLS / SSL** pane. 11 tests, offline.
 - [x] `SqlClientView` — SQL editor (Ctrl+Enter), run button, result grid
-- [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → tables/views → columns, types in details; double-click a table to query) _(indexes/procedures tree TODO)_
+- [x] Schema browser — `JdbcExplorer` + `ResourceExplorerView` lazy tree (database → Tables/Views/Procedures/Functions; a table expands to columns · indexes · foreign keys; types in details; double-click a table to query)
 - [x] Result grid: rendered, **sortable** (header click), **live filter** (`SortedList`→`FilteredList`, any-cell case-insensitive), and **Export JSON/CSV** of the displayed rows via FileChooser. `ResultGridExporter` (protocol-db, hand-rolled RFC 8259/4180, no deps) — 8 tests
 - [x] **4/4 unit tests pass** (in-memory SQLite)
 - [x] **ER diagram** — `JdbcService.erDiagramMermaid()`/`erDiagramMermaid(tables)` builds a Mermaid `erDiagram` from tables/columns/PK/FK; "ER Diagram" button opens a **table-picker** (choose which tables to include; dangling relationships to excluded tables are dropped) then renders it in `DiagramView` (zoom/pan + **Export SVG/PNG**). Unit tests cover entities + relationship + filtered selection.
@@ -919,6 +919,18 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       replayable `{url, sql}` detail blob; MainWindow wires it at both SQL tab sites and routes `sql`-protocol
       replays back into a SQL tab (`loadQuery`) instead of a REST tab.
 - [x] HikariCP connection pooling — `JdbcConnectionPool` (per-profile `HikariDataSource`, keyed `user@url`) + `JdbcPoolConfig` (tunable size/timeout/keepalive); `JdbcService.connectPooled()`; dynamic-driver-safe (no `driverClassName` → resolves `DriverShim` via `DriverManager`); gated pooled `JdbcLiveIT` round-trips
+- [x] **Editable result grid** (SQL-Developer-style) — a single-table `SELECT` with a primary key becomes
+      editable: in-place cell edit → targeted `UPDATE`, **Insert row…** form → `INSERT` (`SqlInsertBuilder`),
+      right-click **Delete row…** → `DELETE`, each routed through a SQL-preview "Apply" gate keyed on the PK.
+- [x] **Transaction control** — `JdbcService.setAutoCommit/isAutoCommit/commit/rollback`; an **Auto-commit**
+      toggle + **Commit**/**Rollback** buttons in the run bar (enabled only while connected with auto-commit
+      off). With auto-commit off, grid edits/DML buffer into one transaction the user commits or discards;
+      `close()` rolls back and restores auto-commit so a pooled connection returns clean. 2 tests.
+- [x] **CSV import into a table** — pure `CsvReader` (RFC 4180: quoted commas/newlines, doubled quotes,
+      CRLF; 4 tests) + `CsvImportPlanner` (per-CSV-column → table-column mapping, blank→default or →NULL,
+      builds INSERTs via `SqlInsertBuilder`; 4 tests). **UI:** an **Import CSV…** button on a browsed table
+      opens a header-aware column-mapping dialog (auto-matches by name/position), previews the INSERTs, then
+      runs them as one all-or-nothing transaction (`JdbcService.executeAll`) and re-runs the SELECT.
 
 #### 8.1.1 JDBC Driver Strategy — **bundle the light ones, load the rest on demand**
 > Decision (see Decisions Log #9): do NOT bundle every driver. Bundle small + permissively

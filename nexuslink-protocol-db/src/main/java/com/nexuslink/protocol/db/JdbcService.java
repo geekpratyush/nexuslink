@@ -93,6 +93,69 @@ public final class JdbcService implements AutoCloseable {
         return md.getDatabaseProductName() + " " + md.getDatabaseProductVersion();
     }
 
+    /**
+     * Sets the session's auto-commit mode. When {@code false}, subsequent DML is buffered into an
+     * open transaction until {@link #commit()} or {@link #rollback()} — the model the SQL workbench
+     * uses to let a user edit several rows and then commit or discard them together.
+     */
+    public void setAutoCommit(boolean autoCommit) throws SQLException {
+        if (connection != null) connection.setAutoCommit(autoCommit);
+    }
+
+    /** True if each statement commits immediately (the default). False while a manual transaction is open. */
+    public boolean isAutoCommit() {
+        try {
+            return connection == null || connection.getAutoCommit();
+        } catch (SQLException e) {
+            return true;
+        }
+    }
+
+    /** Commits the open transaction. No-op in auto-commit mode. */
+    public void commit() throws SQLException {
+        if (connection != null && !connection.getAutoCommit()) connection.commit();
+    }
+
+    /** Rolls back the open transaction, discarding uncommitted work. No-op in auto-commit mode. */
+    public void rollback() throws SQLException {
+        if (connection != null && !connection.getAutoCommit()) connection.rollback();
+    }
+
+    /**
+     * Runs several statements as a single unit and returns the total affected-row count. When the
+     * session is in auto-commit mode this wraps them in their own transaction (all-or-nothing, then
+     * auto-commit is restored); when a manual transaction is already open the statements simply join
+     * it, leaving the final commit/rollback to the caller. Used by the CSV importer.
+     */
+    public int executeAll(List<String> statements) throws SQLException {
+        if (!isConnected()) throw new SQLException("Not connected");
+        boolean auto = connection.getAutoCommit();
+        if (!auto) return runAll(statements);   // fold into the user's open transaction
+        connection.setAutoCommit(false);
+        try {
+            int n = runAll(statements);
+            connection.commit();
+            return n;
+        } catch (SQLException e) {
+            try { connection.rollback(); } catch (SQLException ignored) {}
+            throw e;
+        } finally {
+            try { connection.setAutoCommit(true); } catch (SQLException ignored) {}
+        }
+    }
+
+    private int runAll(List<String> statements) throws SQLException {
+        int total = 0;
+        try (Statement st = connection.createStatement()) {
+            for (String sql : statements) {
+                st.execute(sql);
+                int c = st.getUpdateCount();
+                if (c > 0) total += c;
+            }
+        }
+        return total;
+    }
+
     /** Executes a single SQL statement (auto-detects SELECT vs update). */
     public QueryResult execute(String sql) {
         long start = System.nanoTime();
@@ -347,6 +410,14 @@ public final class JdbcService implements AutoCloseable {
     @Override
     public void close() {
         if (connection != null) {
+            // Discard any uncommitted manual transaction and restore auto-commit so a pooled
+            // connection is handed back clean (a physical close would drop it anyway).
+            try {
+                if (!connection.getAutoCommit()) {
+                    connection.rollback();
+                    connection.setAutoCommit(true);
+                }
+            } catch (SQLException ignored) {}
             // For a pooled session this returns the connection to the pool rather than closing the
             // physical socket; the pool stays alive for reuse and is shut down by its owner.
             try { connection.close(); } catch (SQLException ignored) {}
