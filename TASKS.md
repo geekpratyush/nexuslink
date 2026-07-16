@@ -750,9 +750,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       the other by relative path (descend into the same sub-folder / climb the same number of levels); pure
       JavaFX-free `SyncBrowsing` path math (8 tests) with a suppression counter to break the mirror loop;
       enabling it snapshots both paths so it never jumps on activation.
-- [-] Per-pane status line: item count, **selected count + total size** done (each pane shows
+- [x] Per-pane status line: item count, **selected count + total size** done (each pane shows
       `N selected · <size>` on selection, reverting to the item count otherwise; pure reusable
-      `FileItem.humanSize(long)`, 2 tests). _(free space TODO.)_
+      `FileItem.humanSize(long)`, 2 tests). **Free space** done: pure `DiskSpace(free,total)` value with a
+      `summary()` (`"15.0 GB free of 100.0 GB (15%)"`, omitting the % when total is unknown) + `freeFraction()`;
+      4 tests. `FileSystem.diskSpace(path)` (empty by default; `LocalFileSystem` answers via `Files.getFileStore`
+      usable/total), fetched off the FX thread alongside `list` and appended to the item-count line.
 
 **Transfers**
 - [-] `TransferQueue` panel — **done:** observable engine driving existing `FileTransfer`, sequential

@@ -25,6 +25,15 @@ public interface FileSystem {
     List<FileItem> list(String path) throws Exception;
 
     /**
+     * Free/total capacity of the volume backing {@code path}, for the pane's status line. Empty by
+     * default (remote services that can't report it); {@link LocalFileSystem} answers from the disk.
+     * Called off the FX thread alongside {@link #list}, so an implementation may do blocking I/O.
+     */
+    default java.util.Optional<DiskSpace> diskSpace(String path) {
+        return java.util.Optional.empty();
+    }
+
+    /**
      * True if an entry named {@code name} already exists in directory {@code dir}. Used by the
      * transfer queue to decide whether to raise an overwrite/skip prompt. The default lists
      * {@code dir} and matches by name; implementations may override with a cheaper check.

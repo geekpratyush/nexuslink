@@ -58,6 +58,15 @@ public final class LocalFileSystem implements FileSystem {
         return Files.exists(Path.of(dir).resolve(name));
     }
 
+    @Override public java.util.Optional<DiskSpace> diskSpace(String path) {
+        try {
+            java.nio.file.FileStore store = Files.getFileStore(Path.of(path).toAbsolutePath().normalize());
+            return java.util.Optional.of(new DiskSpace(store.getUsableSpace(), store.getTotalSpace()));
+        } catch (IOException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
     @Override public boolean supportsContentAccess() { return true; }
 
     @Override public byte[] readFile(FileItem item, long maxBytes) throws IOException {

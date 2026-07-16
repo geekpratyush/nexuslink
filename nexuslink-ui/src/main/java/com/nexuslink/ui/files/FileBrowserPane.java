@@ -55,6 +55,8 @@ public final class FileBrowserPane extends VBox {
     private List<FileItem> listing = List.of();
     // The item-count status shown when nothing is selected; a selection temporarily replaces it.
     private String baseStatus = "";
+    // Free/total capacity of the current directory's volume, appended to the item-count status; null when unknown.
+    private DiskSpace diskSpace;
 
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
@@ -395,7 +397,7 @@ public final class FileBrowserPane extends VBox {
     private void navigateTo(String path, boolean record) {
         runBg("list " + path, () -> {
             List<FileItem> items = fs.list(path);
-            return new Object[]{path, items};
+            return new Object[]{path, items, fs.diskSpace(path)};
         }, result -> {
             Object[] r = (Object[]) result;
             currentPath = (String) r[0];
@@ -405,6 +407,9 @@ public final class FileBrowserPane extends VBox {
             updateNavButtons();
             @SuppressWarnings("unchecked")
             List<FileItem> items = (List<FileItem>) r[1];
+            @SuppressWarnings("unchecked")
+            var space = (java.util.Optional<DiskSpace>) r[2];
+            diskSpace = space.orElse(null);
             var rows = new java.util.ArrayList<FileItem>(items.size() + 1);
             rows.add(FileItem.up(fs.parent(currentPath)));
             rows.addAll(items);
@@ -446,6 +451,7 @@ public final class FileBrowserPane extends VBox {
         baseStatus = visible == total
                 ? total + " item(s)"
                 : "showing " + visible + " of " + total + " item(s)";
+        if (diskSpace != null) baseStatus += "  ·  " + diskSpace.summary();
         statusLabel.setText(baseStatus);
     }
 
@@ -495,6 +501,7 @@ public final class FileBrowserPane extends VBox {
         addressField.clear();
         filterField.clear();
         listing = List.of();
+        diskSpace = null;
         breadcrumbBar.getChildren().clear();
         history.clear();
         updateNavButtons();
