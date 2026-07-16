@@ -812,7 +812,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`.file-pane .table-row-cell.drop-target` CSS) while a drag is over it _(cross-pane table highlight already done)_
 
 **File operations**
-- [-] Batch/multi-file rename; duplicate; **copy-path** — copy-path done (context menu + Ctrl+Shift+C copies
+- [x] Batch/multi-file rename; duplicate; **copy-path** — copy-path done (context menu + Ctrl+Shift+C copies
       the full path(s) of the selection to the clipboard); **batch rename** engine done: pure `BulkRename`
       previews before → after for a selection with find/replace (literal or `$1`-backref regex),
       prefix/suffix, `{n}` sequential numbering (start/step/zero-pad) and a case transform — all
@@ -820,7 +820,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       row. 12 tests. **UI wired:** a **Batch rename…** context-menu item on each pane opens `BatchRenameDialog`
       (find/replace + Regex, prefix/suffix, Add-number spinners, Case combo) with a live before → after preview
       that colours colliding rows red and disables OK until the plan is unambiguous and non-empty; accepting
-      renames the changed rows sequentially off the FX thread via `FileSystem.rename`. _(Duplicate still TODO.)_
+      renames the changed rows sequentially off the FX thread via `FileSystem.rename`. **Duplicate** done:
+      pure `DuplicateName` mints a non-colliding name (`report.txt` → `report copy.txt` → `report copy 2.txt` …,
+      extension-aware, and incrementing rather than stacking when the source is itself a copy); 11 tests.
+      `FileSystem` gained `supportsCopy()`/`copy(src,destDir,destName)` (default reads+writes bytes for any
+      content-access FS; `LocalFileSystem` overrides with `Files.copy` incl. recursive directory trees). A
+      **Duplicate** context-menu item (shown only when the FS supports copy) duplicates the whole selection at
+      once, reserving each minted name across the batch, sequentially off the FX thread.
 - [x] Properties dialog (size, permissions, owner, timestamps) — a **Properties…** context-menu item opens a
       read-only name/type/path/size/modified/permissions grid built from the pure `FileDetails.of(FileItem)`;
       includes symbolic→octal permission conversion (`permissionsOctal`, handles the type prefix + setuid/sticky). 6 tests.

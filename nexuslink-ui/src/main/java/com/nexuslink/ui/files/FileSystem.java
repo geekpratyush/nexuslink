@@ -59,6 +59,26 @@ public interface FileSystem {
         throw new UnsupportedOperationException("content access not supported by " + name());
     }
 
+    /**
+     * True if this file system can duplicate an entry in place (the "Duplicate" action). Defaults to
+     * whatever content access allows — a file can be duplicated by reading and re-writing its bytes —
+     * so any FS with {@link #supportsContentAccess()} gets file duplication for free; {@link
+     * LocalFileSystem} overrides to also copy directory trees.
+     */
+    default boolean supportsCopy() { return supportsContentAccess(); }
+
+    /**
+     * Copies file {@code src} to a new entry named {@code destName} in directory {@code destDir}. The
+     * default handles a single file via {@link #readFile}/{@link #writeFile}; directory copies require
+     * an override (see {@link LocalFileSystem}).
+     */
+    default void copy(FileItem src, String destDir, String destName) throws Exception {
+        if (src.directory()) {
+            throw new UnsupportedOperationException(name() + " cannot duplicate a directory");
+        }
+        writeFile(destDir, destName, readFile(src, Long.MAX_VALUE));
+    }
+
     /** True if this file system supports changing POSIX permissions (chmod). */
     default boolean supportsChmod() { return false; }
 

@@ -267,6 +267,8 @@ public final class FileBrowserPane extends VBox {
         rename.setOnAction(e -> renameSelected());
         MenuItem batchRename = new MenuItem("Batch rename…");
         batchRename.setOnAction(e -> batchRenameSelected());
+        MenuItem duplicate = new MenuItem("Duplicate");
+        duplicate.setOnAction(e -> duplicateSelected());
         MenuItem delete = new MenuItem("Delete  (Del)");
         delete.setOnAction(e -> deleteSelected());
         MenuItem copyPath = new MenuItem("Copy path  (Ctrl+Shift+C)");
@@ -279,9 +281,11 @@ public final class FileBrowserPane extends VBox {
         refresh.setOnAction(e -> refresh());
         openTerminalItem.setVisible(false);
         openTerminalItem.setOnAction(e -> { if (onOpenTerminal != null) onOpenTerminal.accept(currentPath); });
-        ContextMenu menu = new ContextMenu(open, quickView, new SeparatorMenuItem(), rename, batchRename, delete, copyPath, mkdir, new SeparatorMenuItem(), properties, refresh, openTerminalItem);
+        ContextMenu menu = new ContextMenu(open, quickView, new SeparatorMenuItem(), rename, batchRename, duplicate, delete, copyPath, mkdir, new SeparatorMenuItem(), properties, refresh, openTerminalItem);
         // Only offer quick view when this file system can read/write content in place.
         quickView.setDisable(!fs.supportsContentAccess());
+        // Only offer duplicate when this file system can copy an entry in place.
+        duplicate.setDisable(!fs.supportsCopy());
         if (fs.supportsChmod()) {
             MenuItem chmod = new MenuItem("Permissions (chmod)…");
             chmod.setOnAction(e -> chmodSelected());
@@ -635,6 +639,33 @@ public final class FileBrowserPane extends VBox {
                 return null;
             }, r -> refresh());
         });
+    }
+
+    /**
+     * Duplicates each selected entry in place under an auto-suffixed, non-colliding name
+     * ({@code report.txt} → {@code report copy.txt}, then {@code report copy 2.txt}, …). Names are
+     * reserved across the batch so duplicating several files at once never collides, and the running
+     * set is seeded from the current listing. Runs the copies sequentially off the FX thread.
+     */
+    public void duplicateSelected() {
+        if (!fs.supportsCopy()) { statusLabel.setText(fs.name() + " cannot duplicate"); return; }
+        List<FileItem> sel = selected();
+        sel.removeIf(FileItem::parent);
+        if (sel.isEmpty()) return;
+        // Seed the "taken" names from the current directory so we skip existing entries, and grow it as
+        // we mint each duplicate name so a multi-file duplicate can't target the same name twice.
+        java.util.Set<String> taken = new java.util.HashSet<>();
+        for (FileItem f : listing) taken.add(f.name());
+        var plan = new java.util.ArrayList<java.util.Map.Entry<FileItem, String>>();
+        for (FileItem src : sel) {
+            String dup = DuplicateName.of(src.name(), taken);
+            taken.add(dup);
+            plan.add(java.util.Map.entry(src, dup));
+        }
+        runBg("duplicate " + plan.size(), () -> {
+            for (var e : plan) fs.copy(e.getKey(), currentPath, e.getValue());
+            return null;
+        }, r -> refresh());
     }
 
     public void deleteSelected() {

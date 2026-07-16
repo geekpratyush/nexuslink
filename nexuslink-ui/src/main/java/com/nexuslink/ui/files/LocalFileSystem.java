@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -67,6 +68,24 @@ public final class LocalFileSystem implements FileSystem {
 
     @Override public void writeFile(String dir, String name, byte[] data) throws IOException {
         Files.write(Path.of(dir).resolve(name), data);
+    }
+
+    @Override public boolean supportsCopy() { return true; }
+
+    @Override public void copy(FileItem src, String destDir, String destName) throws IOException {
+        Path from = Path.of(src.path());
+        Path to = Path.of(destDir).resolve(destName);
+        if (Files.isDirectory(from)) {
+            try (var walk = Files.walk(from)) {
+                for (Path p : (Iterable<Path>) walk::iterator) {
+                    Path target = to.resolve(from.relativize(p).toString());
+                    if (Files.isDirectory(p)) Files.createDirectories(target);
+                    else Files.copy(p, target, StandardCopyOption.COPY_ATTRIBUTES);
+                }
+            }
+        } else {
+            Files.copy(from, to, StandardCopyOption.COPY_ATTRIBUTES);
+        }
     }
 
     @Override public void mkdir(String path) throws IOException {
