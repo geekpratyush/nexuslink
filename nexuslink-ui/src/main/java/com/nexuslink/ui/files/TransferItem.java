@@ -26,6 +26,10 @@ public final class TransferItem {
     private final OverwriteResolver resolver;
     private final boolean moveMode;   // when true, the source is deleted after a successful copy (a move)
 
+    // The name the file actually lands under; equals the source name unless a "rename on conflict"
+    // resolution redirected it to a non-colliding name.
+    private volatile String destName;
+
     private volatile TransferStatus status = TransferStatus.QUEUED;
     private volatile long transferredBytes;
     private volatile int attempts;   // started attempts, incremented each time the worker begins this item
@@ -52,6 +56,11 @@ public final class TransferItem {
     public FileItem source() { return source; }
     public String name() { return source.name(); }
     public String destDir() { return destDir; }
+
+    /** The name the file lands under — the source name unless a rename-on-conflict redirected it. */
+    public String destName() { return destName == null ? source.name() : destName; }
+    /** Redirects the landing name (rename-on-conflict); the source name is unchanged. */
+    void setDestName(String destName) { this.destName = destName; }
     public long totalBytes() { return totalBytes; }
     public OverwriteResolver resolver() { return resolver; }
 

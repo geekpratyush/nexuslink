@@ -7,6 +7,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.ToggleButton;
@@ -502,14 +503,21 @@ public final class DualPaneBrowser extends BorderPane {
         Platform.runLater(() -> {
             try {
                 ButtonType overwrite = new ButtonType("Overwrite", ButtonBar.ButtonData.YES);
-                ButtonType overwriteAll = new ButtonType("Overwrite all", ButtonBar.ButtonData.OTHER);
+                ButtonType keepBoth = new ButtonType("Keep both", ButtonBar.ButtonData.OTHER);
+                ButtonType ifNewer = new ButtonType("If newer", ButtonBar.ButtonData.OTHER);
                 ButtonType skip = new ButtonType("Skip", ButtonBar.ButtonData.NO);
-                ButtonType skipAll = new ButtonType("Skip all", ButtonBar.ButtonData.OTHER);
-                Alert alert = new Alert(Alert.AlertType.CONFIRMATION,
-                        "\"" + name + "\" already exists in the target directory.",
-                        overwrite, overwriteAll, skip, skipAll);
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION, "", overwrite, keepBoth, ifNewer, skip);
                 alert.setHeaderText("File already exists");
                 alert.setTitle("Overwrite?");
+                // A checkbox promotes the pick to its batch-sticky "…all" variant for the rest of the run.
+                CheckBox applyAll = new CheckBox("Apply to all remaining conflicts");
+                Label msg = new Label("\"" + name + "\" already exists in the target directory.\n"
+                        + "Keep both lands the incoming file under a new name; If newer overwrites "
+                        + "only when the source is more recent.");
+                msg.setWrapText(true);
+                msg.setMaxWidth(360);
+                VBox content = new VBox(10, msg, applyAll);
+                alert.getDialogPane().setContent(content);
                 if (getScene() != null) {
                     alert.initOwner(getScene().getWindow());
                     alert.getDialogPane().sceneProperty().addListener((o, ov, sc) -> {
@@ -517,10 +525,13 @@ public final class DualPaneBrowser extends BorderPane {
                     });
                 }
                 ButtonType picked = alert.showAndWait().orElse(skip);
-                if (picked == overwrite) result.set(OverwriteResolver.Choice.OVERWRITE);
-                else if (picked == overwriteAll) result.set(OverwriteResolver.Choice.OVERWRITE_ALL);
-                else if (picked == skipAll) result.set(OverwriteResolver.Choice.SKIP_ALL);
-                else result.set(OverwriteResolver.Choice.SKIP);
+                boolean all = applyAll.isSelected();
+                OverwriteResolver.Choice choice;
+                if (picked == overwrite) choice = all ? OverwriteResolver.Choice.OVERWRITE_ALL : OverwriteResolver.Choice.OVERWRITE;
+                else if (picked == keepBoth) choice = all ? OverwriteResolver.Choice.RENAME_ALL : OverwriteResolver.Choice.RENAME;
+                else if (picked == ifNewer) choice = all ? OverwriteResolver.Choice.OVERWRITE_IF_NEWER_ALL : OverwriteResolver.Choice.OVERWRITE_IF_NEWER;
+                else choice = all ? OverwriteResolver.Choice.SKIP_ALL : OverwriteResolver.Choice.SKIP;
+                result.set(choice);
             } finally {
                 latch.countDown();
             }

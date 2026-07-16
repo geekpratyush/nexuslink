@@ -14,4 +14,21 @@ public interface FileTransfer {
 
     /** Downloads {@code remoteFile} into local directory {@code localDir}, reporting bytes read. */
     void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception;
+
+    /**
+     * Uploads {@code localFile} into {@code remoteDir} but landing under {@code destName} rather than
+     * the source's own file name — used by the "rename on conflict" resolution to keep both files.
+     * The default ignores {@code destName} (natural name); real file systems override to honour it.
+     */
+    default void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
+        upload(localFile, remoteDir, progress);
+    }
+
+    /**
+     * Downloads {@code remoteFile} into {@code localDir} but landing under {@code destName} rather than
+     * the remote file's own name. The default ignores {@code destName}; real file systems override it.
+     */
+    default void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
+        download(remoteFile, localDir, progress);
+    }
 }

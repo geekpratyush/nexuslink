@@ -10,11 +10,23 @@ import java.util.function.Function;
  */
 public final class OverwriteResolver {
 
-    /** The four answers a user can give when a target file already exists. */
-    public enum Choice { OVERWRITE, SKIP, OVERWRITE_ALL, SKIP_ALL }
+    /**
+     * The answers a user can give when a target file already exists. Besides the plain
+     * overwrite/skip (and their "…all" batch-sticky variants), {@code RENAME} keeps both files by
+     * landing the incoming one under an auto-suffixed name, and {@code OVERWRITE_IF_NEWER} overwrites
+     * only when the source is newer than the existing target (otherwise skips).
+     */
+    public enum Choice {
+        OVERWRITE, SKIP, RENAME, OVERWRITE_IF_NEWER,
+        OVERWRITE_ALL, SKIP_ALL, RENAME_ALL, OVERWRITE_IF_NEWER_ALL
+    }
 
-    /** The resolved per-file action. */
-    public enum Action { OVERWRITE, SKIP }
+    /**
+     * The resolved per-file action. {@code OVERWRITE_IF_NEWER} is a deferred decision the caller
+     * completes with the two timestamps (see {@link #sourceIsNewer(long, long)}); {@code RENAME} asks
+     * the caller to land the file under a non-colliding name.
+     */
+    public enum Action { OVERWRITE, SKIP, RENAME, OVERWRITE_IF_NEWER }
 
     private final Function<String, Choice> prompt;
     private Action sticky;   // non-null once an "…all" answer has been given
@@ -44,9 +56,24 @@ public final class OverwriteResolver {
         return switch (c) {
             case OVERWRITE -> Action.OVERWRITE;
             case SKIP -> Action.SKIP;
+            case RENAME -> Action.RENAME;
+            case OVERWRITE_IF_NEWER -> Action.OVERWRITE_IF_NEWER;
             case OVERWRITE_ALL -> sticky = Action.OVERWRITE;
             case SKIP_ALL -> sticky = Action.SKIP;
+            case RENAME_ALL -> sticky = Action.RENAME;
+            case OVERWRITE_IF_NEWER_ALL -> sticky = Action.OVERWRITE_IF_NEWER;
         };
+    }
+
+    /**
+     * The rule behind {@link Action#OVERWRITE_IF_NEWER}: overwrite when the source is strictly newer
+     * than the destination. When either timestamp is unknown ({@code 0} epoch millis — e.g. a remote
+     * file system that doesn't report a machine-readable mtime) it can't tell, so it errs toward
+     * copying rather than silently dropping an update, returning true. Pure and unit-testable.
+     */
+    public static boolean sourceIsNewer(long sourceEpochMillis, long destEpochMillis) {
+        if (sourceEpochMillis == 0 || destEpochMillis == 0) return true;
+        return sourceEpochMillis > destEpochMillis;
     }
 
     /** True once an "…all" answer has fixed the decision for the rest of the batch. */

@@ -776,8 +776,17 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       every contained file into the normal sequential worker; `DualPaneBrowser` no longer filters out
       directories — folder selections scan off the FX thread, then flow with the shared overwrite
       resolver. 3 added tests (12 in `TransferQueueTest`)
-- [-] Conflict resolution on transfer — **done:** prompt **skip / overwrite** with **overwrite-all /
-      skip-all** stickiness across a batch (`OverwriteResolver`). **TODO:** overwrite-if-newer / rename
+- [x] Conflict resolution on transfer — **done:** prompt **skip / overwrite** with **overwrite-all /
+      skip-all** stickiness across a batch (`OverwriteResolver`). **Overwrite-if-newer + rename (keep both)**
+      done: `OverwriteResolver` gained `RENAME`/`OVERWRITE_IF_NEWER` choices (+ `_ALL` sticky variants) and a
+      pure `sourceIsNewer(srcEpoch,destEpoch)` rule (unknown mtime → errs toward copying). `FileItem` carries a
+      machine-readable `modifiedEpochMillis` (populated by `LocalFileSystem`; 0/unknown elsewhere) so "if newer"
+      compares timestamps rather than parsing per-FS date strings. `FileTransfer` gained `upload/download`
+      overloads taking an explicit landing name (overridden by SFTP/FTP/S3); `TransferItem` tracks a `destName`.
+      `TransferQueue` resolves `OVERWRITE_IF_NEWER` via the two mtimes and `RENAME` via `DuplicateName` against
+      the live destination listing (integrity check follows the renamed file). The overwrite dialog now offers
+      **Overwrite / Keep both / If newer / Skip** with an **Apply to all remaining** checkbox promoting the pick
+      to its `_ALL` variant. Tests: 6 OverwriteResolver, 3 TransferQueue (rename keep-both, if-newer skip/replace).
 - [-] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors —
       **auto-retry done:** pure `RetryPolicy` (max attempts + exponential capped backoff) +
       `TransferErrors.isTransient` (timeout/reset/refused/unreachable → retriable; bad-creds/missing-file/

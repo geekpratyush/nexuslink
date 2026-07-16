@@ -62,10 +62,18 @@ final class FtpFileSystem implements FileSystem, FileTransfer {
     // ---- FileTransfer ----
 
     @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
-        service.upload(localFile, join(remoteDir, localFile.getFileName().toString()), progress);
+        upload(localFile, remoteDir, localFile.getFileName().toString(), progress);
+    }
+
+    @Override public void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
+        service.upload(localFile, join(remoteDir, destName), progress);
     }
 
     @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
-        service.download(remoteFile.path(), localDir.resolve(remoteFile.name()), progress);
+        download(remoteFile, localDir, remoteFile.name(), progress);
+    }
+
+    @Override public void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
+        service.download(remoteFile.path(), localDir.resolve(destName), progress);
     }
 }

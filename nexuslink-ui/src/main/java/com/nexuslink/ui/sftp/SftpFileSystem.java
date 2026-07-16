@@ -70,13 +70,21 @@ final class SftpFileSystem implements FileSystem, FileTransfer {
     // ---- FileTransfer ----
 
     @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
-        String remotePath = join(remoteDir, localFile.getFileName().toString());
+        upload(localFile, remoteDir, localFile.getFileName().toString(), progress);
+    }
+
+    @Override public void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
+        String remotePath = join(remoteDir, destName);
         if (scpMode) service.uploadScp(localFile, remotePath, progress);
         else service.upload(localFile, remotePath, progress);
     }
 
     @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
-        Path target = localDir.resolve(remoteFile.name());
+        download(remoteFile, localDir, remoteFile.name(), progress);
+    }
+
+    @Override public void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
+        Path target = localDir.resolve(destName);
         if (scpMode) service.downloadScp(remoteFile.path(), target, progress);
         else service.download(remoteFile.path(), target, progress);
     }

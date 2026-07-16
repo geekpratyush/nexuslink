@@ -100,14 +100,21 @@ public final class S3FileSystem implements FileSystem, FileTransfer {
     // ---- FileTransfer ----
 
     @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+        upload(localFile, remoteDir, localFile.getFileName().toString(), progress);
+    }
+
+    @Override public void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
         String bucket = S3Path.bucket(remoteDir);
         if (bucket == null) throw new UnsupportedOperationException("Open a bucket before uploading");
-        service.uploadFile(bucket, S3Path.childKey(remoteDir, localFile.getFileName().toString()),
-                localFile, progress);
+        service.uploadFile(bucket, S3Path.childKey(remoteDir, destName), localFile, progress);
     }
 
     @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
+        download(remoteFile, localDir, remoteFile.name(), progress);
+    }
+
+    @Override public void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
         service.downloadToFile(S3Path.bucket(remoteFile.path()), S3Path.prefix(remoteFile.path()),
-                localDir.resolve(remoteFile.name()), progress);
+                localDir.resolve(destName), progress);
     }
 }

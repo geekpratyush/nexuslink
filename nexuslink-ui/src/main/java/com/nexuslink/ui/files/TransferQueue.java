@@ -401,11 +401,20 @@ public final class TransferQueue {
         try {
             if (targetExists(item)) {
                 OverwriteResolver.Action action = item.resolver().resolve(item.name());
+                if (action == OverwriteResolver.Action.OVERWRITE_IF_NEWER) {
+                    // Overwrite only when the source is newer than the existing target; else skip.
+                    action = OverwriteResolver.sourceIsNewer(item.source().modifiedEpochMillis(), destEpoch(item))
+                            ? OverwriteResolver.Action.OVERWRITE : OverwriteResolver.Action.SKIP;
+                }
                 if (action == OverwriteResolver.Action.SKIP) {
                     item.setStatus(TransferStatus.SKIPPED);
                     item.markFinished(System.nanoTime());
                     finish(item);
                     return;
+                }
+                if (action == OverwriteResolver.Action.RENAME) {
+                    // Land under a fresh, non-colliding name so both files survive.
+                    item.setDestName(uniqueDestName(item));
                 }
             }
             execute(item);
@@ -459,18 +468,35 @@ public final class TransferQueue {
     private void execute(TransferItem item) throws Exception {
         governor.startTransfer();
         if (item.direction() == TransferItem.Direction.UPLOAD) {
-            transfer.upload(Path.of(item.source().path()), item.destDir(), sent -> {
+            transfer.upload(Path.of(item.source().path()), item.destDir(), item.destName(), sent -> {
                 governor.tick(sent);
                 item.setTransferredBytes(sent);
                 fireProgress(item);
             });
         } else {
-            transfer.download(item.source(), Path.of(item.destDir()), read -> {
+            transfer.download(item.source(), Path.of(item.destDir()), item.destName(), read -> {
                 governor.tick(read);
                 item.setTransferredBytes(read);
                 fireProgress(item);
             });
         }
+    }
+
+    /** Epoch-millis mtime of the existing destination entry (name = the source name), or 0 if unknown. */
+    private long destEpoch(TransferItem item) throws Exception {
+        FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
+        for (FileItem f : destFs.list(item.destDir())) {
+            if (!f.parent() && f.name().equals(item.name())) return f.modifiedEpochMillis();
+        }
+        return 0;
+    }
+
+    /** A non-colliding landing name for a rename-on-conflict, checked against the destination listing. */
+    private String uniqueDestName(TransferItem item) throws Exception {
+        FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
+        java.util.Set<String> taken = new java.util.HashSet<>();
+        for (FileItem f : destFs.list(item.destDir())) if (!f.parent()) taken.add(f.name());
+        return DuplicateName.of(item.name(), taken);
     }
 
     /**
@@ -480,7 +506,7 @@ public final class TransferQueue {
      */
     private TransferIntegrity.Report verifyTransfer(TransferItem item) throws Exception {
         FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
-        Long actual = destSize(destFs, item.destDir(), item.name());
+        Long actual = destSize(destFs, item.destDir(), item.destName());
         return TransferIntegrity.verify(item.totalBytes(), actual);
     }
 

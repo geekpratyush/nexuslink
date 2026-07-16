@@ -46,7 +46,7 @@ public final class LocalFileSystem implements FileSystem {
                 boolean isDir = Files.isDirectory(p);
                 long size = isDir ? 0 : safeSize(p);
                 out.add(FileItem.of(p.getFileName().toString(), p.toString(), isDir, size,
-                        modified(p), permissions(p)));
+                        modified(p), permissions(p), modifiedEpoch(p)));
             }
         }
         out.sort(Comparator.comparing(FileItem::directory).reversed()
@@ -125,6 +125,11 @@ public final class LocalFileSystem implements FileSystem {
     private static String modified(Path p) {
         try { return TS.format(Files.getLastModifiedTime(p).toInstant()); }
         catch (IOException e) { return ""; }
+    }
+
+    private static long modifiedEpoch(Path p) {
+        try { return Files.getLastModifiedTime(p).toMillis(); }
+        catch (IOException e) { return 0; }
     }
 
     private static String permissions(Path p) {

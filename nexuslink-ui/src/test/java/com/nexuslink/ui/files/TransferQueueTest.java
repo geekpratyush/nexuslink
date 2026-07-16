@@ -19,14 +19,19 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class TransferQueueTest {
 
-    /** Minimal {@link FileTransfer} that copies between two local directories. */
+    /** Minimal {@link FileTransfer} that copies between two local directories (honouring destName). */
     private static final class CopyTransfer implements FileTransfer {
         @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
-            copy(localFile, Path.of(remoteDir).resolve(localFile.getFileName()), progress);
+            upload(localFile, remoteDir, localFile.getFileName().toString(), progress);
+        }
+        @Override public void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
+            copy(localFile, Path.of(remoteDir).resolve(destName), progress);
         }
         @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
-            Path src = Path.of(remoteFile.path());
-            copy(src, localDir.resolve(src.getFileName()), progress);
+            download(remoteFile, localDir, remoteFile.name(), progress);
+        }
+        @Override public void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
+            copy(Path.of(remoteFile.path()), localDir.resolve(destName), progress);
         }
         private void copy(Path src, Path dst, LongConsumer progress) throws Exception {
             long size = Files.size(src);
@@ -228,6 +233,56 @@ class TransferQueueTest {
         q.runPending();
 
         assertEquals("new", Files.readString(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void renameOnConflictKeepsBothUnderASuffixedName(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "new");
+        Files.writeString(remote.resolve("a.txt"), "old");          // conflict
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver rename = new OverwriteResolver(name -> OverwriteResolver.Choice.RENAME);
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), rename);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+        assertEquals("old", Files.readString(remote.resolve("a.txt")), "existing file is untouched");
+        assertEquals("new", Files.readString(remote.resolve("a copy.txt")), "incoming lands under a new name");
+        assertEquals("a copy.txt", created.get(0).destName());
+    }
+
+    @Test
+    void overwriteIfNewerSkipsAnOlderSource(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "src");
+        Path dst = Files.writeString(remote.resolve("a.txt"), "dst");
+        // Make the destination strictly newer than the source.
+        Files.setLastModifiedTime(src, java.nio.file.attribute.FileTime.fromMillis(1_000_000));
+        Files.setLastModifiedTime(dst, java.nio.file.attribute.FileTime.fromMillis(2_000_000));
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver ifNewer = new OverwriteResolver(name -> OverwriteResolver.Choice.OVERWRITE_IF_NEWER);
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), ifNewer);
+        q.runPending();
+
+        assertEquals(TransferStatus.SKIPPED, created.get(0).status());
+        assertEquals("dst", Files.readString(remote.resolve("a.txt")), "older source must not overwrite");
+    }
+
+    @Test
+    void overwriteIfNewerReplacesAnOlderTarget(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "src");
+        Path dst = Files.writeString(remote.resolve("a.txt"), "dst");
+        Files.setLastModifiedTime(src, java.nio.file.attribute.FileTime.fromMillis(2_000_000));
+        Files.setLastModifiedTime(dst, java.nio.file.attribute.FileTime.fromMillis(1_000_000));
+        TransferQueue q = queue(local, remote);
+
+        OverwriteResolver ifNewer = new OverwriteResolver(name -> OverwriteResolver.Choice.OVERWRITE_IF_NEWER);
+        q.enqueue(TransferItem.Direction.UPLOAD, List.of(fileItemFor(src)), remote.toString(), ifNewer);
+        q.runPending();
+
+        assertEquals("src", Files.readString(remote.resolve("a.txt")), "newer source overwrites");
     }
 
     @Test
