@@ -39,6 +39,7 @@ public final class TransferQueue {
     private final TransferGovernor governor = new TransferGovernor();
     private volatile boolean workerRunning;
     private volatile boolean verifyIntegrity;   // when set, each completed file is size-checked on the destination
+    private volatile boolean verifyChecksum;    // when set (with verifyIntegrity), that check also compares digests
     private volatile RetryPolicy retryPolicy = RetryPolicy.none();   // auto-retry on transient errors (off by default)
     private java.util.function.LongConsumer backoffSleeper = TransferQueue::sleepMillis;
     private volatile int concurrency = 1;   // number of files transferred in parallel (>=1)
@@ -323,6 +324,20 @@ public final class TransferQueue {
     public boolean isVerifyIntegrity() { return verifyIntegrity; }
 
     /**
+     * Strengthens the {@link #setVerifyIntegrity integrity check} from "same size" to "same bytes" by
+     * hashing both copies ({@link Checksum#ALGORITHM}) and comparing the digests, catching corruption that
+     * preserves length. Only has an effect while {@link #isVerifyIntegrity()} is on, and only for files
+     * both sides can hash ({@link FileSystem#canChecksum}) — when either cannot, that file quietly falls
+     * back to the size check rather than failing on a check that was never available.
+     *
+     * <p>Off by default, and materially more expensive than the size check: it re-reads <em>both</em>
+     * copies in full, so a verified upload moves roughly three times the file's bytes.</p>
+     */
+    public void setVerifyChecksum(boolean verify) { this.verifyChecksum = verify; }
+
+    public boolean isVerifyChecksum() { return verifyChecksum; }
+
+    /**
      * Enables automatic retry of transfers that fail with a <em>transient</em> error
      * ({@link TransferErrors#isTransient}) according to {@code policy}, backing off between attempts.
      * A permanent error (bad credentials, missing file) still fails immediately. Pass
@@ -501,19 +516,32 @@ public final class TransferQueue {
 
     /**
      * Verifies a just-completed transfer by comparing the destination file's byte count against the
-     * source size ({@link TransferIntegrity}). The destination is on the opposite side to the source;
-     * its size is read by listing the destination directory (the {@link FileSystem} has no cheaper stat).
+     * source size ({@link TransferIntegrity}), and — when {@link #setVerifyChecksum} is on — the two
+     * copies' digests as well. The destination is on the opposite side to the source; it is found by
+     * listing the destination directory (the {@link FileSystem} has no cheaper stat).
      */
     private TransferIntegrity.Report verifyTransfer(TransferItem item) throws Exception {
         FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
-        Long actual = destSize(destFs, item.destDir(), item.destName());
-        return TransferIntegrity.verify(item.totalBytes(), actual);
+        FileItem dest = destEntry(destFs, item.destDir(), item.destName());
+        if (dest == null) return TransferIntegrity.verify(item.totalBytes(), null);
+        if (!verifyChecksum) return TransferIntegrity.verify(item.totalBytes(), dest.size());
+
+        // Both sides must be able to hash before either does: otherwise we would pay to digest one copy
+        // only to throw the answer away for want of something to compare it against.
+        FileSystem sourceFs = item.direction() == TransferItem.Direction.UPLOAD ? local : remote;
+        if (!sourceFs.canChecksum(item.source()) || !destFs.canChecksum(dest)) {
+            return TransferIntegrity.verify(item.totalBytes(), dest.size());
+        }
+        // A file system that claims it can hash but then throws is not swallowed: the failure propagates
+        // and fails the item, rather than quietly downgrading the check the user asked for.
+        return TransferIntegrity.verify(item.totalBytes(), dest.size(),
+                sourceFs.checksum(item.source()), destFs.checksum(dest));
     }
 
-    /** The size of {@code name} inside {@code dir}, or null when it is not present. */
-    private Long destSize(FileSystem fs, String dir, String name) throws Exception {
+    /** The entry named {@code name} inside {@code dir}, or null when it is not present. */
+    private FileItem destEntry(FileSystem fs, String dir, String name) throws Exception {
         for (FileItem f : fs.list(dir)) {
-            if (!f.parent() && f.name().equals(name)) return f.size();
+            if (!f.parent() && f.name().equals(name)) return f;
         }
         return null;
     }
@@ -524,7 +552,17 @@ public final class TransferQueue {
         if (r.issues().contains(TransferIntegrity.Issue.SIZE_MISMATCH)) {
             return "size " + r.actualSize() + " ≠ expected " + r.expectedSize();
         }
+        if (r.issues().contains(TransferIntegrity.Issue.CHECKSUM_MISMATCH)) {
+            return Checksum.ALGORITHM + " " + shortHash(r.actualHash()) + " ≠ expected " + shortHash(r.expectedHash());
+        }
         return r.issues().toString();
+    }
+
+    /** A digest abbreviated to its first 12 hex chars — enough to tell two apart in a one-line error. */
+    private static String shortHash(String hash) {
+        if (hash == null || hash.isBlank()) return "?";
+        String h = hash.trim();
+        return h.length() <= 12 ? h : h.substring(0, 12) + "…";
     }
 
     /**

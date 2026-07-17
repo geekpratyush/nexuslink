@@ -88,6 +88,54 @@ public interface FileSystem {
         writeFile(destDir, destName, readFile(src, Long.MAX_VALUE));
     }
 
+    /**
+     * True if this file system can compute a content checksum for a file, letting {@link TransferQueue}
+     * verify a transfer by digest rather than by size alone. Defaults to whatever content access allows —
+     * a file's bytes can be read back and hashed — so any FS with {@link #supportsContentAccess()} gets
+     * checksums for free; {@link LocalFileSystem} overrides {@link #checksum} to stream instead.
+     */
+    default boolean supportsChecksum() { return supportsContentAccess(); }
+
+    /**
+     * The largest file the in-memory {@link #checksum} default can hash — a {@code byte[]} cannot be
+     * longer than this, and every {@link #readFile} clamps its request to it.
+     */
+    long MAX_IN_MEMORY_CHECKSUM_BYTES = Integer.MAX_VALUE;
+
+    /**
+     * True if this file system can hash <em>this particular</em> file. Narrower than
+     * {@link #supportsChecksum()}: the default {@link #checksum} buffers the whole file into a
+     * {@code byte[]}, so anything larger than {@link #MAX_IN_MEMORY_CHECKSUM_BYTES} would come back
+     * silently truncated and hash to a digest that wrongly looks like corruption — such a file reports
+     * false here instead, and the caller falls back to a size check. An implementation that streams
+     * ({@link LocalFileSystem}) or reads a stored digest overrides this to drop the size limit.
+     */
+    default boolean canChecksum(FileItem item) {
+        return supportsChecksum() && !item.directory() && item.size() <= MAX_IN_MEMORY_CHECKSUM_BYTES;
+    }
+
+    /**
+     * The {@link Checksum#ALGORITHM} digest of {@code item}'s content, as hex. The default reads the whole
+     * file into memory via {@link #readFile}; an implementation that can stream (or that already knows a
+     * digest, e.g. from object-store metadata) should override, along with {@link #canChecksum}. Callers
+     * should consult {@link #canChecksum} first — this throws for a file it cannot faithfully hash rather
+     * than returning a digest of a truncated read.
+     */
+    default String checksum(FileItem item) throws Exception {
+        if (item.directory()) {
+            throw new UnsupportedOperationException("a directory has no checksum: " + item.name());
+        }
+        if (!supportsChecksum()) {
+            throw new UnsupportedOperationException("checksums not supported by " + name());
+        }
+        if (item.size() > MAX_IN_MEMORY_CHECKSUM_BYTES) {
+            throw new UnsupportedOperationException(
+                    name() + " cannot hash a file larger than " + FileItem.humanSize(MAX_IN_MEMORY_CHECKSUM_BYTES)
+                            + " in memory: " + item.name());
+        }
+        return Checksum.sha256(readFile(item, Long.MAX_VALUE));
+    }
+
     /** True if this file system supports changing POSIX permissions (chmod). */
     default boolean supportsChmod() { return false; }
 

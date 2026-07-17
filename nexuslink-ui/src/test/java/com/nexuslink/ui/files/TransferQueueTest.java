@@ -57,6 +57,40 @@ class TransferQueueTest {
         }
     }
 
+    /**
+     * A {@link FileTransfer} that lands the right <em>number</em> of bytes but the wrong ones — the exact
+     * corruption a size-only integrity check cannot see, and the reason the digest check exists.
+     */
+    private static final class CorruptingTransfer implements FileTransfer {
+        @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+            corruptCopy(localFile, Path.of(remoteDir).resolve(localFile.getFileName()), progress);
+        }
+        @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) throws Exception {
+            Path src = Path.of(remoteFile.path());
+            corruptCopy(src, localDir.resolve(src.getFileName()), progress);
+        }
+        private void corruptCopy(Path src, Path dst, LongConsumer progress) throws Exception {
+            byte[] all = Files.readAllBytes(src);
+            if (all.length > 0) all[all.length / 2] ^= 0xFF;   // flip one byte, preserve the length
+            Files.write(dst, all);
+            progress.accept(all.length);
+        }
+    }
+
+    /** The local disk, but declining to hash — stands in for a remote service that cannot report a digest. */
+    private static class NoChecksumFileSystem implements FileSystem {
+        private final LocalFileSystem delegate = new LocalFileSystem();
+        @Override public String name() { return "NoHash"; }
+        @Override public String home() throws Exception { return delegate.home(); }
+        @Override public String parent(String path) { return delegate.parent(path); }
+        @Override public String join(String dir, String name) { return delegate.join(dir, name); }
+        @Override public List<FileItem> list(String path) throws Exception { return delegate.list(path); }
+        @Override public void mkdir(String path) throws Exception { delegate.mkdir(path); }
+        @Override public void rename(String from, String to) throws Exception { delegate.rename(from, to); }
+        @Override public void delete(FileItem item) throws Exception { delegate.delete(item); }
+        @Override public boolean supportsChecksum() { return false; }
+    }
+
     private static TransferQueue queue(Path localDir, Path remoteDir) {
         return new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CopyTransfer());
     }
@@ -152,6 +186,156 @@ class TransferQueueTest {
         q.runPending();
 
         assertEquals(TransferStatus.DONE, created.get(0).status());
+    }
+
+    @Test
+    void checksumVerifyIsOffByDefaultAndTracksItsSetter() {
+        TransferQueue q = queue(null, null);
+        assertFalse(q.isVerifyChecksum());
+        q.setVerifyChecksum(true);
+        assertTrue(q.isVerifyChecksum());
+    }
+
+    @Test
+    void checksumVerifyPassesForAFaithfulCopy(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = queue(local, remote);
+        q.setVerifyIntegrity(true);
+        q.setVerifyChecksum(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+        assertNull(created.get(0).error());
+    }
+
+    @Test
+    void checksumVerifyCatchesCorruptionThatPreservesSize(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CorruptingTransfer());
+        q.setVerifyIntegrity(true);
+        q.setVerifyChecksum(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        TransferItem item = created.get(0);
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertNotNull(item.error());
+        assertTrue(item.error().contains("integrity"), item.error());
+        assertTrue(item.error().contains(Checksum.ALGORITHM), item.error());
+        assertTrue(item.status().retryable());
+    }
+
+    @Test
+    void sizeOnlyVerifyMissesCorruptionThatPreservesSize(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // The gap the digest check closes: same length, different bytes, and Verify alone is happy.
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CorruptingTransfer());
+        q.setVerifyIntegrity(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+    }
+
+    @Test
+    void checksumVerifyIsIgnoredWhileIntegrityVerifyIsOff(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // Hashing rides on top of Verify; with Verify off nothing is checked at all.
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new CorruptingTransfer());
+        q.setVerifyChecksum(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+    }
+
+    @Test
+    void checksumVerifyFallsBackToSizeWhenASideCannotHash(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // The destination cannot report a digest, so the corruption goes unseen — but the transfer must
+        // still succeed rather than fail on an unavailable check.
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new NoChecksumFileSystem(), new CorruptingTransfer());
+        q.setVerifyIntegrity(true);
+        q.setVerifyChecksum(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, created.get(0).status());
+        assertNull(created.get(0).error());
+    }
+
+    @Test
+    void checksumVerifyStillCatchesATruncatedTransferBySize(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // Size and digest both differ; the size issue is the one reported, being the more legible failure.
+        Path src = Files.writeString(local.resolve("a.txt"), "hello world");
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), new TruncatingTransfer());
+        q.setVerifyIntegrity(true);
+        q.setVerifyChecksum(true);
+
+        List<TransferItem> created = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite());
+        q.runPending();
+
+        TransferItem item = created.get(0);
+        assertEquals(TransferStatus.FAILED, item.status());
+        assertTrue(item.error().contains("size"), item.error());
+    }
+
+    @Test
+    void localFileSystemHashesFileContent(@TempDir Path dir) throws Exception {
+        Path f = Files.writeString(dir.resolve("a.txt"), "abc");
+        LocalFileSystem fs = new LocalFileSystem();
+
+        assertTrue(fs.supportsChecksum());
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                fs.checksum(fileItemFor(f)));
+    }
+
+    @Test
+    void inMemoryFileSystemDeclinesToHashAFileTooBigToBuffer() {
+        // Regression guard: readFile clamps at Integer.MAX_VALUE, so hashing a larger file through the
+        // default would digest a truncated prefix and report a mismatch on a perfectly good transfer.
+        // Such a file must report "cannot hash" (→ size-only fallback) rather than produce a wrong digest.
+        FileSystem inMemory = new NoChecksumFileSystem() {
+            @Override public boolean supportsContentAccess() { return true; }
+            @Override public boolean supportsChecksum() { return true; }
+        };
+        FileItem huge = FileItem.of("big.iso", "/tmp/big.iso", false,
+                FileSystem.MAX_IN_MEMORY_CHECKSUM_BYTES + 1, "", "");
+        FileItem small = FileItem.of("a.txt", "/tmp/a.txt", false, 11, "", "");
+
+        assertFalse(inMemory.canChecksum(huge));
+        assertTrue(inMemory.canChecksum(small));
+        // ...and it refuses outright rather than hashing a truncated read, if called anyway.
+        assertThrows(UnsupportedOperationException.class, () -> inMemory.checksum(huge));
+    }
+
+    @Test
+    void localFileSystemHashesAFileOfAnySizeBecauseItStreams() {
+        // The streaming override has no such ceiling — no truncation, so no false mismatch.
+        FileItem huge = FileItem.of("big.iso", "/tmp/big.iso", false,
+                FileSystem.MAX_IN_MEMORY_CHECKSUM_BYTES + 1, "", "");
+        assertTrue(new LocalFileSystem().canChecksum(huge));
+    }
+
+    @Test
+    void localFileSystemRefusesToHashADirectory(@TempDir Path dir) throws Exception {
+        Files.createDirectory(dir.resolve("sub"));
+        LocalFileSystem fs = new LocalFileSystem();
+        FileItem sub = fs.list(dir.toString()).stream().filter(FileItem::directory).findFirst().orElseThrow();
+
+        assertThrows(UnsupportedOperationException.class, () -> fs.checksum(sub));
     }
 
     @Test

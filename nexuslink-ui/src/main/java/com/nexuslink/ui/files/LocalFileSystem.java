@@ -79,6 +79,19 @@ public final class LocalFileSystem implements FileSystem {
         Files.write(Path.of(dir).resolve(name), data);
     }
 
+    /** No size ceiling: {@link #checksum} streams, so a file of any size hashes in constant memory. */
+    @Override public boolean canChecksum(FileItem item) { return !item.directory(); }
+
+    @Override public String checksum(FileItem item) throws IOException {
+        if (item.directory()) {
+            throw new UnsupportedOperationException("a directory has no checksum: " + item.name());
+        }
+        // Streamed rather than inheriting the default's read-it-all, so hashing a huge file stays flat.
+        try (var in = Files.newInputStream(Path.of(item.path()))) {
+            return Checksum.sha256(in);
+        }
+    }
+
     @Override public boolean supportsCopy() { return true; }
 
     @Override public void copy(FileItem src, String destDir, String destName) throws IOException {

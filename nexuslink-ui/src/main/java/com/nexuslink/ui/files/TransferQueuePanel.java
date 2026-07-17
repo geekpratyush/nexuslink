@@ -77,6 +77,15 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         verify.setSelected(queue.isVerifyIntegrity());
         verify.setOnAction(e -> queue.setVerifyIntegrity(verify.isSelected()));
 
+        // Rides on top of Verify — greyed out until that is on, since the queue ignores it otherwise.
+        ToggleButton hash = new ToggleButton("Hash");
+        hash.getStyleClass().add("btn-secondary");
+        hash.setTooltip(new Tooltip("Strengthen Verify from same-size to same-bytes by comparing a "
+                + Checksum.ALGORITHM + " digest of each copy. Re-reads both files in full, so it is markedly slower."));
+        hash.setSelected(queue.isVerifyChecksum());
+        hash.setOnAction(e -> queue.setVerifyChecksum(hash.isSelected()));
+        hash.disableProperty().bind(verify.selectedProperty().not());
+
         ToggleButton autoRetry = new ToggleButton("Auto-retry");
         autoRetry.getStyleClass().add("btn-secondary");
         autoRetry.setTooltip(new Tooltip("Automatically retry transfers that fail with a transient network error "
@@ -107,7 +116,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.setOnAction(e -> queue.clearCompleted());
 
         HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, parallelLbl, parallel,
-                verify, autoRetry, retryFailed, clear);
+                verify, hash, autoRetry, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 
