@@ -58,11 +58,19 @@ public final class FileBrowserPane extends VBox {
     // Free/total capacity of the current directory's volume, appended to the item-count status; null when unknown.
     private DiskSpace diskSpace;
 
+    /** A drop of items from the other pane: the items, the destination directory, and whether it is a move. */
+    @FunctionalInterface
+    public interface CrossPaneDrop {
+        void accept(List<FileItem> items, String destDir, boolean move);
+    }
+
     private Consumer<String> logger = s -> {};
     private Consumer<FileItem> onActivateFile = f -> {};
     private Runnable onChanged = () -> {};
-    // (items dragged from the other pane, target directory) → transfer into that directory.
-    private BiConsumer<List<FileItem>, String> onDropFromOther = (items, dir) -> {};
+    // (items dragged from the other pane, target directory, isMove) → transfer into that directory.
+    private CrossPaneDrop onDropFromOther = (items, dir, move) -> {};
+    // (items dragged within THIS pane onto a folder row, that folder) → rename-move into it (same file system).
+    private BiConsumer<List<FileItem>, String> onSameSideMove = (items, dir) -> {};
     // (files dragged in from the OS file manager, target directory) → upload/copy into that directory.
     private BiConsumer<List<Path>, String> onExternalDrop = (paths, dir) -> {};
     private Runnable onFocused = () -> {};
@@ -94,11 +102,21 @@ public final class FileBrowserPane extends VBox {
     public void setOnChanged(Runnable handler) { this.onChanged = handler == null ? () -> {} : handler; }
 
     /**
-     * Notified when files dragged from the <em>other</em> pane are dropped onto this one: the items and
-     * the destination directory (a folder row under the cursor, else this pane's current directory).
+     * Notified when files dragged from the <em>other</em> pane are dropped onto this one: the items, the
+     * destination directory (a folder row under the cursor, else this pane's current directory), and whether
+     * the gesture was a move (the platform's move modifier, e.g. Shift) rather than a plain copy.
      */
-    public void setOnDropFromOther(BiConsumer<List<FileItem>, String> handler) {
-        this.onDropFromOther = handler == null ? (items, dir) -> {} : handler;
+    public void setOnDropFromOther(CrossPaneDrop handler) {
+        this.onDropFromOther = handler == null ? (items, dir, move) -> {} : handler;
+    }
+
+    /**
+     * Notified when entries dragged from <em>this</em> pane are dropped onto one of its own folder rows: the
+     * items and the target folder. Such a move stays on one file system, so the container performs it as a
+     * rename rather than a copy-and-delete (see {@link SameSideMove}).
+     */
+    public void setOnSameSideMove(BiConsumer<List<FileItem>, String> handler) {
+        this.onSameSideMove = handler == null ? (items, dir) -> {} : handler;
     }
 
     /**
@@ -228,10 +246,11 @@ public final class FileBrowserPane extends VBox {
                 if (!table.getSelectionModel().getSelectedItems().contains(row.getItem())) {
                     table.getSelectionModel().clearAndSelect(row.getIndex());
                 }
-                List<FileItem> sel = selected().stream()
-                        .filter(f -> !f.parent() && !f.directory()).toList();
+                // Folders are draggable too: cross-pane they copy recursively, same-side they rename-move.
+                List<FileItem> sel = selected().stream().filter(f -> !f.parent()).toList();
                 if (sel.isEmpty()) return;
-                Dragboard db = row.startDragAndDrop(TransferMode.COPY);
+                // Offer both modes so the platform's copy/move modifier (e.g. Shift) can pick at drop time.
+                Dragboard db = row.startDragAndDrop(TransferMode.COPY_OR_MOVE);
                 ClipboardContent content = new ClipboardContent();
                 content.put(FILE_DRAG, sel.size());
                 content.putString(sel.size() + " file(s)");
@@ -302,19 +321,22 @@ public final class FileBrowserPane extends VBox {
      * the row level and never reach here). Highlights the whole table while hovering over empty space.
      */
     private void wireDropTarget() {
+        // The table body drops into the current directory, so it only accepts drags from elsewhere — dropping
+        // this pane's own selection into its own current folder would be a no-op (that is a same-side move,
+        // and only makes sense onto a different folder row, handled below).
         table.setOnDragOver(e -> {
-            if (acceptsDrag(e.getDragboard())) e.acceptTransferModes(TransferMode.COPY);
+            if (acceptsFromElsewhere(e.getDragboard())) e.acceptTransferModes(TransferMode.COPY_OR_MOVE);
             e.consume();
         });
         table.setOnDragEntered(e -> {
-            if (acceptsDrag(e.getDragboard()) && !table.getStyleClass().contains("drop-target")) {
+            if (acceptsFromElsewhere(e.getDragboard()) && !table.getStyleClass().contains("drop-target")) {
                 table.getStyleClass().add("drop-target");
             }
             e.consume();
         });
         table.setOnDragExited(e -> { table.getStyleClass().remove("drop-target"); e.consume(); });
         table.setOnDragDropped(e -> {
-            boolean ok = handleDrop(e.getDragboard(), currentPath);
+            boolean ok = handleDrop(e.getDragboard(), currentPath, e.getTransferMode() == TransferMode.MOVE);
             table.getStyleClass().remove("drop-target");
             e.setDropCompleted(ok);
             e.consume();
@@ -329,13 +351,14 @@ public final class FileBrowserPane extends VBox {
      */
     private void wireRowDropTarget(TableRow<FileItem> row) {
         row.setOnDragOver(e -> {
-            if (isFolderDropTarget(row) && acceptsDrag(e.getDragboard())) {
-                e.acceptTransferModes(TransferMode.COPY);
-                e.consume();
-            }
+            if (!isFolderDropTarget(row)) return;
+            Dragboard db = e.getDragboard();
+            // A folder row also accepts this pane's OWN drag — dropping onto a different folder is a move.
+            if (isOwnDrag(db)) { e.acceptTransferModes(TransferMode.MOVE); e.consume(); }
+            else if (acceptsFromElsewhere(db)) { e.acceptTransferModes(TransferMode.COPY_OR_MOVE); e.consume(); }
         });
         row.setOnDragEntered(e -> {
-            if (isFolderDropTarget(row) && acceptsDrag(e.getDragboard())) {
+            if (isFolderDropTarget(row) && (isOwnDrag(e.getDragboard()) || acceptsFromElsewhere(e.getDragboard()))) {
                 if (!row.getStyleClass().contains("drop-target")) row.getStyleClass().add("drop-target");
                 e.consume();
             }
@@ -343,7 +366,7 @@ public final class FileBrowserPane extends VBox {
         row.setOnDragExited(e -> { row.getStyleClass().remove("drop-target"); });
         row.setOnDragDropped(e -> {
             if (!isFolderDropTarget(row)) return;   // let the table-level handler take it
-            boolean ok = handleDrop(e.getDragboard(), row.getItem().path());
+            boolean ok = handleDrop(e.getDragboard(), row.getItem().path(), e.getTransferMode() == TransferMode.MOVE);
             row.getStyleClass().remove("drop-target");
             e.setDropCompleted(ok);
             e.consume();
@@ -356,16 +379,29 @@ public final class FileBrowserPane extends VBox {
                 && row.getItem().directory() && !row.getItem().parent();
     }
 
-    /** True if the dragboard carries files from the other pane or from the OS. */
-    private boolean acceptsDrag(Dragboard db) {
+    /** True if the dragboard carries files from the <em>other</em> pane or from the OS (not our own drag). */
+    private boolean acceptsFromElsewhere(Dragboard db) {
         boolean fromOtherPane = dragSource != null && dragSource != this && db.hasContent(FILE_DRAG);
         return fromOtherPane || db.hasFiles();
     }
 
-    /** Routes a drop of {@code destDir}: cross-pane items to the transfer handler, OS files to upload/copy. */
-    private boolean handleDrop(Dragboard db, String destDir) {
+    /** True if this drag originated in this very pane (a candidate same-side rename-move). */
+    private boolean isOwnDrag(Dragboard db) {
+        return dragSource == this && db.hasContent(FILE_DRAG) && draggedItems != null;
+    }
+
+    /**
+     * Routes a drop into {@code destDir}: this pane's own items become a same-side move, items from the other
+     * pane go to the transfer handler ({@code move} = the platform move modifier was held), and OS files are
+     * uploaded/copied.
+     */
+    private boolean handleDrop(Dragboard db, String destDir, boolean move) {
+        if (isOwnDrag(db)) {
+            onSameSideMove.accept(List.copyOf(draggedItems), destDir);
+            return true;
+        }
         if (dragSource != null && dragSource != this && db.hasContent(FILE_DRAG) && draggedItems != null) {
-            onDropFromOther.accept(List.copyOf(draggedItems), destDir);
+            onDropFromOther.accept(List.copyOf(draggedItems), destDir, move);
             return true;
         }
         if (db.hasFiles()) {

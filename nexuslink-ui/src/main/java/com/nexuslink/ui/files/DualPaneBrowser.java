@@ -70,9 +70,14 @@ public final class DualPaneBrowser extends BorderPane {
         remotePane.setOnActivateFile(f -> download(List.of(f)));
 
         // Drag-and-drop: drop files onto the remote pane to upload, onto the local pane to download,
-        // each into the folder row under the cursor (or the pane's current directory).
-        remotePane.setOnDropFromOther((items, dir) -> enqueue(items, TransferItem.Direction.UPLOAD, false, dir));
-        localPane.setOnDropFromOther((items, dir) -> enqueue(items, TransferItem.Direction.DOWNLOAD, false, dir));
+        // each into the folder row under the cursor (or the pane's current directory). Holding the platform
+        // move modifier (e.g. Shift) turns the copy into a move (the source is deleted once the copy lands).
+        remotePane.setOnDropFromOther((items, dir, move) -> enqueue(items, TransferItem.Direction.UPLOAD, move, dir));
+        localPane.setOnDropFromOther((items, dir, move) -> enqueue(items, TransferItem.Direction.DOWNLOAD, move, dir));
+        // Dragging a pane's own selection onto one of its folder rows moves it within that side by renaming —
+        // no bytes leave the server/disk.
+        localPane.setOnSameSideMove((items, dir) -> sameSideMove(local, localPane, items, dir));
+        remotePane.setOnSameSideMove((items, dir) -> sameSideMove(remote, remotePane, items, dir));
         // External drag-and-drop from the OS file manager: upload onto the remote side, copy on the local side.
         remotePane.setOnExternalDrop(this::uploadExternal);
         localPane.setOnExternalDrop(this::copyLocalExternal);
@@ -346,6 +351,41 @@ public final class DualPaneBrowser extends BorderPane {
                 remotePane.refresh();
             });
         }, "sync-delete");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Moves {@code items} into {@code destDir} on the same side by renaming each (no byte transfer), off the
+     * FX thread. Illegal moves — an entry already in {@code destDir}, or a folder dropped into its own
+     * subtree — are dropped by {@link SameSideMove#plan}; a name that already exists in {@code destDir} is
+     * skipped rather than overwritten, and reported. Refreshes the pane afterward.
+     */
+    private void sameSideMove(FileSystem fs, FileBrowserPane pane, List<FileItem> items, String destDir) {
+        List<SameSideMove.Move> moves = SameSideMove.plan(items, destDir, fs);
+        if (moves.isEmpty()) {
+            messageLabel.setText("Nothing to move there");
+            return;
+        }
+        Thread t = new Thread(() -> {
+            int moved = 0, skipped = 0;
+            for (SameSideMove.Move m : moves) {
+                try {
+                    if (fs.exists(destDir, m.item().name())) { skipped++; continue; }   // don't clobber
+                    fs.rename(m.from(), m.to());
+                    moved++;
+                } catch (Exception ex) {
+                    skipped++;
+                    logger.accept("Move failed for " + m.item().name() + ": " + ex.getMessage());
+                }
+            }
+            int finalMoved = moved, finalSkipped = skipped;
+            Platform.runLater(() -> {
+                messageLabel.setText("Moved " + finalMoved + " item(s)"
+                        + (finalSkipped > 0 ? " · " + finalSkipped + " skipped (name exists or failed)" : ""));
+                pane.refresh();
+            });
+        }, "same-side-move");
         t.setDaemon(true);
         t.start();
     }
