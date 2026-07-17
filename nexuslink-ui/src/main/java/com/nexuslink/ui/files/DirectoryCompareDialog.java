@@ -2,6 +2,7 @@ package com.nexuslink.ui.files;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -10,6 +11,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,10 +29,14 @@ final class DirectoryCompareDialog {
     private final List<FileItem> right;
     private final String leftName;
     private final String rightName;
-    private final List<DirectoryDiff.Entry> diff;
+    private final FileSystem leftFs;
+    private final FileSystem rightFs;
+    /** Re-planned in place when the user switches to a content compare. */
+    private List<DirectoryDiff.Entry> diff;
 
     private final TableView<DirectoryDiff.Entry> table = new TableView<>();
     private final CheckBox showSame = new CheckBox("Show identical");
+    private final CheckBox byContent = new CheckBox("Compare content");
     private final ComboBox<Mode> mode = new ComboBox<>();
     private final Label planLabel = new Label();
 
@@ -46,17 +52,21 @@ final class DirectoryCompareDialog {
         @Override public String toString() { return label; }
     }
 
-    private DirectoryCompareDialog(List<FileItem> left, List<FileItem> right, String leftName, String rightName) {
+    private DirectoryCompareDialog(List<FileItem> left, List<FileItem> right, String leftName, String rightName,
+                                   FileSystem leftFs, FileSystem rightFs) {
         this.left = left;
         this.right = right;
         this.leftName = leftName;
         this.rightName = rightName;
+        this.leftFs = leftFs;
+        this.rightFs = rightFs;
         this.diff = DirectoryDiff.compare(left, right);
     }
 
     static Optional<List<SyncPlanner.Action>> open(Window owner, List<FileItem> left, List<FileItem> right,
-                                                   String leftName, String rightName) {
-        return new DirectoryCompareDialog(left, right, leftName, rightName).show(owner);
+                                                   String leftName, String rightName,
+                                                   FileSystem leftFs, FileSystem rightFs) {
+        return new DirectoryCompareDialog(left, right, leftName, rightName, leftFs, rightFs).show(owner);
     }
 
     private Optional<List<SyncPlanner.Action>> show(Window owner) {
@@ -77,10 +87,22 @@ final class DirectoryCompareDialog {
         mode.setOnAction(e -> updatePlanLabel());
         planLabel.getStyleClass().add("meta-label");
 
+        boolean canHash = canHashBothSides();
+        byContent.setDisable(!canHash);
+        byContent.setTooltip(new Tooltip(canHash
+                ? "Tell same-size files apart by a " + Checksum.ALGORITHM + " digest instead of their timestamp, "
+                        + "which the two sides may format differently or may not have preserved. Reads both copies."
+                : "Not available: " + (leftFs == null || rightFs == null ? "unknown file systems"
+                        : leftFs.name() + " or " + rightFs.name() + " cannot hash file content")));
+        byContent.setOnAction(e -> recompare(dialog));
+
+        HBox topRow = new HBox(12, showSame, byContent);
+        topRow.setAlignment(Pos.CENTER_LEFT);
+
         HBox modeRow = new HBox(8, new Label("Sync:"), mode, planLabel);
         modeRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox content = new VBox(10, showSame, table, new Separator(), modeRow);
+        VBox content = new VBox(10, topRow, table, new Separator(), modeRow);
         content.setPadding(new Insets(12));
         content.setPrefSize(660, 420);
         dialog.getDialogPane().setContent(content);
@@ -94,12 +116,92 @@ final class DirectoryCompareDialog {
         return dialog.showAndWait().filter(plan -> !plan.isEmpty());
     }
 
+    /** True when both sides can hash — the checkbox is pointless (and misleading) otherwise. */
+    private boolean canHashBothSides() {
+        return leftFs != null && rightFs != null && leftFs.supportsChecksum() && rightFs.supportsChecksum();
+    }
+
+    /**
+     * Re-runs the comparison for the current checkbox state. A content compare has to read files, so it
+     * runs on a background thread with the dialog disabled meanwhile; only the same-size candidates
+     * ({@link DirectoryDiff#needsDigest}) are hashed, since every other row is already decided. A file
+     * neither side can hash keeps its metadata verdict rather than failing the whole compare.
+     */
+    private void recompare(Dialog<?> dialog) {
+        if (!byContent.isSelected()) {
+            diff = DirectoryDiff.compare(left, right);
+            refresh(dialog);
+            return;
+        }
+
+        List<DirectoryDiff.Entry> candidates = DirectoryDiff.needsDigest(diff);
+        if (candidates.isEmpty()) {        // nothing ambiguous — no I/O needed at all
+            refresh(dialog);
+            return;
+        }
+
+        dialog.getDialogPane().setDisable(true);
+        dialog.setHeaderText("Hashing " + candidates.size() + " file(s) to compare content…");
+        Task<Map<FileItem, String>> task = new Task<>() {
+            @Override protected Map<FileItem, String> call() {
+                Map<FileItem, String> out = new HashMap<>();
+                for (DirectoryDiff.Entry e : candidates) {
+                    hashInto(out, leftFs, e.left());
+                    hashInto(out, rightFs, e.right());
+                }
+                return out;
+            }
+        };
+        task.setOnSucceeded(ev -> {
+            Map<FileItem, String> digests = task.getValue();
+            diff = DirectoryDiff.compare(left, right, true, DirectoryDiff.Match.CONTENT, digests::get);
+            dialog.getDialogPane().setDisable(false);
+            refresh(dialog);
+        });
+        task.setOnFailed(ev -> {
+            // Never leave the dialog stuck: fall back to the metadata verdict and say so.
+            byContent.setSelected(false);
+            diff = DirectoryDiff.compare(left, right);
+            dialog.getDialogPane().setDisable(false);
+            refresh(dialog);
+            // Overrides the header refresh just set, so the failure is what the user actually reads.
+            dialog.setHeaderText("Content compare failed (showing timestamp comparison): "
+                    + message(task.getException()));
+        });
+        Thread t = new Thread(task, "dir-compare-hash");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Hashes one side's file into {@code out}, skipping (rather than failing) what it cannot hash. */
+    private static void hashInto(Map<FileItem, String> out, FileSystem fs, FileItem f) {
+        if (f == null || !fs.canChecksum(f)) return;
+        try {
+            out.put(f, fs.checksum(f));
+        } catch (Exception e) {
+            // One unreadable file must not sink the comparison; it simply keeps its metadata verdict.
+        }
+    }
+
+    private static String message(Throwable t) {
+        if (t == null) return "unknown error";
+        return t.getMessage() == null ? t.toString() : t.getMessage();
+    }
+
+    /** Re-renders table, header and plan after {@link #diff} has been replaced. */
+    private void refresh(Dialog<?> dialog) {
+        applyFilter();
+        updatePlanLabel();
+        dialog.setHeaderText(summaryText());
+    }
+
     private String summaryText() {
         Map<DirectoryDiff.Status, Integer> s = DirectoryDiff.summary(diff);
-        return String.format("%s  vs  %s   —   %d new left · %d new right · %d differ · %d identical",
+        return String.format("%s  vs  %s   —   %d new left · %d new right · %d differ · %d identical   (by %s)",
                 leftName, rightName,
                 s.get(DirectoryDiff.Status.LEFT_ONLY), s.get(DirectoryDiff.Status.RIGHT_ONLY),
-                s.get(DirectoryDiff.Status.DIFFERENT), s.get(DirectoryDiff.Status.SAME));
+                s.get(DirectoryDiff.Status.DIFFERENT), s.get(DirectoryDiff.Status.SAME),
+                byContent.isSelected() ? "content" : "size + timestamp");
     }
 
     @SuppressWarnings("unchecked")

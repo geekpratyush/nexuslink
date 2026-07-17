@@ -295,7 +295,7 @@ public final class DualPaneBrowser extends BorderPane {
         }
         Window owner = getScene() == null ? null : getScene().getWindow();
         DirectoryCompareDialog.open(owner, localPane.currentListing(), remotePane.currentListing(),
-                "Local — " + local.name(), "Remote — " + remote.name())
+                "Local — " + local.name(), "Remote — " + remote.name(), local, remote)
                 .ifPresent(this::runSyncPlan);
     }
 
