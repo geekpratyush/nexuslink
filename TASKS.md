@@ -697,7 +697,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] `SftpService` — Apache MINA SSHD; password + SSH-private-key auth, list/read + **upload/download (progress), mkdir, rename, delete (recursive), chmod**. **Verified live vs. test.rebex.net.**
 - [x] `SftpView` — **WinSCP/MobaXterm-style two-pane commander** (local↔remote) via reusable `com.nexuslink.ui.files` (`FileBrowserPane`/`DualPaneBrowser`); upload/download, **cross-pane drag-and-drop**, Ctrl/Shift multi-select, New-Folder/Rename(F2)/Delete(Del), context menus.
 - [x] `TransferQueue` — batch ops, pause/resume/retry/cancel, bandwidth throttle (queue panel with Pause/Resume + Limit combo; `TransferGovernor` governs the in-flight copy)
-- [-] `SyncService` — bidirectional sync with conflict resolution (hash compare) — pure planning core
+- [x] `SyncService` — bidirectional sync with conflict resolution (hash compare) — pure planning core
       done: `SyncPlanner` turns a `DirectoryDiff` into an ordered `Action` list for a chosen `Mode`
       (MIRROR_TO_RIGHT / MIRROR_TO_LEFT / UPDATE_RIGHT / UPDATE_LEFT — the two UPDATE_* modes never
       delete); each action carries the source/victim `FileItem` + the diff status that justified it, plus
@@ -705,7 +705,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       8 tests. **UI wired:** the `DirectoryCompareDialog` has a mode combo (mirror →/← · update →/← ) with a
       live "N copy → · M copy ← · D delete" plan preview; **Run sync** executes the plan through
       `DualPaneBrowser` — copies flow via the transfer queue (overwrite prompt), deletes are confirmed once
-      then applied off the FX thread on the correct side. _(Hash-based change detection still TODO.)_
+      then applied off the FX thread on the correct side. **Hash-based change detection done:**
+      `DirectoryDiff.Match.CONTENT` + a `Digests` seam compares same-size files by digest (ignoring the mtime
+      display string, which two file systems format differently); `needsDigest` selects only the same-size
+      pairs worth hashing (incl. metadata-"same" ones); a **Compare content** checkbox in the dialog hashes
+      those off the FX thread and re-diffs, falling back to metadata when a side can't hash. +7 tests.
 - [x] Permissions display (rwx string in details) + **remote chmod** (octal dialog on the SFTP pane)
 
 ### 7.2 FTP / FTPS
@@ -797,13 +801,18 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Parallel/background transfers (configurable concurrency) — `TransferQueue.setConcurrency(n)` runs a pool
       of N worker threads, each claiming the next item atomically (no double-take); **Parallel** spinner (1–8) in
       the queue-panel footer restarts the pool live. 3 tests incl. a barrier-based proof of true 4-way concurrency.
-- [-] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
+- [x] Post-transfer integrity check (size/mtime, optional hash/checksum) — pure `TransferIntegrity`
       verifier done: compares source vs landed destination — byte count always, plus a checksum when the
       caller can hash both sides (case-insensitive, whitespace-trimmed) — returning a `Report` with a
       precise `Issue` list (DESTINATION_MISSING / SIZE_MISMATCH / CHECKSUM_MISMATCH). 8 tests. **Wired into
       `TransferQueue`:** a **Verify** toggle in the queue-panel footer (`setVerifyIntegrity`) size-checks each
       completed file against the destination listing; a mismatch/missing marks it FAILED (retryable) with an
-      "integrity check failed: …" note. 4 added queue tests (24 in `TransferQueueTest`). _(Hash computation still TODO.)_
+      "integrity check failed: …" note. **Hash computation done:** pure `Checksum` (streaming SHA-256 → hex,
+      NIST vectors under test) + `FileSystem.supportsChecksum/canChecksum/checksum` (default hashes via
+      `readFile`, so SFTP/FTP/S3 get it free; `LocalFileSystem` streams; `canChecksum` guards the >2GB
+      `readFile` clamp so an oversized file falls back to the size check rather than hashing a truncated
+      prefix). A **Hash** toggle (`setVerifyChecksum`, disabled until Verify is on) compares both copies'
+      digests when both sides can hash. +16 tests across `Checksum`/`TransferQueue`.
 
 **Drag & drop**
 - [x] **External DnD** — drag files in from the OS file manager and out to the desktop. Dropping OS files
@@ -811,11 +820,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       expand recursively); on the local pane they copy in (recursive, off the FX thread). Local files are
       also put on the dragboard as OS files (`ClipboardContent.putFiles`) so a selection can be dragged out
       to the desktop / another app (no-op for remote paths that don't resolve on disk).
-- [-] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local —
+- [x] Move-vs-copy semantics via modifier keys, incl. server-side move within remote and within local —
       cross-pane **move** done: `TransferItem` carries a `moveMode` flag, `TransferQueue.enqueue(…, moveMode)`
       deletes each source only after its copy succeeds (a skipped/failed copy leaves the source intact);
       **Move →** / **← Move** buttons (confirmed) in `DualPaneBrowser`, both panes refresh after. 3 added
-      queue tests (27 in `TransferQueueTest`). _(modifier-key DnD + same-side/server-side move via rename still TODO.)_
+      queue tests (27 in `TransferQueueTest`). **Modifier-key DnD + same-side move done:** the drag offers
+      `COPY_OR_MOVE`, so the platform move modifier (Shift) turns a cross-pane copy into a move; dragging a
+      pane's own selection onto one of ITS folder rows is a same-side move performed by rename (no byte
+      transfer) — pure `SameSideMove.plan` refuses no-op/self-subtree moves (separator-agnostic via
+      `FileSystem.parent`), the executor skips rather than clobbers an existing name. Folders are now
+      draggable too. +8 `SameSideMove` tests.
 - [x] Drop directly onto a **target folder row** (not only the pane's current directory) — row-level
       drag handlers route a drop into that folder's path; non-folder rows fall through to the current
       directory (drop routing unified behind `acceptsDrag`/`handleDrop`; `enqueue` gained an explicit-
@@ -848,7 +862,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       for images). `FileSystem` gains optional `readFile`/`writeFile` content access, implemented for Local,
       SFTP (`SftpService.readBytes/writeBytes`), FTP (`FtpService.readBytes/writeBytes`) and S3
       (`getObjectBytes`/`putObject`). "Quick view / Edit…" context item, shown only when the FS supports it.
-- [-] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
+- [x] Compare directories (highlight new/changed/missing) — pure `DirectoryDiff` seam done: single-level
       compare of two listings, matching by name (case-sensitive by default, optional case-insensitive for
       Windows FS), classifying each entry LEFT_ONLY / RIGHT_ONLY / DIFFERENT (size, mtime, or file-vs-dir
       type) / SAME (same-name dirs match at this level); ignores the ".." row, returns a merged dirs-first
