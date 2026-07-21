@@ -138,7 +138,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~85% of in-scope tasks complete** (277 done · 39 in-progress · 11 not started by checkbox —
+**Overall: ~86% of in-scope tasks complete** (279 done · 37 in-progress · 11 not started by checkbox —
 see `TASKS.md`). **Phases 0–4 and 6 are complete; Phase 9.4 (External Secret Vaults) is complete.** Five
 cloud/OS-blocked items are **excluded from scope** (Azure Key Vault, cloud sync, RBAC, auto-updater,
 signed Windows/macOS installers — see the "⊘ Out of scope" section in `TASKS.md`). Full `mvn test` is
