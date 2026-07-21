@@ -112,6 +112,42 @@ public final class SftpService implements AutoCloseable {
         }
     }
 
+    // ---- offset-based resume (append to a partially transferred file) ----
+
+    /**
+     * Uploads {@code localSource} from byte {@code offset} onward, appending to the partial remote file.
+     * {@code progress} reports the remote file's total size (offset + bytes sent by this call). An
+     * {@code offset} of 0 delegates to the ordinary truncating {@link #upload}.
+     */
+    public void uploadFrom(Path localSource, String remotePath, long offset, LongConsumer progress) throws Exception {
+        if (offset <= 0) { upload(localSource, remotePath, progress); return; }
+        try (InputStream in = Files.newInputStream(localSource);
+             OutputStream out = sftp.write(remotePath, SftpClient.OpenMode.Write, SftpClient.OpenMode.Append)) {
+            in.skipNBytes(offset);                       // resend nothing already on the server
+            copy(in, out, shifted(progress, offset));
+        }
+    }
+
+    /**
+     * Downloads {@code remotePath} from byte {@code offset} onward, appending to the partial local file.
+     * The remote stream is opened read-only and skipped forward, so the server file is untouched.
+     */
+    public void downloadFrom(String remotePath, Path localTarget, long offset, LongConsumer progress) throws Exception {
+        if (offset <= 0) { download(remotePath, localTarget, progress); return; }
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        try (InputStream in = sftp.read(remotePath, SftpClient.OpenMode.Read);
+             OutputStream out = Files.newOutputStream(localTarget,
+                     java.nio.file.StandardOpenOption.WRITE, java.nio.file.StandardOpenOption.APPEND)) {
+            in.skipNBytes(offset);
+            copy(in, out, shifted(progress, offset));
+        }
+    }
+
+    /** Rebases a progress callback so it reports total file bytes rather than this call's own count. */
+    private static LongConsumer shifted(LongConsumer progress, long offset) {
+        return progress == null ? null : n -> progress.accept(offset + n);
+    }
+
     // ---- SCP transfer mode (same SSH session, different file-copy protocol than SFTP) ----
 
     /**

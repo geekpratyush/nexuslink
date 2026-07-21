@@ -79,4 +79,63 @@ class SftpScpEmbeddedTest {
             assertTrue(svc.list("/").stream().noneMatch(e -> e.name().equals("uploaded.txt")));
         }
     }
+
+    /**
+     * Proves offset-based resume against a real SFTP server rather than a stubbed transport: half a file
+     * is placed remotely to stand in for an interrupted upload, then {@code uploadFrom} appends the rest
+     * and the result must equal the original byte-for-byte. This is the part the queue's unit tests
+     * cannot cover — that {@code OpenMode.Append} really appends and the skip really skips.
+     */
+    @Test
+    void resumedUploadAppendsExactlyTheMissingTail() throws Exception {
+        String payload = "0123456789abcdefghijklmnopqrstuvwxyz";
+        Path local = localDir.resolve("resume-src.txt");
+        Files.writeString(local, payload);
+        int landed = 10;
+
+        try (SftpService svc = new SftpService()) {
+            svc.connect("127.0.0.1", port, "u", "pw");
+            svc.writeBytes("/partial.txt", payload.substring(0, landed).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            java.util.List<Long> reported = new java.util.ArrayList<>();
+            svc.uploadFrom(local, "/partial.txt", landed, reported::add);
+
+            assertEquals(payload, svc.readText("/partial.txt", 4096), "the resumed file must match the source");
+            assertEquals(payload.length(), reported.get(reported.size() - 1),
+                    "progress reports total bytes present, not just this call's contribution");
+            assertTrue(reported.get(0) > landed, "and it starts above the offset rather than back at zero");
+        }
+    }
+
+    /** The mirror case: a partial local file is completed by downloading only the missing tail. */
+    @Test
+    void resumedDownloadAppendsExactlyTheMissingTail() throws Exception {
+        String payload = "the quick brown fox jumps over the lazy dog";
+        int landed = 16;
+
+        try (SftpService svc = new SftpService()) {
+            svc.connect("127.0.0.1", port, "u", "pw");
+            svc.writeBytes("/whole.txt", payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            Path partial = localDir.resolve("resume-dst.txt");
+            Files.writeString(partial, payload.substring(0, landed));
+
+            svc.downloadFrom("/whole.txt", partial, landed, bytes -> {});
+
+            assertEquals(payload, Files.readString(partial));
+        }
+    }
+
+    /** An offset of zero is an ordinary whole-file transfer, so callers need no special-casing. */
+    @Test
+    void zeroOffsetFallsBackToAWholeFileTransfer() throws Exception {
+        Path local = localDir.resolve("zero-offset.txt");
+        Files.writeString(local, "written from scratch");
+
+        try (SftpService svc = new SftpService()) {
+            svc.connect("127.0.0.1", port, "u", "pw");
+            svc.uploadFrom(local, "/from-zero.txt", 0, bytes -> {});
+            assertEquals("written from scratch", svc.readText("/from-zero.txt", 4096));
+        }
+    }
 }

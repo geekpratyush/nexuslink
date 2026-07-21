@@ -86,6 +86,14 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         hash.setOnAction(e -> queue.setVerifyChecksum(hash.isSelected()));
         hash.disableProperty().bind(verify.selectedProperty().not());
 
+        ToggleButton resume = new ToggleButton("Resume");
+        resume.getStyleClass().add("btn-secondary");
+        resume.setTooltip(new Tooltip("When a failed transfer is retried, append to the partial file already on the "
+                + "destination instead of re-sending it from the start. Assumes those bytes are still a correct "
+                + "prefix of the source — pair it with Hash if the source may have changed in between."));
+        resume.setSelected(queue.isResumeTransfers());
+        resume.setOnAction(e -> queue.setResumeTransfers(resume.isSelected()));
+
         ToggleButton autoRetry = new ToggleButton("Auto-retry");
         autoRetry.getStyleClass().add("btn-secondary");
         autoRetry.setTooltip(new Tooltip("Automatically retry transfers that fail with a transient network error "
@@ -116,7 +124,7 @@ public final class TransferQueuePanel extends TitledPane implements TransferQueu
         clear.setOnAction(e -> queue.clearCompleted());
 
         HBox footer = new HBox(10, counts, overall, pauseBtn, limitLbl, throttle, parallelLbl, parallel,
-                verify, hash, autoRetry, retryFailed, clear);
+                verify, hash, resume, autoRetry, retryFailed, clear);
         footer.setAlignment(Pos.CENTER_LEFT);
         footer.setPadding(new Insets(6, 0, 0, 0));
 

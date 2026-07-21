@@ -902,4 +902,165 @@ class TransferQueueTest {
         assertEquals(n, q.count(TransferStatus.DONE), "all files should transfer in parallel and complete");
         for (int i = 0; i < n; i++) assertTrue(Files.exists(remote.resolve("f" + i + ".txt")));
     }
+
+    // ---- offset-based resume ----
+
+    /**
+     * Drops the connection halfway through its first upload, leaving a partial destination file behind —
+     * exactly the state resume exists to recover from. Later attempts succeed, and {@code uploadFrom}
+     * appends rather than truncating, so the test can tell a resumed transfer from a restarted one.
+     */
+    private static final class InterruptingTransfer implements FileTransfer {
+        private final boolean canResume;
+        private int wholeCalls;
+        private int resumeCalls;
+        private final List<Long> offsets = new java.util.ArrayList<>();
+        private boolean interruptNext = true;
+        /** When set, the interrupted attempt has already written every byte before the link drops. */
+        private boolean landEverythingBeforeFailing;
+
+        InterruptingTransfer(boolean canResume) { this.canResume = canResume; }
+
+        @Override public boolean supportsResume() { return canResume; }
+
+        @Override public void upload(Path localFile, String remoteDir, LongConsumer progress) throws Exception {
+            upload(localFile, remoteDir, localFile.getFileName().toString(), progress);
+        }
+
+        @Override public void upload(Path localFile, String remoteDir, String destName, LongConsumer progress) throws Exception {
+            wholeCalls++;
+            byte[] all = Files.readAllBytes(localFile);
+            Path dst = Path.of(remoteDir).resolve(destName);
+            if (interruptNext) {
+                interruptNext = false;
+                int landed = landEverythingBeforeFailing ? all.length : all.length / 2;
+                Files.write(dst, java.util.Arrays.copyOf(all, landed));   // partial write, then the link drops
+                progress.accept(landed);
+                throw new java.net.SocketException("connection reset");
+            }
+            Files.write(dst, all);
+            progress.accept(all.length);
+        }
+
+        @Override public void uploadFrom(Path localFile, String remoteDir, String destName, long offset,
+                                         LongConsumer progress) throws Exception {
+            resumeCalls++;
+            offsets.add(offset);
+            byte[] all = Files.readAllBytes(localFile);
+            Path dst = Path.of(remoteDir).resolve(destName);
+            try (java.io.OutputStream out = Files.newOutputStream(dst,
+                    java.nio.file.StandardOpenOption.WRITE, java.nio.file.StandardOpenOption.APPEND)) {
+                out.write(all, (int) offset, all.length - (int) offset);
+            }
+            progress.accept(all.length);
+        }
+
+        @Override public void download(FileItem remoteFile, Path localDir, LongConsumer progress) {}
+    }
+
+    private static TransferQueue resumeQueue(InterruptingTransfer transfer, boolean resumeEnabled) {
+        TransferQueue q = new TransferQueue(new LocalFileSystem(), new LocalFileSystem(), transfer);
+        q.setResumeTransfers(resumeEnabled);
+        return q;
+    }
+
+    @Test
+    void retryResumesFromThePartialFileRatherThanResending(@TempDir Path local, @TempDir Path remote) throws Exception {
+        String payload = "0123456789abcdef";   // 16 bytes → 8 land before the interruption
+        Path src = Files.writeString(local.resolve("a.txt"), payload);
+        InterruptingTransfer transfer = new InterruptingTransfer(true);
+        TransferQueue q = resumeQueue(transfer, true);
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+        assertEquals(TransferStatus.FAILED, item.status(), "the first attempt is interrupted mid-file");
+        assertEquals(8, Files.size(remote.resolve("a.txt")), "half the payload landed");
+
+        q.retry(item);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(1, transfer.resumeCalls, "the retry appends instead of restarting");
+        assertEquals(List.of(8L), transfer.offsets, "it picks up at the partial file's length");
+        assertEquals(payload, Files.readString(remote.resolve("a.txt")), "and the file is whole and correct");
+    }
+
+    @Test
+    void retryWithoutResumeResendsTheWholeFile(@TempDir Path local, @TempDir Path remote) throws Exception {
+        String payload = "0123456789abcdef";
+        Path src = Files.writeString(local.resolve("a.txt"), payload);
+        InterruptingTransfer transfer = new InterruptingTransfer(true);
+        TransferQueue q = resumeQueue(transfer, false);
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+        q.retry(item);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(0, transfer.resumeCalls, "resume is off, so the retry restarts from byte zero");
+        assertEquals(2, transfer.wholeCalls);
+        assertEquals(payload, Files.readString(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void resumeIsSkippedWhenTheTransportCannotAppend(@TempDir Path local, @TempDir Path remote) throws Exception {
+        Path src = Files.writeString(local.resolve("a.txt"), "0123456789abcdef");
+        InterruptingTransfer transfer = new InterruptingTransfer(false);   // e.g. SFTP in SCP mode
+        TransferQueue q = resumeQueue(transfer, true);
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+        q.retry(item);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(0, transfer.resumeCalls, "the whole-file path is used when append is unavailable");
+        assertEquals("0123456789abcdef", Files.readString(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void aPreExistingFileOnAFirstAttemptIsNotTreatedAsAPartialTransfer(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // Someone else's shorter file is already sitting at the destination. Appending to it would splice
+        // two unrelated files, so a first attempt must overwrite it wholesale — resume is a retry concept.
+        Path src = Files.writeString(local.resolve("a.txt"), "0123456789abcdef");
+        Files.writeString(remote.resolve("a.txt"), "older");
+        InterruptingTransfer transfer = new InterruptingTransfer(true);
+        transfer.interruptNext = false;   // let the first attempt succeed
+        TransferQueue q = resumeQueue(transfer, true);
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(0, transfer.resumeCalls);
+        assertEquals("0123456789abcdef", Files.readString(remote.resolve("a.txt")));
+    }
+
+    @Test
+    void aRetryWhoseFileFullyLandedTransfersNothing(@TempDir Path local, @TempDir Path remote) throws Exception {
+        // The interruption struck after the last byte was written but before the queue saw it complete.
+        String payload = "0123456789abcdef";
+        Path src = Files.writeString(local.resolve("a.txt"), payload);
+        InterruptingTransfer transfer = new InterruptingTransfer(true);
+        transfer.landEverythingBeforeFailing = true;
+        TransferQueue q = resumeQueue(transfer, true);
+
+        TransferItem item = q.enqueue(TransferItem.Direction.UPLOAD,
+                List.of(fileItemFor(src)), remote.toString(), OverwriteResolver.alwaysOverwrite()).get(0);
+        q.runPending();
+        assertEquals(TransferStatus.FAILED, item.status());
+
+        q.retry(item);
+        q.runPending();
+
+        assertEquals(TransferStatus.DONE, item.status());
+        assertEquals(0, transfer.resumeCalls, "nothing left to send");
+        assertEquals(item.totalBytes(), item.transferredBytes(), "but the item still reads as fully transferred");
+        assertEquals(payload, Files.readString(remote.resolve("a.txt")));
+    }
 }

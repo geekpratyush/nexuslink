@@ -33,6 +33,7 @@ public final class TransferItem {
     private volatile TransferStatus status = TransferStatus.QUEUED;
     private volatile long transferredBytes;
     private volatile int attempts;   // started attempts, incremented each time the worker begins this item
+    private volatile int totalAttempts;   // as above but never reset by a manual retry (see previouslyAttempted)
     private volatile String error;
     private volatile long startNanos = -1;   // set when the transfer goes ACTIVE
     private volatile long endNanos = -1;      // set when it reaches a terminal state
@@ -92,7 +93,16 @@ public final class TransferItem {
 
     /** Number of attempts started so far; incremented as the worker begins each try. */
     public int attempts() { return attempts; }
-    void beginAttempt() { this.attempts++; }
+
+    /**
+     * True once this item has been attempted at least once before the current try — i.e. there may be a
+     * partial file of ours at the destination to resume from. Deliberately not derived from
+     * {@link #attempts()}, which a manual retry resets to restore the auto-retry budget and which
+     * therefore cannot distinguish a retry from a first attempt.
+     */
+    public boolean previouslyAttempted() { return totalAttempts > 1; }
+
+    void beginAttempt() { this.attempts++; this.totalAttempts++; }
 
     public long transferredBytes() { return transferredBytes; }
     void setTransferredBytes(long bytes) { this.transferredBytes = bytes; }

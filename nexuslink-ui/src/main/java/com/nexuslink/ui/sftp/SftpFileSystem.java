@@ -88,4 +88,15 @@ final class SftpFileSystem implements FileSystem, FileTransfer {
         if (scpMode) service.downloadScp(remoteFile.path(), target, progress);
         else service.download(remoteFile.path(), target, progress);
     }
+
+    /** SFTP can append, but SCP is whole-file only — so resume is unavailable in SCP mode. */
+    @Override public boolean supportsResume() { return !scpMode; }
+
+    @Override public void uploadFrom(Path localFile, String remoteDir, String destName, long offset, LongConsumer progress) throws Exception {
+        service.uploadFrom(localFile, join(remoteDir, destName), offset, progress);
+    }
+
+    @Override public void downloadFrom(FileItem remoteFile, Path localDir, String destName, long offset, LongConsumer progress) throws Exception {
+        service.downloadFrom(remoteFile.path(), localDir.resolve(destName), offset, progress);
+    }
 }

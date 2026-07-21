@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 /**
  * Drives the existing {@link FileTransfer} copy logic for a batch of {@link TransferItem}s, exposing
@@ -40,6 +41,7 @@ public final class TransferQueue {
     private volatile boolean workerRunning;
     private volatile boolean verifyIntegrity;   // when set, each completed file is size-checked on the destination
     private volatile boolean verifyChecksum;    // when set (with verifyIntegrity), that check also compares digests
+    private volatile boolean resumeTransfers;   // when set, a retried item appends to its partial destination file
     private volatile RetryPolicy retryPolicy = RetryPolicy.none();   // auto-retry on transient errors (off by default)
     private java.util.function.LongConsumer backoffSleeper = TransferQueue::sleepMillis;
     private volatile int concurrency = 1;   // number of files transferred in parallel (>=1)
@@ -338,6 +340,21 @@ public final class TransferQueue {
     public boolean isVerifyChecksum() { return verifyChecksum; }
 
     /**
+     * When enabled, a <em>retried</em> transfer appends to whatever partial file its interrupted attempt
+     * left at the destination instead of re-sending from byte zero — the difference between losing ten
+     * minutes of a large upload and losing ten seconds. Only applies on a retry (a first attempt's
+     * pre-existing destination file belongs to the overwrite resolver) and only where the transport can
+     * append ({@link FileTransfer#supportsResume}); everything else transfers whole files as before.
+     *
+     * <p>Off by default because resuming trusts the partial bytes to be a correct prefix of the source —
+     * see {@link ResumePlan} for why a source edited between attempts can produce a right-sized but
+     * spliced file, and why {@link #setVerifyChecksum} is the companion that catches it.
+     */
+    public void setResumeTransfers(boolean resume) { this.resumeTransfers = resume; }
+
+    public boolean isResumeTransfers() { return resumeTransfers; }
+
+    /**
      * Enables automatic retry of transfers that fail with a <em>transient</em> error
      * ({@link TransferErrors#isTransient}) according to {@code policy}, backing off between attempts.
      * A permanent error (bad credentials, missing file) still fails immediately. Pass
@@ -432,7 +449,13 @@ public final class TransferQueue {
                     item.setDestName(uniqueDestName(item));
                 }
             }
-            execute(item);
+            ResumePlan.Plan plan = planResume(item);
+            // ALREADY_COMPLETE means the interrupted attempt had in fact landed every byte, so there is
+            // nothing to send — but the item still flows through verification and the move-delete below,
+            // which is exactly what should decide whether those bytes are actually good.
+            if (plan.action() != ResumePlan.Action.ALREADY_COMPLETE) {
+                execute(item, plan.offset());
+            }
             item.setTransferredBytes(item.totalBytes());
             if (verifyIntegrity) {
                 TransferIntegrity.Report report = verifyTransfer(item);
@@ -480,21 +503,39 @@ public final class TransferQueue {
                 : local.exists(item.destDir(), item.name());
     }
 
-    private void execute(TransferItem item) throws Exception {
+    private void execute(TransferItem item, long offset) throws Exception {
         governor.startTransfer();
-        if (item.direction() == TransferItem.Direction.UPLOAD) {
-            transfer.upload(Path.of(item.source().path()), item.destDir(), item.destName(), sent -> {
-                governor.tick(sent);
-                item.setTransferredBytes(sent);
-                fireProgress(item);
-            });
+        LongConsumer progress = done -> {
+            governor.tick(done);
+            item.setTransferredBytes(done);
+            fireProgress(item);
+        };
+        boolean upload = item.direction() == TransferItem.Direction.UPLOAD;
+        if (offset > 0) {
+            // The transports rebase their progress callback by the offset, so `done` stays a count of
+            // total bytes present at the destination and the percentage does not jump backwards.
+            if (upload) transfer.uploadFrom(Path.of(item.source().path()), item.destDir(), item.destName(), offset, progress);
+            else transfer.downloadFrom(item.source(), Path.of(item.destDir()), item.destName(), offset, progress);
+        } else if (upload) {
+            transfer.upload(Path.of(item.source().path()), item.destDir(), item.destName(), progress);
         } else {
-            transfer.download(item.source(), Path.of(item.destDir()), item.destName(), read -> {
-                governor.tick(read);
-                item.setTransferredBytes(read);
-                fireProgress(item);
-            });
+            transfer.download(item.source(), Path.of(item.destDir()), item.destName(), progress);
         }
+    }
+
+    /**
+     * Decides whether {@code item} can pick up from a partial destination file. Only a <em>retry</em>
+     * qualifies: on a first attempt any file already at the destination is someone else's, and it is the
+     * overwrite resolver's business, not ours. Sizing the partial file costs a directory listing, so the
+     * cheap disqualifiers are checked first.
+     */
+    private ResumePlan.Plan planResume(TransferItem item) throws Exception {
+        if (!resumeTransfers || !item.previouslyAttempted() || !transfer.supportsResume()) {
+            return ResumePlan.of(item.totalBytes(), 0, false);
+        }
+        FileSystem destFs = item.direction() == TransferItem.Direction.UPLOAD ? remote : local;
+        FileItem dest = destEntry(destFs, item.destDir(), item.destName());
+        return ResumePlan.of(item.totalBytes(), dest == null ? 0 : dest.size(), true);
     }
 
     /** Epoch-millis mtime of the existing destination entry (name = the source name), or 0 if unknown. */

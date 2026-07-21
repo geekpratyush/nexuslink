@@ -31,4 +31,31 @@ public interface FileTransfer {
     default void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
         download(remoteFile, localDir, progress);
     }
+
+    /**
+     * Whether this transport can append to a partially transferred file, letting an interrupted
+     * transfer pick up mid-file rather than starting over. Transports that say true must implement
+     * both {@link #uploadFrom} and {@link #downloadFrom}. See {@link ResumePlan} for when it is safe.
+     */
+    default boolean supportsResume() { return false; }
+
+    /**
+     * Uploads {@code localFile} from byte {@code offset} onward, appending to the partial file already
+     * at {@code remoteDir/destName}. An {@code offset} of 0 is an ordinary whole-file upload.
+     *
+     * <p>{@code progress} reports the file's <em>total</em> bytes present (i.e. {@code offset} plus what
+     * this call has sent), not just this call's contribution, so percentages and throttling stay correct
+     * across a resume. The default throws, so a transport must opt in via {@link #supportsResume}.
+     */
+    default void uploadFrom(Path localFile, String remoteDir, String destName, long offset, LongConsumer progress) throws Exception {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " cannot resume uploads");
+    }
+
+    /**
+     * Downloads {@code remoteFile} from byte {@code offset} onward, appending to the partial file at
+     * {@code localDir/destName}. Progress semantics match {@link #uploadFrom}.
+     */
+    default void downloadFrom(FileItem remoteFile, Path localDir, String destName, long offset, LongConsumer progress) throws Exception {
+        throw new UnsupportedOperationException(getClass().getSimpleName() + " cannot resume downloads");
+    }
 }

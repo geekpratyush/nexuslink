@@ -791,13 +791,27 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       the live destination listing (integrity check follows the renamed file). The overwrite dialog now offers
       **Overwrite / Keep both / If newer / Skip** with an **Apply to all remaining** checkbox promoting the pick
       to its `_ALL` variant. Tests: 6 OverwriteResolver, 3 TransferQueue (rename keep-both, if-newer skip/replace).
-- [-] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors —
+- [x] **Resume** interrupted/partial transfers (offset-based); auto-retry on transient errors —
       **auto-retry done:** pure `RetryPolicy` (max attempts + exponential capped backoff) +
       `TransferErrors.isTransient` (timeout/reset/refused/unreachable → retriable; bad-creds/missing-file/
       unknown-host → permanent, scans the cause chain); wired into `TransferQueue` (per-item attempt
       count, injectable backoff sleeper, off by default) behind an **Auto-retry** toggle in the queue
-      footer. 13 tests (4 RetryPolicy, 5 TransferErrors, 4 queue). _(offset-based resume of a partial file
-      still TODO — needs append/offset support in `FileTransfer`.)_
+      footer. 13 tests (4 RetryPolicy, 5 TransferErrors, 4 queue). **Offset-based resume done:** pure
+      `ResumePlan.of(sourceSize,destSize,enabled)` → TRANSFER_WHOLE / RESUME_FROM(offset) / ALREADY_COMPLETE,
+      erring toward re-sending whenever the partial file can't be trusted as a prefix (destination *longer*
+      than the source, unknown source size, nothing there). 8 tests. `FileTransfer` gained
+      `supportsResume()` + `uploadFrom`/`downloadFrom` (offset overloads that append; the default throws so a
+      transport must opt in), implemented by `SftpService.uploadFrom/downloadFrom` (`OpenMode.Write|Append`
+      for upload, read + `skipNBytes` for download) and `FtpService` (`APPE` for upload, `setRestartOffset`
+      +`REST` for download, cleared in a `finally` since it's sticky on the client; `supportsRestart()` gates
+      it via the FEAT list). Transports rebase the progress callback by the offset so percentages never jump
+      backwards. `TransferQueue.setResumeTransfers` + a **Resume** toggle in the queue footer; resume applies
+      **only on a retry** (a pre-existing file on a first attempt belongs to the overwrite resolver) via a new
+      `TransferItem.previouslyAttempted()` — deliberately NOT `attempts()`, which a manual retry resets to
+      restore the auto-retry budget. ALREADY_COMPLETE transfers nothing but still flows through verification
+      and the move-delete. 5 queue tests + **3 embedded-SSHD tests** proving the real append/skip against an
+      actual SFTP server (`SftpScpEmbeddedTest`, no Docker). SCP mode reports `supportsResume()==false`
+      (whole-file protocol).
 - [x] Parallel/background transfers (configurable concurrency) — `TransferQueue.setConcurrency(n)` runs a pool
       of N worker threads, each claiming the next item atomically (no double-take); **Parallel** spinner (1–8) in
       the queue-panel footer restarts the pool live. 3 tests incl. a barrier-based proof of true 4-way concurrency.

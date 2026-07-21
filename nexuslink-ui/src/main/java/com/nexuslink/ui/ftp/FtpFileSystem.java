@@ -76,4 +76,21 @@ final class FtpFileSystem implements FileSystem, FileTransfer {
     @Override public void download(FileItem remoteFile, Path localDir, String destName, LongConsumer progress) throws Exception {
         service.download(remoteFile.path(), localDir.resolve(destName), progress);
     }
+
+    /**
+     * Uploads resume via {@code APPE}, which every FTP server supports; downloads need {@code REST},
+     * which not all do. A server that hides REST simply transfers whole files.
+     */
+    @Override public boolean supportsResume() {
+        try { return service.supportsRestart(); }
+        catch (Exception e) { return false; }
+    }
+
+    @Override public void uploadFrom(Path localFile, String remoteDir, String destName, long offset, LongConsumer progress) throws Exception {
+        service.uploadFrom(localFile, join(remoteDir, destName), offset, progress);
+    }
+
+    @Override public void downloadFrom(FileItem remoteFile, Path localDir, String destName, long offset, LongConsumer progress) throws Exception {
+        service.downloadFrom(remoteFile.path(), localDir.resolve(destName), offset, progress);
+    }
 }

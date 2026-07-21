@@ -126,6 +126,52 @@ public final class FtpService implements AutoCloseable {
         if (!ftp.completePendingCommand()) throw new IllegalStateException("Upload did not complete: " + ftp.getReplyString().trim());
     }
 
+    /**
+     * Uploads {@code localSource} from byte {@code offset} onward using FTP {@code APPE}, adding to the
+     * partial remote file. {@code progress} reports the remote file's total size (offset + bytes sent
+     * here). An {@code offset} of 0 delegates to the ordinary truncating {@link #upload}.
+     */
+    public void uploadFrom(Path localSource, String remotePath, long offset, LongConsumer progress) throws Exception {
+        if (offset <= 0) { upload(localSource, remotePath, progress); return; }
+        try (InputStream in = Files.newInputStream(localSource);
+             OutputStream out = ftp.appendFileStream(remotePath)) {
+            if (out == null) throw new IllegalStateException("Server refused append: " + ftp.getReplyString().trim());
+            in.skipNBytes(offset);                       // resend nothing already on the server
+            copy(in, out, shifted(progress, offset));
+        }
+        if (!ftp.completePendingCommand()) throw new IllegalStateException("Resumed upload did not complete: " + ftp.getReplyString().trim());
+    }
+
+    /**
+     * Downloads {@code remotePath} from byte {@code offset} onward using FTP {@code REST}, appending to
+     * the partial local file. Not every server honours REST — the offset is cleared afterwards either
+     * way so a later whole-file transfer is unaffected.
+     */
+    public void downloadFrom(String remotePath, Path localTarget, long offset, LongConsumer progress) throws Exception {
+        if (offset <= 0) { download(remotePath, localTarget, progress); return; }
+        if (localTarget.getParent() != null) Files.createDirectories(localTarget.getParent());
+        ftp.setRestartOffset(offset);
+        try (InputStream in = ftp.retrieveFileStream(remotePath);
+             OutputStream out = Files.newOutputStream(localTarget,
+                     java.nio.file.StandardOpenOption.WRITE, java.nio.file.StandardOpenOption.APPEND)) {
+            if (in == null) throw new IllegalStateException("Server refused resumed download: " + ftp.getReplyString().trim());
+            copy(in, out, shifted(progress, offset));
+        } finally {
+            ftp.setRestartOffset(0);                     // sticky on the client — clear it for the next transfer
+        }
+        if (!ftp.completePendingCommand()) throw new IllegalStateException("Resumed download did not complete: " + ftp.getReplyString().trim());
+    }
+
+    /** True when the server advertises the {@code REST} command needed to resume a download. */
+    public boolean supportsRestart() throws Exception {
+        return ftp.hasFeature("REST");
+    }
+
+    /** Rebases a progress callback so it reports total file bytes rather than this call's own count. */
+    private static LongConsumer shifted(LongConsumer progress, long offset) {
+        return progress == null ? null : n -> progress.accept(offset + n);
+    }
+
     private static void copy(InputStream in, OutputStream out, LongConsumer progress) throws Exception {
         byte[] buf = new byte[64 * 1024];
         long total = 0;
