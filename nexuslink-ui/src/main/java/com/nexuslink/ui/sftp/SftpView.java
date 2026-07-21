@@ -4,6 +4,8 @@ import com.nexuslink.protocol.sftp.SftpService;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.files.DualPaneBrowser;
 import com.nexuslink.ui.files.LocalFileSystem;
+import com.nexuslink.ui.files.SavedSessions;
+import com.nexuslink.ui.files.SessionMenu;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -34,22 +36,27 @@ public final class SftpView extends BorderPane {
     private final DualPaneBrowser browser;
     private final SftpFileSystem remote = new SftpFileSystem(service);
     private final CheckBox scpToggle = new CheckBox("SCP transfers");
+    private SessionMenu sessionMenu;
+    /** Remote directory a just-opened session wants to land in; consumed by the next successful connect. */
+    private String pendingRemoteDir = "";
     private Consumer<String> logger = s -> {};
 
     public SftpView() {
         getStyleClass().add("sftp-view");
-        setTop(buildBar());
         // The remote pane wraps the long-lived service, so the commander can be built up-front: the
         // local pane is browsable straight away and the remote side stays "not connected" until connect.
+        // Built before the bar because the Sessions menu reads the panes' current directories.
         browser = new DualPaneBrowser(new LocalFileSystem(), remote, remote);
         browser.startLocal();
         browser.disconnectRemote();
         setCenter(browser);
+        setTop(buildBar());
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
         browser.setLogger(this.logger);
+        sessionMenu.setLogger(this.logger);
     }
 
     /** A request to open an SSH terminal against this SFTP server, cd'd into {@code dir}. */
@@ -125,8 +132,10 @@ public final class SftpView extends BorderPane {
             logger.accept("SFTP: transfers now use " + (scpToggle.isSelected() ? "SCP" : "SFTP"));
         });
 
+        sessionMenu = new SessionMenu("sftp", this::captureSession, this::openSession);
+
         HBox row = new HBox(8, lbl("Host:"), hostField, lbl("Port:"), portField, lbl("User:"), userField,
-                passField, connectBtn, disconnectBtn, diagnoseBtn, scpToggle, helpBtn);
+                passField, connectBtn, disconnectBtn, sessionMenu, diagnoseBtn, scpToggle, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10, 10, 4, 10));
 
@@ -141,6 +150,40 @@ public final class SftpView extends BorderPane {
     }
 
     private Label lbl(String t) { Label l = new Label(t); l.getStyleClass().add("meta-label"); return l; }
+
+    /**
+     * Snapshots the connect form (unresolved, so a {@code ${VAR}} reference is saved as written rather
+     * than baked into the file) plus the directories both panes are showing. The password is not read:
+     * {@link SavedSessions} never stores secrets.
+     */
+    private SavedSessions.Session captureSession() {
+        return new SavedSessions.Session("", hostField.getText().trim(), parsePort(),
+                userField.getText().trim(), keyField.getText().trim(),
+                browser.currentLocalPath(), browser.currentRemotePath(),
+                java.util.Map.of("scp", String.valueOf(scpToggle.isSelected())));
+    }
+
+    /** Quick-connect: fill the form from a saved session and connect, landing in its last directories. */
+    private void openSession(SavedSessions.Session s) {
+        hostField.setText(s.host());
+        portField.setText(String.valueOf(s.port()));
+        userField.setText(s.user());
+        keyField.setText(s.keyPath());
+        scpToggle.setSelected(s.flag("scp", false));
+        remote.setScpMode(scpToggle.isSelected());
+        browser.startLocal(s.lastLocalDir());
+        // Held until the connect actually happens, so the remembered directory survives the detour
+        // through a manual Connect when the session needs a password typed in first.
+        pendingRemoteDir = s.lastRemoteDir();
+        if (s.keyPath().isEmpty()) {
+            passField.clear();
+            passField.requestFocus();
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("Session '" + s.name() + "' loaded — enter the password and press Connect");
+        } else {
+            connect();   // a private key means nothing is left to type
+        }
+    }
 
     /** Runs a DNS→TCP reachability check against the configured host/port. */
     private void diagnose() {
@@ -173,7 +216,9 @@ public final class SftpView extends BorderPane {
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + user + "@" + host);
             logger.accept("SFTP connected");
-            browser.connectRemote();
+            String startDir = pendingRemoteDir;
+            pendingRemoteDir = "";
+            browser.connectRemote(startDir);
             connectBtn.setDisable(false);
             disconnectBtn.setDisable(false);
         });
@@ -189,6 +234,9 @@ public final class SftpView extends BorderPane {
     }
 
     private void disconnect() {
+        // Record where both panes ended up before the remote one is cleared, so the next quick-connect
+        // to this session lands back here. A no-op unless a session is active.
+        sessionMenu.rememberDirs(browser.currentLocalPath(), browser.currentRemotePath());
         service.close();
         browser.disconnectRemote();
         statusLabel.getStyleClass().setAll("meta-label");

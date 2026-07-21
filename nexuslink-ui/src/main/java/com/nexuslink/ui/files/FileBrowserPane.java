@@ -421,6 +421,20 @@ public final class FileBrowserPane extends VBox {
         runBg("home", () -> fs.home(), result -> navigateTo((String) result));
     }
 
+    /**
+     * Loads {@code preferred} if it still lists, else the file system's home. Use for a directory
+     * remembered from an earlier session: it may since have been renamed, deleted or put out of reach
+     * of this account, and quietly landing home beats greeting the user with an error on an empty pane.
+     * The probe costs one extra listing, but only once per connect.
+     */
+    public void loadStartDir(String preferred) {
+        if (preferred == null || preferred.isBlank()) { loadHome(); return; }
+        runBg("home", () -> {
+            try { fs.list(preferred); return preferred; }
+            catch (Exception e) { return fs.home(); }
+        }, result -> navigateTo((String) result));
+    }
+
     public void navigateTo(String path) {
         navigateTo(path, true);
     }

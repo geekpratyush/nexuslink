@@ -871,11 +871,25 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (new-left/new-right/differs/identical, with a "show identical" toggle) + a header summary count.
 
 **Sessions & integration**
-- [-] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session — folder
+- [x] Bookmarks / saved sessions / quick-connect; remember last local+remote dirs per session — folder
       **bookmarks** done: pure `PathBookmarks` (ordered, path-unique add/remove/contains, tab-separated
       serialize/parse + file load/save; 10 tests) wired into each `FileBrowserPane` as a **★** dropdown —
       bookmark/un-bookmark the current folder + one entry per saved location that navigates to it, persisted
-      per file-system under `~/.nexuslink/bookmarks-<name>.txt`. _(Saved sessions / quick-connect / last-dir memory still TODO.)_
+      per file-system under `~/.nexuslink/bookmarks-<name>.txt`. **Saved sessions / quick-connect / last-dir
+      memory done:** pure `SavedSessions` + `Session` record (ordered, case-insensitively name-unique
+      add/remove/find, `withDirs`/`withName`/`withOptions`, an `options` map for protocol flags, and a
+      `key=value`-per-field line format that ignores unknown keys so a hand-edited or newer file degrades
+      rather than fails); **passwords are deliberately never persisted** — a session stores only host/port/
+      user, an optional private-key *path* and flags, so `~/.nexuslink/sessions-<protocol>.txt` holds no
+      secrets. 17 tests. **UI wired:** a shared, protocol-agnostic **Sessions ▾** `SessionMenu` in the connect
+      bar (save-current-as / one quick-connect entry per session / forget) driven by a per-view `capture`
+      + `open` pair, so SFTP contributes its key path + SCP flag and FTP its passive/TLS flags. Quick-connect
+      fills the form and connects immediately when nothing secret is left to type (SFTP private key, FTP
+      anonymous), otherwise focuses the password field; the session's remote dir is held in a `pendingRemoteDir`
+      so it survives that detour. `FileBrowserPane.loadStartDir` lands in a remembered directory but falls back
+      to home when it no longer lists (moved/deleted/out of reach), `DualPaneBrowser.startLocal(dir)/
+      connectRemote(dir)/currentLocalPath()/currentRemotePath()` expose it, and `disconnect()` records both
+      panes' directories against the active session.
 - [x] Norton-Commander keyboard shortcuts (F5 copy · F6 rename · F7 mkdir · F8 delete · Tab switches panes) —
       handled at the `DualPaneBrowser` level over the active (last-focused) pane, with a matching clickable
       function-key bar along the bottom; text-field edits are not hijacked. _(F6 is rename; true move TODO.)_

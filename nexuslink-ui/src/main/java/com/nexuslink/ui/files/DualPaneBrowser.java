@@ -140,14 +140,30 @@ public final class DualPaneBrowser extends BorderPane {
      * where the local pane is always present.
      */
     public void startLocal() {
-        localPane.loadHome();
+        startLocal(null);
+    }
+
+    /** As {@link #startLocal()}, but landing in {@code startDir} (e.g. a saved session's last local dir). */
+    public void startLocal(String startDir) {
+        localPane.loadStartDir(startDir);
     }
 
     /** Marks the remote side connected and loads its home directory into the right pane. */
     public void connectRemote() {
-        remoteConnected = true;
-        remotePane.loadHome();
+        connectRemote(null);
     }
+
+    /** As {@link #connectRemote()}, but landing in {@code startDir} (e.g. a saved session's last remote dir). */
+    public void connectRemote(String startDir) {
+        remoteConnected = true;
+        remotePane.loadStartDir(startDir);
+    }
+
+    /** The directory the local pane is showing. */
+    public String currentLocalPath() { return localPane.currentPath(); }
+
+    /** The directory the remote pane is showing, or {@code ""} while disconnected. */
+    public String currentRemotePath() { return remoteConnected ? remotePane.currentPath() : ""; }
 
     /**
      * Marks the remote side disconnected and shows a "not connected" placeholder in the right pane.
