@@ -1,6 +1,6 @@
-package com.nexuslink.ui.s3;
+package com.nexuslink.ui.gcs;
 
-import com.nexuslink.protocol.s3.S3Service;
+import com.nexuslink.protocol.gcs.GcsService;
 import com.nexuslink.ui.files.FileItem;
 import com.nexuslink.ui.files.FileSystem;
 import com.nexuslink.ui.files.FileTransfer;
@@ -12,24 +12,25 @@ import java.util.List;
 import java.util.function.LongConsumer;
 
 /**
- * Adapts {@link S3Service} to the generic {@link FileSystem}/{@link FileTransfer} contracts so an
- * S3-compatible object store drives one pane of the {@link com.nexuslink.ui.files.DualPaneBrowser} —
- * the same WinSCP-style commander (transfer queue, drag-and-drop, quick-view) used for SFTP/FTP.
+ * Adapts {@link GcsService} to the generic {@link FileSystem}/{@link FileTransfer} contracts so Google
+ * Cloud Storage drives one pane of the {@link com.nexuslink.ui.files.DualPaneBrowser} — the same
+ * WinSCP-style commander (transfer queue, drag-and-drop, quick-view) used for SFTP/FTP and S3.
  *
- * <p>The bucket list is the root; buckets and common prefixes appear as folders and objects as files,
- * with all the path math in the pure {@link ObjectPath}. S3 has no native rename, so that one operation is
- * unsupported (copy-then-delete would be needed); everything else — list, mkdir (folder marker), delete
- * (recursive), upload, download, and in-place content read/write — maps onto the service.
+ * <p>The bucket list is the root; buckets and virtual directories appear as folders and objects as
+ * files, with all the path math in the pure {@link ObjectPath} shared with S3/Azure. GCS has no native
+ * rename, so that one operation is unsupported (copy-then-delete would be needed); everything else —
+ * list, mkdir (folder marker), delete (recursive), upload, download, and in-place content read/write —
+ * maps onto the service.
  */
-public final class S3FileSystem implements FileSystem, FileTransfer {
+public final class GcsFileSystem implements FileSystem, FileTransfer {
 
-    private static final int MAX_KEYS = 1000;
+    private static final int MAX_OBJECTS = 1000;
 
-    private final S3Service service;
+    private final GcsService service;
 
-    public S3FileSystem(S3Service service) { this.service = service; }
+    public GcsFileSystem(GcsService service) { this.service = service; }
 
-    @Override public String name() { return "S3"; }
+    @Override public String name() { return "GCS"; }
 
     @Override public String home() { return "/"; }
 
@@ -47,13 +48,13 @@ public final class S3FileSystem implements FileSystem, FileTransfer {
         }
         String bucket = ObjectPath.bucket(path);
         String prefix = ObjectPath.prefix(path);
-        S3Service.S3Listing listing = service.listChildren(bucket, prefix);
+        GcsService.GcsListing listing = service.listChildren(bucket, prefix);
         for (String folder : listing.folders()) {   // e.g. "a/b/"
             out.add(FileItem.of(ObjectPath.lastSegment(folder), "/" + bucket + "/" + folder, true, 0, "", ""));
         }
-        for (S3Service.S3Item item : listing.files()) {
-            out.add(FileItem.of(ObjectPath.lastSegment(item.key()), "/" + bucket + "/" + item.key(),
-                    false, item.size(), item.lastModified(), item.storageClass()));
+        for (GcsService.GcsObject obj : listing.files()) {
+            out.add(FileItem.of(ObjectPath.lastSegment(obj.name()), "/" + bucket + "/" + obj.name(),
+                    false, obj.size(), obj.updated(), obj.storageClass()));
         }
         return out;
     }
@@ -68,22 +69,22 @@ public final class S3FileSystem implements FileSystem, FileTransfer {
     }
 
     @Override public void rename(String from, String to) {
-        throw new UnsupportedOperationException("S3 has no rename — copy the object to the new key, then delete");
+        throw new UnsupportedOperationException(
+                "GCS has no rename — copy the object to the new name, then delete");
     }
 
     @Override public void delete(FileItem item) {
         String bucket = ObjectPath.bucket(item.path());
-        String key = ObjectPath.prefix(item.path());
+        String name = ObjectPath.prefix(item.path());
         if (item.directory()) {
-            // Delete every object under the folder's prefix (a flat, delimiter-free listing), then the
-            // folder marker itself.
-            String folderPrefix = key.endsWith("/") ? key : key + "/";
-            for (S3Service.S3Item obj : service.listObjects(bucket, folderPrefix, MAX_KEYS)) {
-                service.deleteObject(bucket, obj.key());
+            // Delete every object under the folder's prefix (a flat listing), then the folder marker itself.
+            String folderPrefix = name.endsWith("/") ? name : name + "/";
+            for (GcsService.GcsObject obj : service.listObjectsUnder(bucket, folderPrefix, MAX_OBJECTS)) {
+                service.deleteObject(bucket, obj.name());
             }
             service.deleteObject(bucket, folderPrefix);
         } else {
-            service.deleteObject(bucket, key);
+            service.deleteObject(bucket, name);
         }
     }
 

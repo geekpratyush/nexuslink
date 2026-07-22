@@ -4,6 +4,8 @@ import com.nexuslink.protocol.azure.AzureBlobExplorer;
 import com.nexuslink.protocol.azure.AzureBlobService;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
+import com.nexuslink.ui.files.DualPaneBrowser;
+import com.nexuslink.ui.files.LocalFileSystem;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -20,6 +22,7 @@ public final class AzureBlobView extends BorderPane {
 
     private final AzureBlobService service = new AzureBlobService();
     private final ResourceExplorerView explorer = new ResourceExplorerView("Containers");
+    private final DualPaneBrowser commander;
 
     private final TextField connStringField = new TextField();
     private final Button connectBtn = new Button("Connect");
@@ -30,7 +33,16 @@ public final class AzureBlobView extends BorderPane {
     public AzureBlobView() {
         getStyleClass().add("azure-view");
         setTop(buildBar());
-        setCenter(explorer);
+        // Tree explorer + a WinSCP-style commander (local ↔ Azure) sharing the same transfer queue / DnD.
+        AzureBlobFileSystem azurefs = new AzureBlobFileSystem(service);
+        commander = new DualPaneBrowser(new LocalFileSystem(), azurefs, azurefs);
+        commander.startLocal();
+        commander.disconnectRemote();
+        TabPane tabs = new TabPane(
+                new Tab("Explorer", explorer),
+                new Tab("Commander", commander));
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        setCenter(tabs);
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -86,6 +98,7 @@ public final class AzureBlobView extends BorderPane {
             logger.accept("Azure Blob connected — " + task.getValue() + " containers");
             explorer.setExplorer(new AzureBlobExplorer(service));
             explorer.load();
+            commander.connectRemote();   // the Azure pane now lists containers as the root
             connectBtn.setDisable(false);
         });
         task.setOnFailed(e -> {

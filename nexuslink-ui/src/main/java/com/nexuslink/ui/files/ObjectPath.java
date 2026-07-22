@@ -1,19 +1,21 @@
-package com.nexuslink.ui.s3;
+package com.nexuslink.ui.files;
 
 /**
  * Pure, dependency-free path math for the object-storage commander. It maps the browser's slash-path
- * convention onto an S3 {@code bucket} + {@code key-prefix}:
+ * convention onto a {@code container} + {@code key-prefix} pair, the model every object store shares —
+ * an S3/GCS bucket and an Azure Blob container are all "the first path segment":
  * <ul>
- *   <li>{@code "/"} — the root: the list of buckets.</li>
+ *   <li>{@code "/"} — the root: the list of buckets/containers.</li>
  *   <li>{@code "/my-bucket"} — a bucket's root (empty prefix).</li>
  *   <li>{@code "/my-bucket/a/b/"} — the prefix {@code a/b/} inside {@code my-bucket}.</li>
  * </ul>
  * Object keys use {@code /} as a virtual folder separator; directory prefixes are kept trailing-slashed.
- * This is the offline-tested seam behind {@code S3FileSystem} (which just does I/O).
+ * This is the offline-tested seam shared by {@code S3FileSystem}, {@code AzureBlobFileSystem} and
+ * {@code GcsFileSystem} (which just do I/O).
  */
-public final class S3Path {
+public final class ObjectPath {
 
-    private S3Path() {}
+    private ObjectPath() {}
 
     /** True for the synthetic root path that lists buckets. */
     public static boolean isRoot(String path) {

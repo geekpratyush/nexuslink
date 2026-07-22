@@ -915,13 +915,22 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (new `sshd-scp` dep), reusing the open SSH session; a **SCP transfers** checkbox on the SFTP bar routes
       transfers through SCP while listing/navigation stay on SFTP. `SftpScpEmbeddedTest` proves an SCP
       upload → SFTP list/read → SCP download → delete round-trip against an embedded MINA SSHD server (no Docker).
-- [-] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) — **done for S3:**
-      `S3FileSystem` adapts `S3Service` to the `FileSystem`/`FileTransfer` contracts (buckets = root, common
-      prefixes = folders, objects = files) so S3 drives the same `DualPaneBrowser` (transfer queue, DnD,
-      quick-view) as SFTP/FTP; pure `S3Path` bucket/key math (9 tests) + new `S3Service` listChildren/
-      getObjectBytes/downloadToFile/uploadFile/createFolder (`S3CommanderLiveIT` round-trip green vs
-      LocalStack); S3View gains a **Commander** tab beside the tree explorer. _(Azure/GCS follow once their
-      upload/put lands — still `[-]` in 7.3.)_
+- [x] **Reuse the commander + transfer queue + DnD for object storage** (S3/Azure/GCS) — **done for all
+      three.** Each adapts its service to the `FileSystem`/`FileTransfer` contracts (buckets/containers =
+      root, common prefixes = folders, objects/blobs = files) so it drives the same `DualPaneBrowser`
+      (transfer queue, DnD, quick-view) as SFTP/FTP, and each view gains a **Commander** tab beside its tree
+      explorer, brought online by `commander.connectRemote()` on a successful connect. The bucket/key path
+      math is one pure seam shared by all three — `S3Path` was promoted to **`com.nexuslink.ui.files.ObjectPath`**
+      (the container+prefix model is identical across the three stores; 30 tests). None of the three has a
+      native rename, so that operation throws with a copy-then-delete hint; recursive delete walks a flat
+      prefix listing then removes the folder marker. **S3:** `S3FileSystem` + `S3Service` listChildren/
+      getObjectBytes/downloadToFile/uploadFile/createFolder (`S3CommanderLiveIT` round-trip green vs LocalStack).
+      **Azure:** `AzureBlobFileSystem` + new `AzureBlobService` listChildren (`listBlobsByHierarchy` with the
+      `/` delimiter, `isPrefix()` rows becoming folders) / listBlobsUnder / getBlobBytes / downloadToFile /
+      uploadFile / createFolder / putBlob / putText / deleteBlob. **GCS:** `GcsFileSystem` + new `GcsService`
+      listChildren (`BlobListOption.currentDirectory()`, `isDirectory()` rows becoming folders) /
+      listObjectsUnder / getObjectBytes / downloadToFile / uploadFile / createFolder / putObject / putText /
+      deleteObject. _(Azure/GCS live-IT round-trips vs Azurite/fake-gcs-server still to add.)_
 
 ### 7.x Connection-type visibility (per-user)
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
@@ -933,13 +942,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       + custom endpoints like LocalStack `localhost:4566/bucket/key`) URLs; URL-decodes the key (keeps literal
       `+`), `toS3Uri()` canonicalization, `S3UriException` on malformed input. 25 tests.
 - [x] `S3Explorer` + `S3View` — bucket → object tree with size/modified/etag details (reuses `ResourceExplorerView`); wired into the shell (new `nexuslink-protocol-s3` module, S3 sample opens prefilled)
-- [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. **Live E2E verified** via `AzureLiveIT` against the local Azurite emulator. _SAS tokens / tiering / upload TODO._
+- [-] `AzureBlobService` — Azure SDK (connection string / shared key); connect, listContainers, listBlobs. `AzureBlobExplorer` + `AzureBlobView` (container → blob tree). Azurite sample. **Live E2E verified** via `AzureLiveIT` against the local Azurite emulator. **Upload/put done** — listChildren (hierarchical, `/` delimiter) / listBlobsUnder / getBlobBytes / downloadToFile / uploadFile / createFolder / putBlob / putText / deleteBlob, driving the §7.4 **Commander** tab. _SAS tokens / tiering TODO._
 - [x] **Azure connection-string parser** — pure driver-free `AzureConnectionString.parse(...)` of `Key=Value;`
       pairs (case-insensitive): protocol/account/key/endpointSuffix/SAS + explicit `BlobEndpoint` overrides,
       the `UseDevelopmentStorage=true` Azurite shortcut (`isDevelopment()`), computed
       `blobEndpoint()`/`queueEndpoint()`/`tableEndpoint()`/`fileEndpoint()`, and a `redacted()` masking the key/SAS;
       `MalformedConnectionStringException` on bad input. 18 tests.
-- [-] `GcsService` — Google Cloud Storage client (project + service-account JSON / ADC); connect, listBuckets, listObjects. **Now emulator-aware** (honours `STORAGE_EMULATOR_HOST` with anonymous creds) and **live E2E verified** via `GcsLiveIT` against fake-gcs-server. `GcsExplorer` + `GcsView`. _Signed URLs / upload TODO._
+- [-] `GcsService` — Google Cloud Storage client (project + service-account JSON / ADC); connect, listBuckets, listObjects. **Now emulator-aware** (honours `STORAGE_EMULATOR_HOST` with anonymous creds) and **live E2E verified** via `GcsLiveIT` against fake-gcs-server. `GcsExplorer` + `GcsView`. **Upload/put done** — listChildren (`currentDirectory()`) / listObjectsUnder / getObjectBytes / downloadToFile / uploadFile / createFolder / putObject / putText / deleteObject, driving the §7.4 **Commander** tab. _Signed URLs TODO._
 - [x] **GCS URI parser** — pure `GcsUri.parse(...)` for `gs://bucket/object`, path-style
       (`storage.googleapis.com`/`storage.cloud.google.com/bucket/object`) and virtual-hosted
       (`bucket.storage.googleapis.com/object`) URLs → `{bucket, object}`, URL-decoding the object;

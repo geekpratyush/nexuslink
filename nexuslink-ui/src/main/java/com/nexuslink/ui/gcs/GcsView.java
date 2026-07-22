@@ -4,6 +4,8 @@ import com.nexuslink.protocol.gcs.GcsExplorer;
 import com.nexuslink.protocol.gcs.GcsService;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
+import com.nexuslink.ui.files.DualPaneBrowser;
+import com.nexuslink.ui.files.LocalFileSystem;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,6 +23,7 @@ public final class GcsView extends BorderPane {
 
     private final GcsService service = new GcsService();
     private final ResourceExplorerView explorer = new ResourceExplorerView("Buckets");
+    private final DualPaneBrowser commander;
 
     private final TextField projectField = new TextField();
     private final TextField credPathField = new TextField();
@@ -32,7 +35,16 @@ public final class GcsView extends BorderPane {
     public GcsView() {
         getStyleClass().add("gcs-view");
         setTop(buildBar());
-        setCenter(explorer);
+        // Tree explorer + a WinSCP-style commander (local ↔ GCS) sharing the same transfer queue / DnD.
+        GcsFileSystem gcsfs = new GcsFileSystem(service);
+        commander = new DualPaneBrowser(new LocalFileSystem(), gcsfs, gcsfs);
+        commander.startLocal();
+        commander.disconnectRemote();
+        TabPane tabs = new TabPane(
+                new Tab("Explorer", explorer),
+                new Tab("Commander", commander));
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        setCenter(tabs);
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -110,6 +122,7 @@ public final class GcsView extends BorderPane {
             logger.accept("GCS connected — " + task.getValue() + " buckets");
             explorer.setExplorer(new GcsExplorer(service));
             explorer.load();
+            commander.connectRemote();   // the GCS pane now lists buckets as the root
             connectBtn.setDisable(false);
         });
         task.setOnFailed(e -> {
