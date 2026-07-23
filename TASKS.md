@@ -936,7 +936,7 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **Enable/disable protocols** — data-driven protocol catalog; View ▸ Protocols… dialog toggles which connection types appear in the menu + sidebar, persisted via Preferences (`ProtocolPrefs`). Each user sees only the connectors they use.
 
 ### 7.3 Object Storage
-- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText, **putObject/putText + deleteObject** (upload). **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` (list/get **and upload→get→delete**) vs LocalStack. **Presigned URLs** done: pure `S3PresignedUrl` — AWS SigV4 query-string presigner for GET/PUT (virtual-hosted + path-style, optional session token, `UNSIGNED-PAYLOAD`, `javax.crypto` only, no SDK / cross-module dep); 22 tests incl. a known-answer signature. _Versioning / multipart + UI "copy presigned link" TODO._
+- [-] `S3Service` — AWS SDK v2 (URL-connection client), S3-compatible (AWS/MinIO/Wasabi), path-style; connect, listBuckets, listObjects, getObjectAsText, **putObject/putText + deleteObject** (upload). **Verified live: 647 buckets from MinIO Play** + `S3LiveIT` (list/get **and upload→get→delete**) vs LocalStack. **Presigned URLs** done: pure `S3PresignedUrl` — AWS SigV4 query-string presigner for GET/PUT (virtual-hosted + path-style, optional session token, `UNSIGNED-PAYLOAD`, `javax.crypto` only, no SDK / cross-module dep); 22 tests incl. a known-answer signature. **Multipart upload done:** pure `MultipartPlan.of(size,threshold,partSize)` splits an upload into legal S3 parts — clamps the part size into the 5 MiB–5 GiB range and grows it so a huge object stays under the 10,000-part cap, single `PutObject` below the 8 MiB threshold; 13 tests. `S3Service.uploadFile` now transparently streams large files part-by-part (create → uploadPart×N → complete, each part read straight off the file at its offset via a bounded stream so nothing large is buffered, aborting the upload on failure so orphan parts don't linger), reporting cumulative-byte progress per part; `setMultipartUpload(threshold,partSize)` tunes it. Object-storage commander (SFTP-parity) uploads benefit automatically. **`S3LiveIT.multipartUploadRoundTrip`** proves a real 3-part (5+5+2 MiB) upload → byte-exact read-back vs LocalStack. _Versioning + UI "copy presigned link" TODO._
 - [x] **S3 URI parser** — pure `S3Uri.parse(...)` → `{bucket, key, region, endpoint, style}` for `s3://`,
       virtual-hosted (`bucket.s3[.-]region.amazonaws.com`) and path-style (`s3.region.amazonaws.com/bucket/key`
       + custom endpoints like LocalStack `localhost:4566/bucket/key`) URLs; URL-decodes the key (keeps literal
@@ -1321,6 +1321,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 > Session notes go here. Format: `YYYY-MM-DD: <what was done>`
 
 - 2026-06-23: Specification analyzed. TASKS.md created. Build has not started yet.
+- 2026-07-23: **S3 multipart upload (§7.3).** Pure `MultipartPlan` computes a legal part split (5 MiB–5 GiB
+  clamp, part-size growth to stay under the 10,000-part cap, single-PutObject below the 8 MiB threshold; 13
+  tests). `S3Service.uploadFile` transparently drives create → uploadPart×N → complete for large files —
+  each part streamed off the file at its offset via a bounded, retry-reopenable stream (nothing large is
+  buffered), the upload aborted on failure so orphan parts don't accrue charges, cumulative progress ticking
+  per part. `setMultipartUpload(threshold,partSize)` tunes it; the object-storage commander uploads benefit
+  automatically. `S3LiveIT.multipartUploadRoundTrip` proves a real 3-part upload → byte-exact read-back vs
+  LocalStack (green). Full UI build 282 tests green.
 - 2026-07-02: **File Commander — pause/resume + bandwidth throttle.** New JavaFX-free `TransferGovernor`
   governs the in-flight transfer at the one shared choke point (the cumulative-bytes progress callback,
   called per 64 KB chunk): it blocks the transfer thread while paused and sleeps to cap the average rate —

@@ -15,7 +15,11 @@ import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -80,6 +84,41 @@ class S3LiveIT {
             svc.deleteObject(BUCKET, key);
             assertTrue(svc.listObjects(BUCKET, "uploaded/", 100).stream()
                     .noneMatch(o -> o.key().equals(key)));
+        }
+    }
+
+    /**
+     * A real multipart upload: 12 MiB at S3's 5 MiB minimum part size is three parts (5 + 5 + 2), so
+     * this exercises the create → uploadPart×N → complete path, the short final part, and progress
+     * ticking per part rather than once at the end. The bytes are read back to prove the parts were
+     * reassembled in order.
+     */
+    @Test
+    void multipartUploadRoundTrip() throws Exception {
+        Path local = Files.createTempFile("nexuslink-multipart", ".bin");
+        try (S3Service svc = new S3Service()) {
+            int size = 12 * 1024 * 1024;
+            byte[] data = new byte[size];
+            new Random(42).nextBytes(data);
+            Files.write(local, data);
+
+            svc.connect(ENDPOINT, "test", "test", "us-east-1", true);
+            svc.setMultipartUpload(1024 * 1024, MultipartPlan.MIN_PART_SIZE);
+            String key = "multipart/it-" + System.currentTimeMillis() + ".bin";
+
+            List<Long> ticks = new ArrayList<>();
+            svc.uploadFile(BUCKET, key, local, ticks::add);
+
+            assertEquals(3, ticks.size(), "expected one progress tick per part");
+            assertEquals(List.of(5L << 20, 10L << 20, (long) size), ticks);
+
+            assertEquals(size, svc.listObjects(BUCKET, "multipart/", 100).stream()
+                    .filter(o -> o.key().equals(key)).findFirst().orElseThrow().size());
+            assertArrayEquals(data, svc.getObjectBytes(BUCKET, key, size));
+
+            svc.deleteObject(BUCKET, key);
+        } finally {
+            Files.deleteIfExists(local);
         }
     }
 }
