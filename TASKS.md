@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~88%** — 285 done · 38 in-progress · 10 open (by checkbox). Phases 0–4, 6, **7 (file transfer)** & **9 (monitoring/tracing/vaults/code-gen/packaging)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~88%** — 287 done · 36 in-progress · 10 open (by checkbox). Phases 0–4, 6, **7 (file transfer)** & **9 (monitoring/tracing/vaults/code-gen/packaging)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 

@@ -26,7 +26,7 @@ workbench you use for REST and Kafka.
 ## Current Status
 
 NexusLink is under active development. As of the latest session roughly **88% of the tasks in
-`TASKS.md` are done** (285 done · 38 in-progress · 10 not started), and **Phases 0–4, 6, 7 and 9
+`TASKS.md` are done** (287 done · 36 in-progress · 10 not started), and **Phases 0–4, 6, 7 and 9
 are complete**. A local Docker stack (`test-env/`) live-verifies 17 protocol families incl. Kafka,
 SQS/SNS, JMS, MQTT, SFTP/FTP, object storage, secret vaults and databases. `TASKS.md` is the live,
 phase-by-phase tracker and the source of truth; the table below summarizes it.
@@ -59,7 +59,7 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **gRPC** (reflection-based, unary + pure `.proto` parser) | ✅ Working (verified live; streaming TODO) |
 | **JDBC SQL** (SQLite/H2/Postgres/MySQL/MariaDB bundled + on-demand driver mgr incl. Redshift/BigQuery, ER diagram, TLS, sortable/filterable result grid + JSON/CSV export) | ✅ Working |
 | **MongoDB** (find/SQL/aggregate/explain/CRUD, schema diagram, Compass views, export) | ✅ Working |
-| **Redis** (Lettuce; key browser, typed values, command console) | 🟡 Built (needs live server for E2E) |
+| **Redis** (Lettuce; key browser, typed values, command console with completion, Pub/Sub panel) | ✅ Working (live-verified vs the Docker stack) |
 | **Kafka** (admin/produce/consume, topic explorer, consume table + payload formatter + JSON/CSV export, **consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics, connect diagnostics**) | ✅ Working (charts/JMX pending; needs a broker for E2E) |
 | **SFTP / SCP / FTP / FTPS** (WinSCP-style dual-pane commander: drag-drop incl. external OS DnD, transfer queue w/ speed·ETA·pause·throttle·parallel·recursive·integrity-hash·offset-resume, move, batch-rename, dir-compare + content sync, saved sessions, quick-view/edit) | ✅ Working (verified live) |
 | **S3 / Azure Blob / GCS** object storage (bucket→object browser + dual-pane commander, S3 multipart upload) | ✅ Working (S3 verified live vs LocalStack; Azure/GCS need an emulator or creds for E2E) |
