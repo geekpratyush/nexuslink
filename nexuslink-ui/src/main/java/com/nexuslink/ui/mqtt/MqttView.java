@@ -1,8 +1,13 @@
 package com.nexuslink.ui.mqtt;
 
+import com.nexuslink.protocol.mqtt.MqttHistoryEntry;
+import com.nexuslink.protocol.mqtt.MqttHistoryStore;
+import com.nexuslink.protocol.mqtt.MqttMessageHistory;
 import com.nexuslink.protocol.mqtt.MqttService;
 import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -10,7 +15,9 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -41,12 +48,28 @@ public final class MqttView extends BorderPane {
 
     private final TextArea messageLog = new TextArea();
 
+    /** Persistent message history: the file-backed store, its in-memory model and the table view. */
+    private final MqttHistoryStore historyStore;
+    private final MqttMessageHistory history = new MqttMessageHistory();
+    private final ObservableList<MqttHistoryEntry> historyRows = FXCollections.observableArrayList();
+    private final TableView<MqttHistoryEntry> historyTable = new TableView<>(historyRows);
+    private final TextField historyTopicFilter = new TextField();
+    private final TextField historySearch = new TextField();
+    private final Label historyStatus = new Label();
+
     private Consumer<String> logger = s -> {};
 
     public MqttView() {
+        this(MqttHistoryStore.userDefault());
+    }
+
+    /** Test seam: lets a test point the persistent history at a temporary file. */
+    public MqttView(MqttHistoryStore historyStore) {
+        this.historyStore = historyStore;
         getStyleClass().add("mqtt-view");
         setTop(buildBar());
         setCenter(buildBody());
+        loadHistory();
     }
 
     public void setLogger(Consumer<String> logger) {
@@ -126,20 +149,83 @@ public final class MqttView extends BorderPane {
         HBox pubRow = new HBox(8, label("Publish:"), pubTopic, label("QoS:"), pubQos, pubRetained, pubBtn, pubStatus);
         pubRow.setAlignment(Pos.CENTER_LEFT);
 
-        // Message log
+        // Activity log (connection / subscription events)
         messageLog.getStyleClass().add("code-area");
         messageLog.setEditable(false);
-        messageLog.setPromptText("Subscribed messages and publish acks appear here…");
-        Button clear = new Button("Clear");
-        clear.getStyleClass().add("btn-secondary");
-        clear.setOnAction(e -> messageLog.clear());
-        HBox logHeader = new HBox(8, label("Messages:"), clear);
+        messageLog.setPromptText("Connection and subscription activity appears here…");
+        Button clearLog = new Button("Clear");
+        clearLog.getStyleClass().add("btn-secondary");
+        clearLog.setOnAction(e -> messageLog.clear());
+        HBox logHeader = new HBox(8, label("Activity:"), clearLog);
         logHeader.setAlignment(Pos.CENTER_LEFT);
-
-        VBox box = new VBox(8, subRow, new Separator(), pubRow, pubPayload, new Separator(), logHeader, messageLog);
-        box.setPadding(new Insets(10));
+        VBox activityBox = new VBox(6, logHeader, messageLog);
+        activityBox.setPadding(new Insets(8));
         VBox.setVgrow(messageLog, Priority.ALWAYS);
+
+        TabPane bottom = new TabPane(
+                closedTab("Messages", buildHistoryPane()),
+                closedTab("Activity", activityBox));
+
+        VBox box = new VBox(8, subRow, new Separator(), pubRow, pubPayload, new Separator(), bottom);
+        box.setPadding(new Insets(10));
+        VBox.setVgrow(bottom, Priority.ALWAYS);
         return box;
+    }
+
+    private Tab closedTab(String title, javafx.scene.Node content) {
+        Tab tab = new Tab(title, content);
+        tab.setClosable(false);
+        return tab;
+    }
+
+    /**
+     * The persistent message history: every message sent or received is appended to
+     * {@code ~/.nexuslink/mqtt-history.log} and reloaded on the next launch, so a subscription's
+     * traffic outlives the session. The topic box filters with real MQTT wildcards.
+     */
+    private VBox buildHistoryPane() {
+        historyTable.getColumns().setAll(
+                column("Time", 90, e -> TIME.format(e.timestamp().atZone(ZoneId.systemDefault()))),
+                column("Dir", 46, e -> e.direction() == MqttHistoryEntry.Direction.RECEIVED ? "◀ in" : "▶ out"),
+                column("Topic", 240, MqttHistoryEntry::topic),
+                column("QoS", 46, e -> String.valueOf(e.qos())),
+                column("Ret", 46, e -> e.retained() ? "✓" : ""),
+                column("Payload", 420, MqttHistoryEntry::payload));
+        historyTable.setId("mqtt-history-table");
+        historyTopicFilter.setId("mqtt-history-topic-filter");
+        historyTable.setPlaceholder(new Label("No messages yet — subscribe to a topic to start recording."));
+        historyTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+
+        historyTopicFilter.getStyleClass().add("nl-field");
+        historyTopicFilter.setPromptText("filter by topic, e.g. sensors/#");
+        historyTopicFilter.textProperty().addListener((o, a, b) -> refreshHistoryRows());
+        historySearch.getStyleClass().add("nl-field");
+        historySearch.setPromptText("payload contains…");
+        historySearch.textProperty().addListener((o, a, b) -> refreshHistoryRows());
+        HBox.setHgrow(historyTopicFilter, Priority.ALWAYS);
+        HBox.setHgrow(historySearch, Priority.ALWAYS);
+
+        Button clearHistory = new Button("Clear history");
+        clearHistory.getStyleClass().add("btn-secondary");
+        clearHistory.setOnAction(e -> clearHistory());
+
+        historyStatus.getStyleClass().add("meta-label");
+        HBox header = new HBox(8, label("Topic:"), historyTopicFilter,
+                label("Payload:"), historySearch, clearHistory, historyStatus);
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        VBox box = new VBox(6, header, historyTable);
+        box.setPadding(new Insets(8));
+        VBox.setVgrow(historyTable, Priority.ALWAYS);
+        return box;
+    }
+
+    private TableColumn<MqttHistoryEntry, String> column(String title, double width,
+                                                         java.util.function.Function<MqttHistoryEntry, String> value) {
+        TableColumn<MqttHistoryEntry, String> col = new TableColumn<>(title);
+        col.setPrefWidth(width);
+        col.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(value.apply(c.getValue())));
+        return col;
     }
 
     private Label label(String text) {
@@ -171,8 +257,8 @@ public final class MqttView extends BorderPane {
                         true, "", "", 0);
                 service.setListener(new MqttService.MessageListener() {
                     @Override public void onMessage(MqttService.Incoming m) {
-                        Platform.runLater(() -> append("◀ " + m.topic() + "  (q" + m.qos()
-                                + (m.retained() ? ",retained" : "") + ")  " + m.payload()));
+                        Platform.runLater(() -> record(MqttHistoryEntry.received(
+                                m.topic(), m.payload(), m.qos(), m.retained())));
                     }
                     @Override public void onConnectionLost(Throwable cause) {
                         Platform.runLater(() -> {
@@ -233,7 +319,7 @@ public final class MqttView extends BorderPane {
                 () -> {
                     pubStatus.getStyleClass().setAll("status-2xx");
                     pubStatus.setText("✓ sent");
-                    append("▶ " + topic + "  (q" + qos + (retained ? ",retained" : "") + ")  " + payload);
+                    record(MqttHistoryEntry.published(topic, payload, qos, retained));
                     logger.accept("MQTT published → " + topic);
                 },
                 err -> {
@@ -253,6 +339,55 @@ public final class MqttView extends BorderPane {
     }
 
     private interface ThrowingRunnable { void run() throws Exception; }
+
+    // ------------------------------------------------------------------ persistent message history
+
+    /** Loads the persisted history (off the FX thread — the file may be large) into the table. */
+    private void loadHistory() {
+        Task<List<MqttHistoryEntry>> task = new Task<>() {
+            @Override protected List<MqttHistoryEntry> call() { return historyStore.load(); }
+        };
+        task.setOnSucceeded(e -> {
+            history.addAll(task.getValue());
+            refreshHistoryRows();
+        });
+        task.setOnFailed(e -> historyStatus.setText("History unavailable"));
+        runBg(task, "mqtt-history-load");
+    }
+
+    /**
+     * Records one message in the in-memory log and appends it to the history file. Called on the FX
+     * thread; the (small, append-only) write is handed to a background thread so a slow disk never
+     * stalls the message stream.
+     */
+    private void record(MqttHistoryEntry entry) {
+        history.add(entry);
+        refreshHistoryRows();
+        Thread writer = new Thread(() -> historyStore.append(entry), "mqtt-history-append");
+        writer.setDaemon(true);
+        writer.start();
+    }
+
+    private void refreshHistoryRows() {
+        List<MqttHistoryEntry> shown = history.search(historyTopicFilter.getText(), historySearch.getText());
+        historyRows.setAll(shown);
+        int total = history.size();
+        historyStatus.setText(shown.size() == total
+                ? total + " message(s)"
+                : shown.size() + " of " + total + " message(s)");
+        if (!historyRows.isEmpty()) {
+            historyTable.scrollTo(historyRows.size() - 1);
+        }
+    }
+
+    /** Empties both the in-memory log and the persisted file. */
+    private void clearHistory() {
+        history.clear();
+        refreshHistoryRows();
+        Thread cleaner = new Thread(historyStore::clear, "mqtt-history-clear");
+        cleaner.setDaemon(true);
+        cleaner.start();
+    }
 
     private void append(String line) {
         messageLog.appendText(LocalTime.now().format(TIME) + "  " + line + "\n");

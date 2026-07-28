@@ -57,7 +57,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 ├── nexuslink-protocol-mongo      ← MongoDB client
 ├── nexuslink-protocol-s3         ← S3 / object storage (AWS SDK v2)
 ├── nexuslink-protocol-kafka      ← Kafka (admin/producer/consumer)
-├── nexuslink-protocol-mqtt       ← MQTT (Eclipse Paho; connect/subscribe/publish)
+├── nexuslink-protocol-mqtt       ← MQTT (Eclipse Paho v5; connect/subscribe/publish + history)
 ├── nexuslink-protocol-rabbitmq   ← RabbitMQ (AMQP 0.9.1; declare/publish/consume)
 ├── nexuslink-protocol-ldap       ← LDAP / Active Directory (UnboundID; browse + search)
 ├── nexuslink-protocol-snmp       ← SNMP (SNMP4J; v1/v2c GET + WALK)
@@ -103,7 +103,7 @@ Built, wired into the shell, and verified (full `mvn test` is green):
 | **MongoDB client** | protocol-mongo | find/SQL/aggregate/explain/CRUD, inferred schema diagram, Compass-style JSON/Table/Schema views, JSON/CSV export, query history. |
 | **Redis client** | protocol-redis | Lettuce; key browser with typed value rendering + command console. _(Needs a live server for E2E.)_ |
 | **Kafka client** | protocol-kafka | Admin topic explorer, produce, consume. _(First cut; needs a broker for E2E.)_ |
-| **MQTT client** | protocol-mqtt | Eclipse Paho; connect, subscribe to topic filters, publish. **Verified live (HiveMQ public broker).** _(First cut.)_ |
+| **MQTT client** | protocol-mqtt | Eclipse Paho **v5**; connect, subscribe to topic filters, publish with v5 properties, persistent message history (`~/.nexuslink/mqtt-history.log`) with wildcard topic filtering. **Verified live (HiveMQ public broker).** |
 | **RabbitMQ client** | protocol-rabbitmq | Official `amqp-client` (AMQP 0.9.1); declare exchange/queue/binding, publish, consume into a live log; `${VAR}` in every field; pure `factoryFor` seam **7/7 unit tests**. _(First cut; needs a broker for E2E.)_ |
 | **SSE client** | protocol-http | Live `text/event-stream` log with event-type filter. **Verified live (Wikimedia firehose).** |
 | **GraphQL client** | protocol-http | Query/variables editor + one-click introspection. **Verified live.** |
@@ -130,15 +130,15 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **2** | Help system (built early to guide everything) | ✅ Engine + dialog + all 17 topics + Markdown/Mermaid renderer done |
 | **3** | HTTP core: REST, WebSocket, SSE | ✅ **Complete** — REST (auth: Basic/Bearer/API-key/**OAuth2 client-creds+auth-code-PKCE**/**AWS SigV4**/**Digest**/**HMAC**/**NTLM**, **cookie jar**, **response assertions**, **waterfall timeline**, **pre-request script runner**, **DNS cache**, **W3C traceparent + Zipkin span export**, code-gen 11 langs), WS, **SSE** done |
 | **4** | Kafka client (producer/consumer/admin/schema registry/monitoring) | ✅ **Substantially complete** — admin/produce/consume + explorer + consume table/formatter/export, **consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics, connect diagnostics**; only live lag chart + JMX pending |
-| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (live) + **RabbitMQ** (dashboard + DLX) + **AWS SQS/SNS** (full UI + DLQ redrive, live vs LocalStack) + **JMS** (service live vs Artemis, UI pending) + **IBM MQ** + **Solace** + **Google Pub/Sub** + **Azure Service Bus** (queues + topics/subs + DLQ, emulator-aware) done; MQTT v5 pending (all Docker-doable) |
+| **5** | Enterprise messaging (JMS, IBM MQ, Solace, MQTT, RabbitMQ, cloud) | 🟡 **MQTT** (live) + **RabbitMQ** (dashboard + DLX) + **AWS SQS/SNS** (full UI + DLQ redrive, live vs LocalStack) + **JMS** (service live vs Artemis, UI pending) + **IBM MQ** + **Solace** + **Google Pub/Sub** + **Azure Service Bus** (queues + topics/subs + DLQ, emulator-aware) done, **MQTT on Paho v5** (v5 properties + persistent message history); only JMS's UI remains |
 | **6** | Advanced HTTP (gRPC, GraphQL) | ✅ **gRPC** (reflection, unary, **pure `.proto` parser**) + **GraphQL** (query/introspection + **schema explorer**) done; streaming/subscription panels pending |
-| **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | 🟢 **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·parallel·recursive·integrity-verify·auto-retry), move, batch-rename, dir-compare + sync, bookmarks, properties, quick-view/edit-in-place, external OS DnD (+ drop-onto-folder-row), "open terminal here", SCP mode, S3 object-storage commander**; only offset-resume + Azure/GCS commander reuse (blocked on their put) remain |
+| **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | ✅ **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·parallel·recursive·integrity-verify·auto-retry), move, batch-rename, dir-compare + sync, bookmarks, properties, quick-view/edit-in-place, external OS DnD (+ drop-onto-folder-row), "open terminal here", SCP mode, S3 object-storage commander**; **complete** — offset-based resume, Azure Blob + GCS commander panes and S3 multipart upload all landed |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export + **visual query builder + EXPLAIN + in-grid/structure editing**) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF + DIT tree) + **SNMP** (v1/v2c/v3 USM on the wire + MIB names + trap/inform receiver) + **SSH terminal** (MINA SSHD PTY shell + custom VT100/xterm renderer with xterm-256 + alt-screen + local port forwarding) done |
 | **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** + **External Secret Vaults** (HashiCorp Vault KV v2 + AWS Secrets Manager + CyberArk Conjur + `SecretVaultsView` UI, all live-verified) done; charts + jlink pending. _Cloud sync, RBAC, Azure Key Vault, auto-updater, cross-OS signed installers → **out of scope** (see TASKS.md)._ |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~86% of in-scope tasks complete** (279 done · 37 in-progress · 11 not started by checkbox —
+**Overall: ~86% of in-scope tasks complete** (282 done · 39 in-progress · 11 not started by checkbox —
 see `TASKS.md`). **Phases 0–4 and 6 are complete; Phase 9.4 (External Secret Vaults) is complete.** Five
 cloud/OS-blocked items are **excluded from scope** (Azure Key Vault, cloud sync, RBAC, auto-updater,
 signed Windows/macOS installers — see the "⊘ Out of scope" section in `TASKS.md`). Full `mvn test` is
@@ -156,7 +156,7 @@ the local Docker stack:
 
 1. **Docker-verified brokers** (add-dep → service → gated `*LiveIT` → compose service → UI): JMS UI (service
    already live vs Artemis) · HashiCorp Vault · AWS Secrets Manager (LocalStack) · CyberArk Conjur · IBM MQ ·
-   Solace · ✅ Google Pub/Sub · ✅ Azure Service Bus (emulator) · MQTT v5 (Paho v5 lib swap).
+   Solace · ✅ Google Pub/Sub · ✅ Azure Service Bus (emulator) · ✅ MQTT v5 (Paho v5 lib swap).
 2. **Chart / dashboard UI** (verify by launching) — Kafka live lag chart + JMX + heatmap; distributed-tracing
    tree view; connection-state panel. (Underlying pure summaries/models already exist.)
 3. **File-commander depth** — resume interrupted transfers (offset), parallel transfers, external-OS

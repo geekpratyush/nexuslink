@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~75%** — 224 done · 43 in-progress · 33 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4 & 6 complete; **Phase 9.4 External Secret Vaults complete** (HashiCorp Vault + AWS Secrets Manager + CyberArk Conjur + UI); **§9.1 connection-state panel** + **§4.8 Kafka throughput chart & lag heatmap** + **§9.2 distributed-trace tree view complete**. `mvn test` green across 25 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~86%** — 282 done · 39 in-progress · 11 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4, 6 & **7 (file transfer)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -586,10 +586,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       nofile ulimit, smallest scaling tier).
 
 ### 5.4 MQTT
-- [x] `MqttService` — Eclipse Paho **v3.1.1** (`nexuslink-protocol-mqtt`): connect
+- [x] `MqttService` — Eclipse Paho **v5** (`nexuslink-protocol-mqtt`, migrated from v3.1.1): connect
       (tcp/ssl/ws, optional user/pass + LWT, auto-reconnect), subscribe/unsubscribe (QoS 0/1/2),
-      publish (QoS + retained), streaming listener. **Verified live vs. broker.hivemq.com**
-      (subscribe → publish → received the message back at QoS 1). _v5.0 TODO._
+      publish (QoS + retained + v5 properties), streaming listener. **Verified live vs. broker.hivemq.com**
+      (subscribe → publish → received the message back at QoS 1).
 - [x] `MqttView` — broker URL, client ID, auth, QoS selector, topic subscribe/publish, live
       message log; wired into the shell (File menu + sidebar + HiveMQ public sample)
 - [x] v5 properties: user properties, message expiry, content type, correlation data — migrated Paho v3→v5 client; `MqttMessageProperties` (Paho-free record) mapped both directions in `MqttService.publish(...)`/`Incoming`; gated `MqttLiveIT` round-trip
@@ -602,7 +602,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `$`-topic exclusion, empty levels), plus `isValidFilter`/`isValidTopicName` per §4.7.3 (whole-level
       wildcards, `#` only last, no wildcards in names, no U+0000, ≤65535 UTF-8 bytes). Index-walking, no
       per-match allocation; 71 tests. _(UI subscription-overlap highlighting can build on this.)_
-- [-] Message history — live in-session log (timestamp, QoS, retained flag); _persistent history TODO_
+- [x] Message history — **persistent**: pure `MqttHistoryEntry` (tab-separated `key=value` line codec —
+      tabs/newlines/backslashes escaped so a multi-line JSON payload stays one line; unknown keys ignored,
+      damaged lines skipped) + bounded thread-safe `MqttMessageHistory` (5 000 entries, `matching()` filters
+      with real `MqttTopicFilter` wildcards, `search()` adds a payload contains) + append-only
+      `MqttHistoryStore` over `~/.nexuslink/mqtt-history.log` (compacted to the cap on load; I/O failures
+      surface via `lastError()` rather than breaking the client). `MqttView` gained a **Messages** table
+      (time · direction · topic · QoS · retained · payload) with topic-filter + payload-search boxes and
+      **Clear history**, beside the connection **Activity** log. 29 unit tests + an FX reload/filter test.
 
 ### 5.5 RabbitMQ
 - [-] `RabbitMqService` — AMQP 0.9.1 client (official `amqp-client`): connect (URI/host[:port] +
