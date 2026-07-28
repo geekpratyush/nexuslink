@@ -135,6 +135,81 @@
         </profile>
 
         <!--
+          jlink: builds a trimmed Java runtime containing only the JDK modules NexusLink actually
+          needs, so the jpackage app-image ships that instead of the full JDK runtime. The app is a
+          shaded, classpath (non-modular) jar, so jlink cannot derive the set itself — the list below
+          was produced by
+
+            jdeps (print-module-deps, ignore-missing-deps, multi-release 21) over target/nexuslink.jar
+
+          plus the modules nothing references statically but the runtime still loads through a
+          service or a system property: jdk.crypto.ec (ECDHE cipher suites — without it every modern
+          TLS handshake fails), jdk.charsets, jdk.zipfs, jdk.localedata, and java.desktop (JavaFX).
+          Use it together with fatjar + jpackage:
+            Build:  mvn -Pfatjar,jlink,jpackage -pl nexuslink-app -am clean verify
+            Output: nexuslink-app/target/runtime/  (the trimmed runtime, consumed by jpackage)
+          Rerun the jdeps command above after adding a dependency that reaches for a new JDK module.
+        -->
+        <profile>
+            <id>jlink</id>
+            <properties>
+                <nexuslink.runtime.dir>${project.build.directory}/runtime</nexuslink.runtime.dir>
+                <nexuslink.jlink.modules>java.base,java.compiler,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.sql,java.xml,jdk.charsets,jdk.crypto.ec,jdk.jfr,jdk.jsobject,jdk.localedata,jdk.net,jdk.unsupported,jdk.unsupported.desktop,jdk.xml.dom,jdk.zipfs</nexuslink.jlink.modules>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <executions>
+                            <execution>
+                                <id>jlink-runtime</id>
+                                <phase>package</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <!-- jlink refuses to write into an existing directory. -->
+                                        <delete dir="${nexuslink.runtime.dir}"/>
+                                        <exec executable="${java.home}/bin/jlink" failonerror="true">
+                                            <arg value="--add-modules"/>
+                                            <arg value="${nexuslink.jlink.modules}"/>
+                                            <arg value="--strip-debug"/>
+                                            <arg value="--no-header-files"/>
+                                            <arg value="--no-man-pages"/>
+                                            <arg value="--compress=zip-6"/>
+                                            <arg value="--output"/>
+                                            <arg value="${nexuslink.runtime.dir}"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!--
+                      Contributes only <runtimeImage> to the jpackage execution declared in the
+                      jpackage profile. Maven merges configuration for the same plugin + execution id
+                      across active profiles, so -Pjlink,jpackage bundles the trimmed runtime while
+                      -Pjpackage alone still bundles the full JDK runtime.
+                    -->
+                    <plugin>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>1.6.5</version>
+                        <executions>
+                            <execution>
+                                <id>app-image</id>
+                                <configuration>
+                                    <runtimeImage>${nexuslink.runtime.dir}</runtimeImage>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
           jpackage: wraps the fat JAR in a native, self-contained application image that bundles its
           own Java runtime — end users need NO Java installed; they just run the produced app. jpackage
           is OS-specific, so this must be built ON each target OS (Windows produces the .exe app dir,

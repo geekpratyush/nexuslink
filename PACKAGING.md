@@ -93,7 +93,12 @@ Change `<type>` in the `jpackage` profile (in `nexuslink-app/pom.xml`) to a plat
 ## Notes & next steps
 
 - **Size:** the fat JAR is large because it bundles the AWS SDK, gRPC, Kafka, database drivers, JavaFX
-  for four platforms, etc. A future `jlink` step (TASKS §9.6) can trim the runtime the app-image bundles.
+  for four platforms, etc. The **`jlink` profile** trims the runtime the app-image bundles from ~286 MB
+  to ~70 MB — add it to the build: `mvn -Pfatjar,jlink,jpackage -pl nexuslink-app -am clean verify`.
+  The module list lives in the profile's `nexuslink.jlink.modules` property; regenerate it with
+  `jdeps --print-module-deps --ignore-missing-deps --multi-release 21 target/nexuslink.jar` after
+  adding a dependency that reaches for a new JDK module, keeping the service-loaded extras the profile
+  documents (notably `jdk.crypto.ec`, without which TLS handshakes fail).
 - **Reproducibility:** both profiles are opt-in; CI / day-to-day `mvn install` does not build them.
 - **Signing/notarization** (macOS Gatekeeper, Windows SmartScreen) is handled at distribution time
   with platform certificates.

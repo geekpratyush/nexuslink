@@ -171,6 +171,16 @@ public final class SqlClientView extends BorderPane {
         t.start();
     }
 
+    /** The connection + the editor's statement as a code-generation request (see the code-gen SPI). */
+    private com.nexuslink.protocol.db.SqlCodeGenerator.Request codeGenRequest() {
+        String selected = sqlEditor.getSelectedText();
+        String sql = selected == null || selected.isBlank() ? sqlEditor.getText() : selected;
+        return new com.nexuslink.protocol.db.SqlCodeGenerator.Request(
+                Env.resolve(urlField.getText().trim()),
+                Env.resolve(userField.getText().trim()),
+                sql);
+    }
+
     private VBox buildConnectionBar() {
         urlField.getStyleClass().add("nl-field");
         HBox.setHgrow(urlField, Priority.ALWAYS);
@@ -226,7 +236,13 @@ public final class SqlClientView extends BorderPane {
 
         Label lbl = new Label("Database:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, builderBtn, erBtn, structureBtn, helpBtn);
+        Button codeBtn = new Button("Code…");
+        codeBtn.getStyleClass().add("btn-secondary");
+        codeBtn.setTooltip(new Tooltip("Generate a snippet that runs the editor's statement against this database"));
+        codeBtn.setOnAction(e -> com.nexuslink.ui.rest.CodeGenDialog.show(
+                getScene() == null ? null : getScene().getWindow(), codeGenRequest()));
+
+        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, builderBtn, erBtn, structureBtn, codeBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 

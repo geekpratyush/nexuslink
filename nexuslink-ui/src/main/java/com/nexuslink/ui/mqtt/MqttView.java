@@ -1,5 +1,6 @@
 package com.nexuslink.ui.mqtt;
 
+import com.nexuslink.protocol.mqtt.MqttCodeGenerator;
 import com.nexuslink.protocol.mqtt.MqttHistoryEntry;
 import com.nexuslink.protocol.mqtt.MqttHistoryStore;
 import com.nexuslink.protocol.mqtt.MqttMessageHistory;
@@ -104,7 +105,13 @@ public final class MqttView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("mqtt"));
 
-        HBox row1 = new HBox(8, label("Broker:"), brokerField, connectBtn, helpBtn);
+        Button codeBtn = new Button("Code…");
+        codeBtn.getStyleClass().add("btn-secondary");
+        codeBtn.setTooltip(new Tooltip("Generate a publish/subscribe snippet for this broker and topic"));
+        codeBtn.setOnAction(e -> com.nexuslink.ui.rest.CodeGenDialog.show(
+                getScene() == null ? null : getScene().getWindow(), codeGenRequest()));
+
+        HBox row1 = new HBox(8, label("Broker:"), brokerField, connectBtn, codeBtn, helpBtn);
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(10, 10, 4, 10));
         HBox row2 = new HBox(8, label("Client:"), clientIdField, label("Auth:"), userField, passField);
@@ -339,6 +346,18 @@ public final class MqttView extends BorderPane {
     }
 
     private interface ThrowingRunnable { void run() throws Exception; }
+
+    /** The current broker + topic as a code-generation request (see the code-gen SPI). */
+    private MqttCodeGenerator.Request codeGenRequest() {
+        String topic = Env.resolve(pubTopic.getText().trim());
+        if (topic.isEmpty()) topic = Env.resolve(subTopic.getText().trim());
+        return new MqttCodeGenerator.Request(
+                Env.resolve(brokerField.getText().trim()),
+                topic,
+                pubQos.getValue() == null ? 0 : pubQos.getValue(),
+                pubRetained.isSelected(),
+                Env.resolve(userField.getText().trim()));
+    }
 
     // ------------------------------------------------------------------ persistent message history
 

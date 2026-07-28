@@ -167,7 +167,13 @@ public final class KafkaView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("kafka-client"));
 
-        HBox row1 = new HBox(8, label("Brokers:"), bootstrapField, connectBtn, diagnoseBtn, helpBtn);
+        Button codeBtn = new Button("Code…");
+        codeBtn.getStyleClass().add("btn-secondary");
+        codeBtn.setTooltip(new Tooltip("Generate a producer/consumer snippet for this cluster and topic"));
+        codeBtn.setOnAction(e -> com.nexuslink.ui.rest.CodeGenDialog.show(
+                getScene() == null ? null : getScene().getWindow(), codeGenRequest()));
+
+        HBox row1 = new HBox(8, label("Brokers:"), bootstrapField, connectBtn, diagnoseBtn, codeBtn, helpBtn);
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(10, 10, 4, 10));
         HBox row2 = new HBox(8, label("Security:"), protocolCombo, label("SASL:"), saslMechCombo, saslUser, saslPass);
@@ -994,6 +1000,16 @@ public final class KafkaView extends BorderPane {
     /** Kafka keystore type from a file extension ({@code .jks} → JKS, else PKCS12). */
     private static String storeType(String path) {
         return path.toLowerCase().endsWith(".jks") ? "JKS" : "PKCS12";
+    }
+
+    /** The current cluster + topic as a code-generation request (see the code-gen SPI). */
+    private com.nexuslink.protocol.kafka.KafkaCodeGenerator.Request codeGenRequest() {
+        return new com.nexuslink.protocol.kafka.KafkaCodeGenerator.Request(
+                Env.resolve(bootstrapField.getText().trim()),
+                Env.resolve(produceTopic.getText().trim()),
+                "",
+                protocolCombo.getValue(),
+                saslMechCombo.getValue());
     }
 
     /** Runs a DNS→TCP reachability check against the first broker in the bootstrap list. */

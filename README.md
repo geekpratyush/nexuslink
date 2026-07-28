@@ -25,9 +25,9 @@ workbench you use for REST and Kafka.
 
 ## Current Status
 
-NexusLink is under active development. As of the latest session roughly **86% of the tasks in
-`TASKS.md` are done** (282 done · 39 in-progress · 11 not started), and **Phases 0–4, 6 and 7 are
-complete**. A local Docker stack (`test-env/`) live-verifies 17 protocol families incl. Kafka,
+NexusLink is under active development. As of the latest session roughly **88% of the tasks in
+`TASKS.md` are done** (285 done · 38 in-progress · 10 not started), and **Phases 0–4, 6, 7 and 9
+are complete**. A local Docker stack (`test-env/`) live-verifies 17 protocol families incl. Kafka,
 SQS/SNS, JMS, MQTT, SFTP/FTP, object storage, secret vaults and databases. `TASKS.md` is the live,
 phase-by-phase tracker and the source of truth; the table below summarizes it.
 
@@ -80,15 +80,15 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | Metrics dashboard (throughput / error-rate / P50-P95-P99 + live chart) | ✅ Working (REST feeds it; per-endpoint + export TODO) |
 | Distributed tracing (W3C Trace Context, Zipkin v2 export, trace tree view) | ✅ Working |
 | External secret vaults (HashiCorp Vault, AWS Secrets Manager, CyberArk Conjur) | ✅ Working (all live-verified) |
-| Global code generation SPI (beyond REST) | ⏳ Not started |
-| Native packaging (fat jar + `jpackage` self-contained app-image) | ✅ Working (`jlink` runtime slimming pending) |
+| Cross-protocol code generation SPI (REST, Kafka, MQTT, SQL providers) | ✅ Working |
+| Native packaging (fat jar + `jpackage` app-image + `jlink`-trimmed 70 MB runtime) | ✅ Working |
 
 > **Short answer to "is it done?": most of it.** The Phase-1 foundation (vault, certificate manager,
 > environment variables, history), the help infrastructure, the full file-transfer commander, and every
 > protocol family (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/LDAP/SNMP/SSH, object storage, a deep Kafka
 > client, MQTT, RabbitMQ, JMS, IBM MQ, Solace and the cloud queues, MCP/LLM) are built, and most are
 > verified live against the Docker stack. Remaining work is the tail: the JMS UI, gRPC/GraphQL streaming
-> panels, a Redis Pub/Sub panel, `jlink` runtime slimming, and assorted polish. See `TASKS.md` for the
+> panels, a Redis Pub/Sub panel, and assorted polish. See `TASKS.md` for the
 > exact remaining items per phase.
 
 ## Requirements

@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~86%** — 282 done · 39 in-progress · 11 open (by checkbox). Phases 0–4, 6 & **7 (file transfer)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~88%** — 285 done · 38 in-progress · 10 open (by checkbox). Phases 0–4, 6, **7 (file transfer)** & **9 (monitoring/tracing/vaults/code-gen/packaging)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -1225,7 +1225,21 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       Activity log. Launch-verified (screenshot) with the shell theme.
 
 ### 9.5 Code Generation (Global)
-- [-] `RestCodeGenerator` — REST request → client snippet (per-language enum registry). _SPI across all protocols TODO._
+- [x] `RestCodeGenerator` — REST request → client snippet (per-language enum registry), now exposed
+      through the cross-protocol SPI by `RestCodeGeneratorProvider`
+- [x] **Cross-protocol code-generation SPI** — `CodeGenerator` + `CodeGenTarget` + `CodeGenRegistry`
+      (plugin-api, `ServiceLoader`-discovered, mirrors `ExtensionRegistry`: first registration of a
+      protocol id wins, duplicates reported not thrown; **`Collections.unmodifiableMap`, not
+      `Map.copyOf`** — the latter loses insertion order and the UI shows generators in registration
+      order). `supports(Object)` keeps the registry type-safe without generics, so the UI asks
+      "who can render this request?" and never names a protocol. Providers: **REST** (all 11 languages),
+      **Kafka** (Java producer/consumer, kafka-python, `kafka-console-*` CLI — security properties only
+      when the cluster isn't plaintext), **MQTT** (mosquitto_pub/sub, Paho v5, paho-mqtt, mqtt.js —
+      broker URI parsed by `MqttBrokerUri` so scheme-default ports/TLS are right, password redacted),
+      **SQL** (JDBC, SQLAlchemy, psql/mysql/sqlite3 — the password always comes from `$DB_PASSWORD`,
+      never inlined). `CodeGenDialog` is now registry-driven (protocol dropdown appears only when
+      several generators claim the request) and a **Code…** button was added to the Kafka, MQTT and SQL
+      views. 34 unit tests + 3 FX tests.
 - [x] Output languages: cURL, Python (requests), JavaScript (fetch), Java (HttpClient), PowerShell,
       **Node (axios), C# (HttpClient), Go (net/http), Rust (reqwest), PHP (curl), Ruby (net/http)** — 10 tests
 - [x] `CodeGenDialog` — language dropdown (driven by `Language.values()`), copy button
@@ -1240,7 +1254,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       jar and bundles a Java runtime into a native app needing NO Java installed (`target/dist/NexusLink/`,
       run `bin/NexusLink`). `mvn -Pfatjar,jpackage -pl nexuslink-app -am clean verify`. Built per-OS;
       switch `<type>` to EXE/MSI · DMG/PKG · DEB/RPM for installers (may need extra OS tooling).
-- [ ] `jlink` — further minimize the bundled runtime (jpackage currently bundles the full JDK runtime)
+- [x] **`jlink` runtime slimming** — a `jlink` profile builds a trimmed runtime from an explicit module
+      list (the shaded jar is classpath/non-modular, so jlink can't derive it: the list came from
+      `jdeps --print-module-deps --ignore-missing-deps --multi-release 21` over the fat jar, **plus the
+      modules nothing references statically** — `jdk.crypto.ec` (without it every ECDHE TLS handshake
+      fails), `jdk.charsets`, `jdk.zipfs`, `jdk.localedata`, `java.desktop`), with `--strip-debug
+      --no-header-files --no-man-pages --compress=zip-6`. The jlink profile contributes only
+      `<runtimeImage>` to the jpackage execution, so profiles merge: `-Pfatjar,jlink,jpackage` ships the
+      trimmed runtime, `-Pfatjar,jpackage` alone still ships the full JDK. **Verified: 286 MB → 70 MB
+      (−75%)**, the app launches and runs on the trimmed runtime with no exceptions, and an HTTPS
+      round-trip succeeds on it (proving the crypto providers survived the trim).
 
 ---
 

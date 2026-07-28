@@ -134,12 +134,12 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 | **6** | Advanced HTTP (gRPC, GraphQL) | ✅ **gRPC** (reflection, unary, **pure `.proto` parser**) + **GraphQL** (query/introspection + **schema explorer**) done; streaming/subscription panels pending |
 | **7** | File transfer (SFTP/SCP, FTP/FTPS, S3/Azure/GCS) | ✅ **SFTP, FTP/FTPS, S3, Azure Blob, GCS** done — WinSCP-style dual-pane commander + drag-drop + **transfer queue (speed·ETA·pause·throttle·parallel·recursive·integrity-verify·auto-retry), move, batch-rename, dir-compare + sync, bookmarks, properties, quick-view/edit-in-place, external OS DnD (+ drop-onto-folder-row), "open terminal here", SCP mode, S3 object-storage commander**; **complete** — offset-based resume, Azure Blob + GCS commander panes and S3 multipart upload all landed |
 | **8** | Databases & enterprise (JDBC, **Mongo**, Redis, LDAP, SSH, SNMP) | 🟡 JDBC (+TLS, sortable/filterable grid + export + **visual query builder + EXPLAIN + in-grid/structure editing**) + Mongo + **Redis** + **LDAP** (search + filter builder + entry CRUD + LDIF + DIT tree) + **SNMP** (v1/v2c/v3 USM on the wire + MIB names + trap/inform receiver) + **SSH terminal** (MINA SSHD PTY shell + custom VT100/xterm renderer with xterm-256 + alt-screen + local port forwarding) done |
-| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | 🟡 **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** + **External Secret Vaults** (HashiCorp Vault KV v2 + AWS Secrets Manager + CyberArk Conjur + `SecretVaultsView` UI, all live-verified) done; charts + jlink pending. |
+| **9** | Monitoring, metrics, tracing, secret vaults, code-gen, native packaging | ✅ **Metrics dashboard** (per-endpoint breakdown + P50/P95/P99 + live chart + **CSV/JSON export + threshold alerting**) + **distributed tracing** (W3C Trace Context + **Zipkin v2 export**) + **code-gen (11 langs)** + **External Secret Vaults** (HashiCorp Vault KV v2 + AWS Secrets Manager + CyberArk Conjur + `SecretVaultsView` UI, all live-verified) done, **cross-protocol code-gen SPI** (REST/Kafka/MQTT/SQL providers, `ServiceLoader`-discovered) and **`jlink` runtime slimming** (286 MB → 70 MB) complete. |
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~86% of in-scope tasks complete** (282 done · 39 in-progress · 11 not started by checkbox —
-see `TASKS.md`). **Phases 0–4, 6 and 7 are complete; Phase 9.4 (External Secret Vaults) is complete.**
+**Overall: ~88% of in-scope tasks complete** (285 done · 38 in-progress · 10 not started by checkbox —
+see `TASKS.md`). **Phases 0–4, 6, 7 and 9 are complete.**
 Full `mvn test` is **BUILD SUCCESS** across all 30 modules, and **17 gated `*LiveIT`s pass** against the local Docker stack
 (`test-env/`), which live-verifies as many protocol families (incl. **AWS SQS/SNS via LocalStack**, **JMS
 via ActiveMQ Artemis**, and **HashiCorp Vault / AWS Secrets Manager / CyberArk Conjur** secret vaults).
@@ -161,7 +161,7 @@ the local Docker stack:
    drag-and-drop, quick-view/edit-in-place, SCP mode, object-storage commander reuse.
 4. ✅ **SSH terminal** — MINA SSHD PTY shell + a custom VT100/xterm renderer UI (done).
 5. **Help/onboarding UI** — `HelpButton`, tooltip-plus, `ErrorHelpLink`, empty-state, first-run overlay.
-6. **`jlink`** runtime slimming (the only in-scope packaging item left).
+6. ✅ **`jlink`** runtime slimming (done — the app-image now bundles a 70 MB runtime).
 
 _Done since this list was first written:_ ✅ vault UI + auto-lock · ✅ SSE · ✅ GraphQL · ✅ gRPC ·
 ✅ Kafka first cut · ✅ Redis · ✅ SFTP/FTP · ✅ S3/Azure/GCS · ✅ Mongo power features ·
