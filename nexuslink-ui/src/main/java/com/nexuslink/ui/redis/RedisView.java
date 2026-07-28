@@ -1,5 +1,6 @@
 package com.nexuslink.ui.redis;
 
+import com.nexuslink.protocol.redis.RedisCommandCatalog;
 import com.nexuslink.protocol.redis.RedisExplorer;
 import com.nexuslink.protocol.redis.RedisService;
 import com.nexuslink.ui.env.Env;
@@ -10,6 +11,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -27,6 +29,7 @@ public final class RedisView extends BorderPane {
 
     private final TextField commandField = new TextField();
     private final TextArea consoleOut = new TextArea();
+    private final ContextMenu completionPopup = new ContextMenu();
 
     private final RedisPubSubPanel pubSub = new RedisPubSubPanel(
             () -> uriField.getText(), service);
@@ -88,6 +91,7 @@ public final class RedisView extends BorderPane {
         commandField.getStyleClass().add("nl-field");
         commandField.setPromptText("e.g.  SET greeting hello   |   GET greeting   |   KEYS *");
         commandField.setOnAction(e -> runCommand());
+        installCompletion();
         Button runBtn = new Button("Run");
         runBtn.getStyleClass().add("btn-primary");
         runBtn.setOnAction(e -> runCommand());
@@ -112,6 +116,59 @@ public final class RedisView extends BorderPane {
         SplitPane sp = new SplitPane(explorer, rightTabs);
         sp.setDividerPositions(0.34);
         return sp;
+    }
+
+    /**
+     * Command-name completion for the console: as the first token is typed, a popup offers the
+     * matching commands from {@link RedisCommandCatalog} with their one-line summary; picking one
+     * replaces the token and leaves the caret ready for its arguments.
+     *
+     * <p>Only the first token completes — once a space has been typed the user is writing arguments,
+     * where a command list would be noise.
+     */
+    private void installCompletion() {
+        commandField.textProperty().addListener((o, old, text) -> {
+            if (text == null || text.isBlank() || text.contains(" ")) {
+                completionPopup.hide();
+                return;
+            }
+            List<RedisCommandCatalog.Command> matches = RedisCommandCatalog.complete(text);
+            if (matches.isEmpty()) {
+                completionPopup.hide();
+                return;
+            }
+            completionPopup.getItems().setAll(matches.stream().limit(12).map(this::completionItem).toList());
+            if (!completionPopup.isShowing() && commandField.getScene() != null) {
+                completionPopup.show(commandField, javafx.geometry.Side.BOTTOM, 0, 0);
+            }
+        });
+        // Escape dismisses it; Enter runs the command, so the popup must not swallow either.
+        commandField.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE) completionPopup.hide();
+        });
+        commandField.focusedProperty().addListener((o, was, has) -> {
+            if (!has) completionPopup.hide();
+        });
+    }
+
+    /** Test seam: the console's command entry and its completion popup. */
+    TextField consoleCommandField() {
+        return commandField;
+    }
+
+    /** Test seam: the completion popup driven by {@link #installCompletion()}. */
+    ContextMenu consoleCompletionPopup() {
+        return completionPopup;
+    }
+
+    private MenuItem completionItem(RedisCommandCatalog.Command command) {
+        MenuItem item = new MenuItem(command.name() + "   —   " + command.summary());
+        item.setOnAction(e -> {
+            commandField.setText(command.name() + " ");
+            commandField.positionCaret(commandField.getText().length());
+            completionPopup.hide();
+        });
+        return item;
     }
 
     private void connect() {

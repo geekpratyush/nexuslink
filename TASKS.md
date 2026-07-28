@@ -1017,9 +1017,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 8.2 Redis Client (separate driver — not JDBC)
 - [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack. _Cluster + Sentinel TODO._
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
-- [-] Command console — `RedisService.execute()` supports ~20 common commands; **auto-complete core done**:
-      pure `RedisCommandCatalog` (58 commands with group/summary/syntax) + case-insensitive first-token prefix
-      `complete()`, `find()`, `inGroup()`; 12 tests. _(Wire into the console editor as a completion popup TODO.)_
+- [x] Command console — `RedisService.execute()` supports ~20 common commands (+ `PUBLISH`); pure
+      `RedisCommandCatalog` (58 commands with group/summary/syntax) + case-insensitive first-token
+      prefix `complete()`/`find()`/`inGroup()`; 12 tests. **Completion popup wired into the console
+      editor:** typing the first token offers the matching commands with their one-line summary,
+      picking one inserts `NAME ` ready for arguments; the popup only fires on the first token (once a
+      space is typed the user is writing arguments), Escape and focus-loss dismiss it, and Enter still
+      runs the command. 2 FX tests.
 - [x] **Glob matcher** — pure `RedisGlob.matches(pattern, key)` mirrors Redis `stringmatchlen` (`*`/`?`,
       `[..]` classes with ranges + `^` negation, `\` escapes; whole-string, case-sensitive) so `KEYS`/`SCAN MATCH`
       listings can be filtered client-side without a round-trip. 7 tests.
