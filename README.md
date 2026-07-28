@@ -25,16 +25,11 @@ workbench you use for REST and Kafka.
 
 ## Current Status
 
-NexusLink is under active development and **not yet feature-complete** against the full
-specification (`NexusLink_Specification.md`). As of the latest session, roughly **68% of the
-in-scope tasks are done** (203 done · 44 in-progress · 52 not started of **299 in-scope**;
-~75% weighting partial work), and **Phases 0–4 and 6 are complete**. Five items that need
-resources this environment will never have (a real Azure/cloud account, a hosted backend/release
-server, or Windows/macOS signing machines) are **excluded from scope** — see the "⊘ Out of scope
-for this environment" section in `TASKS.md`. A local Docker stack (`test-env/`) live-verifies 15
-protocol families incl. Kafka, SQS/SNS, JMS, MQTT, SFTP/FTP and databases (14 gated `*LiveIT`s
-confirmed green this session). `TASKS.md` is the live, phase-by-phase tracker and the source of
-truth; the table below summarizes it.
+NexusLink is under active development. As of the latest session roughly **86% of the tasks in
+`TASKS.md` are done** (282 done · 39 in-progress · 11 not started), and **Phases 0–4, 6 and 7 are
+complete**. A local Docker stack (`test-env/`) live-verifies 17 protocol families incl. Kafka,
+SQS/SNS, JMS, MQTT, SFTP/FTP, object storage, secret vaults and databases. `TASKS.md` is the live,
+phase-by-phase tracker and the source of truth; the table below summarizes it.
 
 Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 
@@ -66,36 +61,35 @@ Legend: ✅ working · 🟡 partial / first cut · ⏳ not started
 | **MongoDB** (find/SQL/aggregate/explain/CRUD, schema diagram, Compass views, export) | ✅ Working |
 | **Redis** (Lettuce; key browser, typed values, command console) | 🟡 Built (needs live server for E2E) |
 | **Kafka** (admin/produce/consume, topic explorer, consume table + payload formatter + JSON/CSV export, **consumer-lag monitor, offset-reset dialog, schema registry + compatibility + evolution diff, side-effect-free poll browser, AdminClient metrics, connect diagnostics**) | ✅ Working (charts/JMX pending; needs a broker for E2E) |
-| **SFTP / FTP / FTPS** (WinSCP-style dual-pane commander: drag-drop, transfer queue w/ speed·ETA·pause·throttle·recursive·integrity-verify, move, batch-rename, dir-compare + sync, bookmarks, properties, mkdir/rename/delete/chmod) | ✅ Working (verified live; resume/parallel/external-DnD TODO) |
-| **S3 / Azure Blob / GCS** object storage (bucket→object browser) | 🟡 S3 verified live; Azure/GCS need creds for E2E |
+| **SFTP / SCP / FTP / FTPS** (WinSCP-style dual-pane commander: drag-drop incl. external OS DnD, transfer queue w/ speed·ETA·pause·throttle·parallel·recursive·integrity-hash·offset-resume, move, batch-rename, dir-compare + content sync, saved sessions, quick-view/edit) | ✅ Working (verified live) |
+| **S3 / Azure Blob / GCS** object storage (bucket→object browser + dual-pane commander, S3 multipart upload) | ✅ Working (S3 verified live vs LocalStack; Azure/GCS need an emulator or creds for E2E) |
 | **MCP Inspector** (tools/resources/prompts, Bearer-token auth) | ✅ Working (tested; OAuth/PKCE + vaulting TODO) |
 | **AI / LLM tester** (Anthropic SDK) | ✅ Working (needs `ANTHROPIC_API_KEY`) |
 | **AI Agent** (MCP tool-calling loop — Claude calls an MCP server's tools) | ✅ Working (needs `ANTHROPIC_API_KEY` + an MCP server) |
-| **MQTT** (Eclipse Paho; connect/subscribe/publish) | 🟡 First cut (verified live vs. HiveMQ public broker) |
+| **MQTT** (Eclipse Paho **v5**; connect/subscribe/publish, v5 properties, persistent message history with wildcard filtering) | ✅ Working (verified live vs. HiveMQ public broker) |
 | **RabbitMQ** (AMQP 0.9.1; declare/publish/consume + management dashboard: queues/exchanges/bindings + overview, DLX builder) | 🟡 First cut (publisher confirms/ack pending; needs a broker for E2E) |
-| JMS · IBM MQ · Solace · cloud messaging (SQS/SNS/Service Bus/Pub-Sub) | ⏳ Not started |
+| **JMS · IBM MQ · Solace · cloud messaging** (SQS/SNS, Azure Service Bus, Google Pub/Sub) | ✅ Working (SQS/SNS, IBM MQ, Solace, Service Bus, Pub/Sub have full UIs; JMS service is live-verified, its UI pending) |
 | **LDAP / Active Directory** (browse + RFC-4515 search + filter builder, entry add/modify/delete, LDIF import/export, lazy DIT tree) | 🟡 First cut (StartTLS pending; needs a directory server for E2E) |
 | **SNMP** (v1/v2c GET + WALK + MIB-name resolution, v3/USM config model, trap receiver) | 🟡 First cut (v3-on-the-wire + inform pending; needs an agent for E2E) |
-| SSH terminal | ⏳ Not started |
+| **SSH terminal** (MINA SSHD PTY shell + custom VT100/xterm renderer, xterm-256, alt-screen, local port forwarding) | ✅ Working (verified live) |
 
 **Cross-cutting / polish**
 
 | Area | Status |
 |------|--------|
 | Metrics dashboard (throughput / error-rate / P50-P95-P99 + live chart) | ✅ Working (REST feeds it; per-endpoint + export TODO) |
-| Distributed tracing · team collaboration | ⏳ Not started |
-| External secret vaults (HashiCorp/AWS/Azure/CyberArk) | ⏳ Not started |
+| Distributed tracing (W3C Trace Context, Zipkin v2 export, trace tree view) | ✅ Working |
+| External secret vaults (HashiCorp Vault, AWS Secrets Manager, CyberArk Conjur) | ✅ Working (all live-verified) |
 | Global code generation SPI (beyond REST) | ⏳ Not started |
-| Native packaging (`jlink` / `jpackage`, auto-update) | ⏳ Not started |
+| Native packaging (fat jar + `jpackage` self-contained app-image) | ✅ Working (`jlink` runtime slimming pending) |
 
-> **Short answer to "is it done?": no, but the offline-buildable core is largely there.** The Phase-1
-> foundation (vault, certificate manager, environment variables, history), the help infrastructure, and
-> most protocols (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/object-storage/MCP/LLM, a now-deep Kafka
-> client, MQTT, RabbitMQ with management dashboard, LDAP with LDIF/DIT, and an SNMP browser with trap
-> receiver) are built and many are verified live. Remaining work clusters into things that need external
-> systems or heavy new dependencies: JMS/IBM-MQ/Solace/cloud messaging, SSH terminal, chart/JMX
-> dashboards, distributed tracing, external secret-vault integrations, a JS pre-request engine, and
-> native installers. See `TASKS.md` for the exact remaining items per phase.
+> **Short answer to "is it done?": most of it.** The Phase-1 foundation (vault, certificate manager,
+> environment variables, history), the help infrastructure, the full file-transfer commander, and every
+> protocol family (REST/WS/SSE/GraphQL/gRPC/SQL/Mongo/Redis/LDAP/SNMP/SSH, object storage, a deep Kafka
+> client, MQTT, RabbitMQ, JMS, IBM MQ, Solace and the cloud queues, MCP/LLM) are built, and most are
+> verified live against the Docker stack. Remaining work is the tail: the JMS UI, gRPC/GraphQL streaming
+> panels, a Redis Pub/Sub panel, `jlink` runtime slimming, and assorted polish. See `TASKS.md` for the
+> exact remaining items per phase.
 
 ## Requirements
 

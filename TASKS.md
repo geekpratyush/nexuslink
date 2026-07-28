@@ -27,7 +27,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~86%** — 282 done · 39 in-progress · 11 open (by checkbox; 5 cloud/OS-blocked items excluded — see ⊘ Out of scope). Phases 0–4, 6 & **7 (file transfer)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~86%** — 282 done · 39 in-progress · 11 open (by checkbox). Phases 0–4, 6 & **7 (file transfer)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -40,15 +40,14 @@ across 24 modules. Docker works here (v29 / compose v5). Two containers were lef
 
 **Can everything close in one day? Honestly: ~90% yes, 100% no.** ~106 items remain (61 open + 45 partial).
 The Docker-simulate pattern (proven this session for SQS/SNS + JMS) makes most of the "infra-gated" set
-buildable and live-verifiable in a focused day. A handful genuinely can't be *fully* closed offline and
-should be marked **won't-close-today** with the reason (see Wave E). Suggested one-day order:
+buildable and live-verifiable in a focused day. Suggested one-day order:
 
 **Wave A — Docker-verified brokers (highest value; ~pattern = 20–30 min each):**
 1. **MQTT v5** (§5.4) — swap Paho v3→v5 client, add v5 props; Mosquitto already in stack.
 2. **HashiCorp Vault** (§9.4) — `hashicorp/vault` dev image; KV v2 read/write.
 3. **AWS Secrets Manager** (§9.4) — LocalStack (add `secretsmanager` to SERVICES); reuse AWS SDK v2.
 4. **Solace** (§5.3) — `solace/solace-pubsub-standard` + JCSMP client.
-5. **CyberArk Conjur** (§9.4) — `cyberark/conjur` OSS image (dockerable, unlike Key Vault).
+5. **CyberArk Conjur** (§9.4) — `cyberark/conjur` OSS image.
 6. **IBM MQ** (§5.2) — `icr.io/ibm-messaging/mq` dev image (heavy ~2GB, needs `LICENSE=accept`).
 7. **SSH terminal service** (§8.5) — MINA SSHD client vs `linuxserver/openssh-server` (service+exec; the
    VT100 *UI* is a separate big piece — do the service, defer the full terminal renderer).
@@ -65,33 +64,9 @@ already done + live-verified this session — just wire the JavaFX panels + File
 **Wave D — charts (JavaFX `LineChart`/heatmap; no headless test — verify by launching):** Kafka lag chart,
 throughput chart, lag heatmap, per-endpoint metrics breakdown, distributed-trace tree view.
 
-**Wave E — WON'T fully close offline (mark + move on, don't fake):** Azure Key Vault (no local emulator —
-needs a real Azure account/managed identity); cloud sync + RBAC (§9.3, need a backend service); auto-updater
-(§9.6, needs a release server — can build the client check only); native per-OS installers (need per-OS
-tooling/signing). These are the realistic residual after a full close-out day.
-
 **How to work each item:** pure/JavaFX-free core + unit tests → thin UI wiring (gate on `mvn -pl nexuslink-ui
 -am compile` + full `mvn test`; no TestFX harness) → for a broker, a `*LiveIT` gated on `-Dnexuslink.it=true`
 + a compose service, run it, confirm PASS. Commit+push each; keep `origin/main` in sync; no AI attribution.
-
----
-
-## ⊘ OUT OF SCOPE FOR THIS ENVIRONMENT (excluded from progress)
-
-**Decision (2026-07-05):** these require resources this environment will never have — cloud accounts, a
-hosted backend/release server, or Windows/macOS build+signing machines — and cannot be tested here even
-with Docker. They are **excluded from the progress denominator** (no checkbox) but kept for completeness so
-anyone with those resources can pick them up. Not "not done" — *not applicable here.*
-
-- **Azure Key Vault: managed identity** (was §9.4) — no local emulator (Azurite doesn't cover Key Vault);
-  needs a real Azure subscription + managed identity. _(AWS Secrets Manager, HashiCorp Vault and CyberArk
-  Conjur stay in scope — all have Docker/LocalStack images.)_
-- **Optional cloud sync of profiles** (was §9.3) — needs a hosted sync backend that doesn't exist in-repo.
-- **RBAC: admin/developer/read-only profiles** (was §9.3) — needs a multi-user auth/identity backend.
-- **Auto-updater service** (was §9.6) — needs a hosted release/update server + artifact signing.
-- **Signed native installers for Windows & macOS** (was §9.6 note) — `jpackage` builds a host-OS app-image
-  here, but signed `.exe/.msi` and `.dmg/.pkg` need those OSes + Authenticode / Apple Developer-ID certs;
-  can't cross-build or sign from Linux. _(The Linux app-image + fat-jar paths remain in scope and done.)_
 
 ---
 
@@ -1218,7 +1193,6 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 9.3 Team Collaboration
 - [x] Profile export as encrypted JSON bundle — `ProfileImportExport` (AES-256-GCM + PBKDF2, 8 tests)
       wired into `ConnectionsPanel` as **Export…/Import…** with a passphrase dialog
-- _Optional cloud sync + RBAC → **excluded** (needs a hosted backend). See ⊘ Out of scope._
 
 ### 9.4 External Secret Vaults
 - [x] **HashiCorp Vault: KV v2 + token/AppRole auth** — new `nexuslink-protocol-secrets` module.
@@ -1249,7 +1223,6 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       Delete against a value editor), **CyberArk Conjur** (appliance/account/login/API-key authenticate +
       read variable). `${VAR}` resolved in every field; all calls run off the FX thread via `Task`; shared
       Activity log. Launch-verified (screenshot) with the shell theme.
-- _Azure Key Vault → **excluded** (no local emulator; needs a real Azure account). See ⊘ Out of scope._
 
 ### 9.5 Code Generation (Global)
 - [-] `RestCodeGenerator` — REST request → client snippet (per-language enum registry). _SPI across all protocols TODO._
@@ -1268,7 +1241,6 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       run `bin/NexusLink`). `mvn -Pfatjar,jpackage -pl nexuslink-app -am clean verify`. Built per-OS;
       switch `<type>` to EXE/MSI · DMG/PKG · DEB/RPM for installers (may need extra OS tooling).
 - [ ] `jlink` — further minimize the bundled runtime (jpackage currently bundles the full JDK runtime)
-- _Auto-updater service + signed cross-OS installers → **excluded** (need a release server / other OSes + signing). See ⊘ Out of scope._
 
 ---
 

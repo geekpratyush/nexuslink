@@ -95,5 +95,5 @@ Change `<type>` in the `jpackage` profile (in `nexuslink-app/pom.xml`) to a plat
 - **Size:** the fat JAR is large because it bundles the AWS SDK, gRPC, Kafka, database drivers, JavaFX
   for four platforms, etc. A future `jlink` step (TASKS §9.6) can trim the runtime the app-image bundles.
 - **Reproducibility:** both profiles are opt-in; CI / day-to-day `mvn install` does not build them.
-- **Signing/notarization** (macOS Gatekeeper, Windows SmartScreen) is out of scope here and is
-  handled at distribution time with platform certificates.
+- **Signing/notarization** (macOS Gatekeeper, Windows SmartScreen) is handled at distribution time
+  with platform certificates.

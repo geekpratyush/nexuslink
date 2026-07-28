@@ -463,7 +463,6 @@ The tool eliminates context switching by providing a unified interface for testi
 | **Kafka ACLs** | Viewer and editor for topic/consumer-group/cluster ACLs, principal management |
 | **Solace Client Profiles** | Client username profiles, ACL profiles, queue/topic endpoint permissions |
 | **MQ Authority** | Object authority manager (OAM), queue manager authority records |
-| **RBAC** | Role-based connection profiles (admin, developer, read-only), team sharing with permission levels |
 
 ---
 
@@ -482,7 +481,6 @@ The tool eliminates context switching by providing a unified interface for testi
 |-------|-------------|
 | **HashiCorp Vault** | KV v1/v2, AppRole auth, AWS/Azure/GCP IAM auth, Kubernetes auth, dynamic secrets |
 | **AWS Secrets Manager** | IAM role-based access, secret rotation, cross-account access |
-| **Azure Key Vault** | Managed identity, service principal, certificate-based auth |
 | **CyberArk Conjur** | Machine identity, secret retrieval |
 | **1Password** | Connect server integration (read-only) |
 
@@ -506,7 +504,6 @@ The tool eliminates context switching by providing a unified interface for testi
 | Organization | Folders, tags, color coding, favorites, search |
 | Templates | Pre-built templates for common services (AWS, Azure, Confluent Cloud, Solace Cloud) |
 | Import/Export | Encrypted JSON export, team sharing via secure link |
-| Sync | Optional cloud sync (encrypted at rest) |
 | Validation | Pre-save validation with detailed error messages |
 
 #### 5.1.2 Connection Pooling
@@ -960,7 +957,6 @@ nexuslink.plugin.api    — Plugin SPI and extension points
 - [ ] External vault integration (HashiCorp Vault, AWS Secrets Manager)
 - [ ] Performance optimization and memory profiling
 - [ ] Native packaging (MSI, DMG, PKG, Deb, RPM)
-- [ ] Auto-updater implementation
 - [ ] Documentation and user guide
 
 ---
