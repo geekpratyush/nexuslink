@@ -138,7 +138,7 @@ Mongo · Redis · Kafka · MQTT · RabbitMQ · SFTP/FTP · S3/Azure/GCS · MCP �
 
 Legend: ✅ done · 🟡 in progress · ⬜ not started
 
-**Overall: ~88% of in-scope tasks complete** (287 done · 36 in-progress · 10 not started by checkbox —
+**Overall: ~88% of in-scope tasks complete** (286 done · 37 in-progress · 10 not started by checkbox —
 see `TASKS.md`). **Phases 0–4, 6, 7 and 9 are complete.**
 Full `mvn test` is **BUILD SUCCESS** across all 30 modules, and **17 gated `*LiveIT`s pass** against the local Docker stack
 (`test-env/`), which live-verifies as many protocol families (incl. **AWS SQS/SNS via LocalStack**, **JMS
