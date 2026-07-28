@@ -28,6 +28,9 @@ public final class RedisView extends BorderPane {
     private final TextField commandField = new TextField();
     private final TextArea consoleOut = new TextArea();
 
+    private final RedisPubSubPanel pubSub = new RedisPubSubPanel(
+            () -> uriField.getText(), service);
+
     private Consumer<String> logger = s -> {};
 
     public RedisView() {
@@ -39,6 +42,13 @@ public final class RedisView extends BorderPane {
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
         explorer.setLogger(this.logger);
+        pubSub.setLogger(this.logger);
+    }
+
+    /** Releases the Pub/Sub subscriber socket — called when the tab is closed. */
+    public void dispose() {
+        pubSub.dispose();
+        service.close();
     }
 
     /** Pre-fills the connection URI (used when opening a saved/sample connection). */
@@ -93,7 +103,13 @@ public final class RedisView extends BorderPane {
         right.setPadding(new Insets(8));
         VBox.setVgrow(consoleOut, Priority.ALWAYS);
 
-        SplitPane sp = new SplitPane(explorer, right);
+        Tab consoleTab = new Tab("Console", right);
+        consoleTab.setClosable(false);
+        Tab pubSubTab = new Tab("Pub/Sub", pubSub);
+        pubSubTab.setClosable(false);
+        TabPane rightTabs = new TabPane(consoleTab, pubSubTab);
+
+        SplitPane sp = new SplitPane(explorer, rightTabs);
         sp.setDividerPositions(0.34);
         return sp;
     }

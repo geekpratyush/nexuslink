@@ -45,6 +45,7 @@
     </modules>
 
     <properties>
+        <netty.version>4.2.13.Final</netty.version>
         <java.version>21</java.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -143,6 +144,21 @@
 
     <dependencyManagement>
         <dependencies>
+            <!--
+              Netty BOM — pins every netty artifact to one line. Without it Maven resolves
+              netty-common 4.1.x (nearest, via Lettuce) alongside netty-transport 4.2.x (via Solace's
+              sol-jcsmp), and the Redis client dies at connect with
+              NoClassDefFoundError: io/netty/util/concurrent/ThreadAwareExecutor — a 4.2 class the
+              4.1 netty-common does not have. Keep this import ahead of everything that drags netty in.
+            -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Internal modules -->
             <dependency>
                 <groupId>com.nexuslink</groupId>

@@ -1033,7 +1033,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       buffer throw `RespIncompleteException` on a partial reply; the stream overload leaves pipelined bytes).
       Binary-safe bulk strings, UTF-8 text; 41 tests. _(raw-command console + pipeline UI can build on this.)_
 - [x] `RedisExplorer` + `RedisView` (key browser with lazy value-on-select + console); wired into the shell
-- [x] Pub/Sub subscriber panel — backend done: `RedisSubscriber` (dedicated blocking conn, `SUBSCRIBE`/`PSUBSCRIBE`/`UNSUBSCRIBE`, RESP2/3 push framing, `AutoCloseable`) + `RedisMessage`/`RedisPubSubEvent` records; gated `RedisPubSubLiveIT` verified live. _(JavaFX panel wiring in `ui/redis` pending Wave 2.)_
+- [x] **Pub/Sub subscriber panel — done end to end.** Backend: `RedisSubscriber` (dedicated blocking
+      conn, `SUBSCRIBE`/`PSUBSCRIBE`/`UNSUBSCRIBE`, RESP2/3 push framing, `AutoCloseable`) +
+      `RedisMessage`/`RedisPubSubEvent`; gated `RedisPubSubLiveIT`. UI: **`RedisPubSubPanel`** (a
+      **Pub/Sub** tab beside the console) — subscribe by channel or pattern, live message table
+      (time · channel · pattern · payload) filtered by a **Redis glob** through the new bounded,
+      thread-safe `RedisMessageLog` (`matching`/`search`, 5 000 entries; 8 tests), a subscriptions
+      list, and a publish row via new `RedisService.publish`. The panel opens its **own** socket —
+      a connection in subscribe mode accepts nothing else — and `MainWindow` closes it with the tab.
+      Every subscriber callback hops to the FX thread. **Live-verified** by `RedisPubSubPanelLiveIT`
+      (subscribe through the panel's control → publish → assert the row appears).
 
 ### 8.3 MongoDB Client (separate driver — not JDBC)
 > **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.

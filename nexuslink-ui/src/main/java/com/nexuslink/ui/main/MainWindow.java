@@ -458,6 +458,8 @@ public final class MainWindow {
         RedisView view = new RedisView();
         view.setLogger(this::log);
         addTab("Redis " + (++newTabCounter), view);
+        // The Pub/Sub panel holds a dedicated blocking socket — close it with the tab.
+        workspace.getTabs().get(workspace.getTabs().size() - 1).setOnClosed(e -> view.dispose());
         return view;
     }
 

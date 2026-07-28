@@ -71,6 +71,20 @@ public final class RedisService implements AutoCloseable {
     }
 
     /** Runs a single command line from the console and returns a printable result. */
+    /**
+     * Publishes {@code message} to {@code channel}.
+     *
+     * @return the number of subscribers that received it
+     */
+    public long publish(String channel, String message) {
+        return redis.publish(channel, message == null ? "" : message);
+    }
+
+    /** The channels with at least one subscriber, as reported by {@code PUBSUB CHANNELS}. */
+    public List<String> activeChannels() {
+        return redis.pubsubChannels();
+    }
+
     public String execute(String commandLine) {
         String[] p = commandLine.trim().split("\\s+");
         if (p.length == 0 || p[0].isEmpty()) return "";
@@ -97,6 +111,7 @@ public final class RedisService implements AutoCloseable {
                 case "SADD" -> String.valueOf(redis.sadd(p[1], Arrays.copyOfRange(p, 2, p.length)));
                 case "SMEMBERS" -> String.join("\n", redis.smembers(p[1]));
                 case "DBSIZE" -> String.valueOf(redis.dbsize());
+                case "PUBLISH" -> String.valueOf(redis.publish(p[1], rest(p, 2)));
                 default -> "(command not supported in console: " + cmd + ")";
             };
         } catch (Exception e) {
