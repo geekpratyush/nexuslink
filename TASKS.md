@@ -1015,7 +1015,8 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] Per-driver license-ack flag surfaced in the UI for Oracle/DB2
 
 ### 8.2 Redis Client (separate driver — not JDBC)
-- [-] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack. _Cluster + Sentinel TODO._
+- [x] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack.
+- [x] **Redis cluster + Sentinel** — pure `RedisTopology` (`of`/`seedUris`/`sentinelSeedUris`/`masterName`, 21 tests) adds a `redis-cluster://h1:6379,h2:6379` seed-list scheme (rewritten to one `redis://` per node, userinfo + `/db` carried onto each) driving a `RedisClusterClient`; `redis-sentinel://…#master` is parsed by Lettuce natively. `RedisService`'s command field is typed to the common supertype `RedisClusterCommands`, so every call site is unchanged in all three modes. `RedisSubscriber` resolves a cluster URI to its first seed and asks a real sentinel for the current master address. **Live-verified** by `RedisClusterLiveIT` (cross-slot keys + cluster-wide SCAN + pub/sub vs a cluster-enabled Redis) and `RedisSentinelLiveIT` (round-trip + master resolution + pub/sub vs a real sentinel).
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
 - [x] Command console — `RedisService.execute()` supports ~20 common commands (+ `PUBLISH`); pure
       `RedisCommandCatalog` (58 commands with group/summary/syntax) + case-insensitive first-token

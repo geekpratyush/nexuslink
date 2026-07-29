@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.net.Socket;
 import java.net.URI;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -68,7 +69,7 @@ public final class RedisSubscriber implements AutoCloseable {
                                           Consumer<RedisMessage> onMessage,
                                           Consumer<RedisSubscriptionEvent> onEvent,
                                           Consumer<Throwable> onError) {
-        Endpoint ep = Endpoint.parse(uri);
+        Endpoint ep = Endpoint.parse(resolve(uri));
         Socket socket = null;
         try {
             socket = ep.tls()
@@ -250,6 +251,82 @@ public final class RedisSubscriber implements AutoCloseable {
     }
 
     /** Parsed connection endpoint from a {@code redis://} / {@code rediss://} URI. */
+    /**
+     * Reduces a multi-node URI to one plain {@code redis://} node this subscriber can open a socket
+     * to; plain URIs pass through untouched.
+     *
+     * <p><b>Cluster:</b> the first seed. Non-sharded {@code PUBLISH} is broadcast across the whole
+     * cluster, so any single node sees every message — only {@code SSUBSCRIBE} would need slot
+     * routing, which this console doesn't offer.
+     *
+     * <p><b>Sentinel:</b> asks each sentinel in turn for the current master address and connects
+     * there, so the panel follows a failover on reconnect rather than pinning a dead master.
+     */
+    static String resolve(String uri) {
+        return switch (RedisTopology.of(uri)) {
+            case CLUSTER -> RedisTopology.seedUris(uri).get(0);
+            case SENTINEL -> resolveSentinelMaster(uri);
+            case STANDALONE -> uri;
+        };
+    }
+
+    private static String resolveSentinelMaster(String uri) {
+        String master = RedisTopology.masterName(uri);
+        List<String> sentinels = RedisTopology.sentinelSeedUris(uri);
+        if (sentinels.isEmpty()) throw new RespException("no sentinel nodes in URI: " + uri);
+
+        RespException last = null;
+        for (String sentinelUri : sentinels) {
+            Endpoint ep = Endpoint.parse(sentinelUri);
+            try (Socket s = new Socket(ep.host(), ep.port())) {
+                InputStream in = new BufferedInputStream(s.getInputStream());
+                OutputStream out = s.getOutputStream();
+                RespCodec codec = new RespCodec();
+                if (ep.password() != null) {
+                    out.write(ep.user() != null
+                            ? codec.encodeCommand("AUTH", ep.user(), ep.password())
+                            : codec.encodeCommand("AUTH", ep.password()));
+                    out.flush();
+                    if (codec.decode(in) instanceof RespValue.RespError e) {
+                        throw new RespException("sentinel AUTH failed: " + e.message());
+                    }
+                }
+                out.write(codec.encodeCommand("SENTINEL", "get-master-addr-by-name", master));
+                out.flush();
+                RespValue reply = codec.decode(in);
+                if (reply instanceof RespValue.RespError e) {
+                    throw new RespException("SENTINEL get-master-addr-by-name: " + e.message());
+                }
+                // A sentinel that doesn't monitor this master replies with a NIL array, which decodes
+                // as a RespArray whose items() is null — not as RespNull. Hence the explicit null check.
+                if (!(reply instanceof RespValue.RespArray arr)
+                        || arr.items() == null || arr.items().size() < 2) {
+                    throw new RespException("sentinel does not monitor master '" + master + "'");
+                }
+                String host = text(arr.items().get(0));
+                String port = text(arr.items().get(1));
+                if (host == null || port == null) {
+                    throw new RespException("malformed master address from sentinel");
+                }
+                // The master's own credentials are the URI's userinfo; sentinels usually share them.
+                String userinfo = ep.password() == null ? ""
+                        : (ep.user() == null ? ":" : ep.user() + ":") + ep.password() + "@";
+                return "redis://" + userinfo + host + ":" + port;
+            } catch (IOException e) {
+                last = new RespException("could not reach sentinel " + ep.host() + ":" + ep.port(), e);
+            } catch (RespException e) {
+                last = e;
+            }
+        }
+        throw new RespException("no sentinel could resolve master '" + master + "'", last);
+    }
+
+    private static String text(RespValue v) {
+        if (v instanceof RespValue.BulkString b) return b.asText();
+        if (v instanceof RespValue.SimpleString s) return s.value();
+        return null;
+    }
+
     private record Endpoint(String host, int port, String user, String password, boolean tls) {
 
         static Endpoint parse(String uri) {

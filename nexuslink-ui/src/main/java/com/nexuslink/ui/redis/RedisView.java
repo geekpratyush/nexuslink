@@ -61,7 +61,7 @@ public final class RedisView extends BorderPane {
 
     private VBox buildBar() {
         uriField.getStyleClass().add("nl-field");
-        uriField.setPromptText("redis://[:password@]host:6379/0   (rediss:// for TLS)");
+        uriField.setPromptText("redis://[:password@]host:6379/0   ·   rediss:// TLS   ·   redis-cluster://h1:6379,h2:6379   ·   redis-sentinel://h1:26379#master");
         HBox.setHgrow(uriField, Priority.ALWAYS);
 
         connectBtn.getStyleClass().add("btn-primary");
@@ -188,8 +188,10 @@ public final class RedisView extends BorderPane {
         String connTarget = uri.replaceAll(":[^:@/]+@", ":***@");
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Connected — " + task.getValue() + " key(s)");
-            logger.accept("Redis connected — " + task.getValue() + " keys");
+            statusLabel.setText("Connected (" + service.topology().label() + ") — "
+                    + task.getValue() + " key(s)");
+            logger.accept("Redis connected (" + service.topology().label() + ") — "
+                    + task.getValue() + " keys");
             explorer.setExplorer(new RedisExplorer(service));
             explorer.load();
             connectBtn.setDisable(false);

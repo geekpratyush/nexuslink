@@ -1,12 +1,15 @@
 package com.nexuslink.protocol.redis;
 
+import io.lettuce.core.AbstractRedisClient;
 import io.lettuce.core.KeyScanCursor;
 import io.lettuce.core.Range;
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.ScanArgs;
 import io.lettuce.core.ScoredValue;
-import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
+import io.lettuce.core.api.StatefulConnection;
+import io.lettuce.core.cluster.RedisClusterClient;
+import io.lettuce.core.cluster.api.sync.RedisClusterCommands;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,22 +19,46 @@ import java.util.stream.Collectors;
 /**
  * Redis client over Lettuce. Connect with a {@code redis://[:password@]host:port[/db]} (or
  * {@code rediss://} for TLS) URI, browse keys, read typed values, and run commands from a console.
+ *
+ * <p>Also speaks the two multi-node topologies (see {@link RedisTopology}): a
+ * {@code redis-sentinel://} URI is parsed by Lettuce natively, and our own
+ * {@code redis-cluster://h1:6379,h2:6379} seed-list scheme opens a {@link RedisClusterClient}. The
+ * command surface is the same in every mode because the field is typed to
+ * {@link RedisClusterCommands} — the common supertype that both standalone {@code RedisCommands} and
+ * {@code RedisAdvancedClusterCommands} extend.
  */
 public final class RedisService implements AutoCloseable {
 
-    private RedisClient client;
-    private StatefulRedisConnection<String, String> connection;
-    private RedisCommands<String, String> redis;
+    private AbstractRedisClient client;
+    private StatefulConnection<String, String> connection;
+    private RedisClusterCommands<String, String> redis;
+    private RedisTopology topology = RedisTopology.STANDALONE;
 
     public void connect(String uri) {
         close();
-        client = RedisClient.create(uri);
-        connection = client.connect();
-        redis = connection.sync();
+        topology = RedisTopology.of(uri);
+        if (topology == RedisTopology.CLUSTER) {
+            List<RedisURI> seeds = RedisTopology.seedUris(uri).stream().map(RedisURI::create).toList();
+            RedisClusterClient cluster = RedisClusterClient.create(seeds);
+            client = cluster;
+            var conn = cluster.connect();
+            connection = conn;
+            redis = conn.sync();
+        } else {
+            // Standalone and sentinel URIs are both understood by RedisClient directly.
+            RedisClient standalone = RedisClient.create(uri);
+            client = standalone;
+            var conn = standalone.connect();
+            connection = conn;
+            redis = conn.sync();
+        }
         redis.ping(); // verify
     }
 
     public boolean isConnected() { return redis != null; }
+
+    /** The topology of the current (or most recent) connection. */
+    public RedisTopology topology() { return topology; }
 
     /** SCAN keys matching {@code pattern} (default *), capped at {@code limit}. */
     public List<String> scanKeys(String pattern, int limit) {
