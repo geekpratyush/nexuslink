@@ -230,6 +230,37 @@ class LdapServiceTest {
     }
 
     @Test
+    void plainConnectionReportsNoTls() throws Exception {
+        try (LdapService ldap = new LdapService()) {
+            ldap.connect("localhost", port, "cn=Directory Manager", "secret", false);
+            assertFalse(ldap.isTlsActive());
+        }
+    }
+
+    @Test
+    void startTlsFailsLoudlyWhenTheServerDoesNotSupportIt() throws Exception {
+        // the in-memory listener is configured without a StartTLS socket factory
+        try (LdapService ldap = new LdapService()) {
+            LDAPException ex = assertThrows(LDAPException.class,
+                    () -> ldap.connect("localhost", port, "cn=Directory Manager", "secret", false, true));
+            assertEquals(com.unboundid.ldap.sdk.ResultCode.UNWILLING_TO_PERFORM, ex.getResultCode());
+            assertFalse(ldap.isConnected());
+            assertFalse(ldap.isTlsActive());
+        }
+    }
+
+    @Test
+    void ldapsWinsOverStartTlsWhenBothAreRequested() throws Exception {
+        // useSsl=true + startTls=true must not attempt the extended operation on a plain socket;
+        // against this non-TLS listener the LDAPS handshake is what fails, not StartTLS.
+        try (LdapService ldap = new LdapService()) {
+            Exception ex = assertThrows(Exception.class,
+                    () -> ldap.connect("localhost", port, "cn=Directory Manager", "secret", true, true));
+            assertFalse(String.valueOf(ex.getMessage()).contains("StartTLS failed"), String.valueOf(ex.getMessage()));
+        }
+    }
+
+    @Test
     void scopeOfMapsTextToEnum() {
         assertEquals(SearchScope.BASE, LdapService.scopeOf("base"));
         assertEquals(SearchScope.ONE, LdapService.scopeOf("one"));

@@ -66,6 +66,7 @@ public final class LdapService implements AutoCloseable {
     }
 
     private volatile LDAPConnection connection;
+    private volatile boolean tlsActive;
 
     /**
      * Connects to {@code host:port}. When {@code bindDn} is blank the bind is anonymous. With
@@ -73,6 +74,17 @@ public final class LdapService implements AutoCloseable {
      * (NexusLink is a testing tool); set it false for plain LDAP / StartTLS-less connections.
      */
     public void connect(String host, int port, String bindDn, String password, boolean useSsl)
+            throws LDAPException, java.security.GeneralSecurityException {
+        connect(host, port, bindDn, password, useSsl, false);
+    }
+
+    /**
+     * As {@link #connect(String, int, String, String, boolean)}, but {@code startTls} upgrades a
+     * plain connection (usually port 389) to TLS with the RFC 4511 StartTLS extended operation
+     * <em>before</em> the bind, so credentials never cross the wire in the clear. StartTLS and
+     * LDAPS are mutually exclusive — {@code useSsl} wins and StartTLS is skipped.
+     */
+    public void connect(String host, int port, String bindDn, String password, boolean useSsl, boolean startTls)
             throws LDAPException, java.security.GeneralSecurityException {
         close();
         LDAPConnectionOptions options = new LDAPConnectionOptions();
@@ -87,10 +99,27 @@ public final class LdapService implements AutoCloseable {
             conn = new LDAPConnection(options);
         }
         conn.connect(host, port);
+        if (!useSsl && startTls) {
+            SSLUtil sslUtil = new SSLUtil(new TrustAllTrustManager());
+            com.unboundid.ldap.sdk.ExtendedResult r = conn.processExtendedOperation(
+                    new com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest(sslUtil.createSSLContext()));
+            if (r.getResultCode() != com.unboundid.ldap.sdk.ResultCode.SUCCESS) {
+                conn.close();
+                throw new LDAPException(r.getResultCode(), "StartTLS failed: " + r.getDiagnosticMessage());
+            }
+            this.tlsActive = true;
+        } else {
+            this.tlsActive = useSsl;
+        }
         if (bindDn != null && !bindDn.isBlank()) {
             conn.bind(bindDn, password == null ? "" : password);
         }
         this.connection = conn;
+    }
+
+    /** True when the live connection is encrypted (LDAPS or a completed StartTLS upgrade). */
+    public boolean isTlsActive() {
+        return tlsActive && isConnected();
     }
 
     public boolean isConnected() {

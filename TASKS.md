@@ -1074,7 +1074,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 8.4 LDAP / Active Directory
 - [x] `LdapService` — UnboundID SDK; connect plain/LDAPS (+ optional bind), Root-DSE naming contexts,
       base/one/sub search with RFC-4515 filter, decoded entries (`nexuslink-protocol-ldap`,
-      **6/6 tests** end-to-end against the bundled in-memory directory server); _StartTLS TODO_
+      **6/6 tests** end-to-end against the bundled in-memory directory server); **StartTLS** —
+      `connect(..., useSsl, startTls)` runs the RFC 4511 StartTLS extended operation before the bind so
+      credentials never cross the wire in the clear; LDAPS wins when both are set; `isTlsActive()` reports
+      the live channel. 3 added tests (19 total)
 - [x] **LDIF + DN model** — `LdifWriter`/`LdifReader` (RFC 2849: base64 `::`, 76-char folding, multi-entry),
       `Dn`/`Rdn` (RFC 4514 parse/escape, parent/child, normalized equality), `LdapEntry`; 29 tests, offline.
 - [x] **LDAP URL (RFC 4516)** — pure `LdapUrl` parse/format for `ldap[s]://host:port/dn?attrs?scope?filter?exts`:
@@ -1086,7 +1089,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       attribute detail; naming contexts pre-fill the base; `${VAR}` in every field. Left pane is now
       tabbed: **List** + **Tree (DIT)** (hierarchy built from result DNs via `Dn.parent()`/`rdn()`,
       select-to-show-attributes). **Import/Export LDIF** buttons via `LdifReader`/`LdifWriter` + FileChooser,
-      fully offline (export honors a selected DIT subtree); all file I/O off the FX thread. _StartTLS TODO_
+      fully offline (export honors a selected DIT subtree); all file I/O off the FX thread. A **StartTLS**
+      checkbox sits beside LDAPS (mutually exclusive); the status line names the channel
+      (LDAPS / StartTLS / cleartext).
 - [x] Search dialog (custom filter builder + predefined filters), entry add/modify/delete —
       `LdapFilterBuilder` (protocol-ldap, RFC 4515 compose + escape, predefined persons/groups/OUs/byUid/
       byCn, 9 tests) behind a **Build…** filter dialog; `LdapService.addEntry/modifyEntry/deleteEntry`

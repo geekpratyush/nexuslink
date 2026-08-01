@@ -39,6 +39,7 @@ public final class LdapView extends BorderPane {
     private final TextField bindDnField = new TextField();
     private final PasswordField passwordField = new PasswordField();
     private final CheckBox sslCheck = new CheckBox("LDAPS");
+    private final CheckBox startTlsCheck = new CheckBox("StartTLS");
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
@@ -84,7 +85,10 @@ public final class LdapView extends BorderPane {
         passwordField.setPromptText("password");
         passwordField.setPrefWidth(140);
 
+        startTlsCheck.setTooltip(new Tooltip("Upgrade the plain connection to TLS before binding (RFC 4511 StartTLS, usually port 389)"));
+        startTlsCheck.setOnAction(e -> { if (startTlsCheck.isSelected()) sslCheck.setSelected(false); });
         sslCheck.setOnAction(e -> {
+            if (sslCheck.isSelected()) startTlsCheck.setSelected(false);
             if (portField.getText().isBlank() || portField.getText().equals("389") || portField.getText().equals("636")) {
                 portField.setText(sslCheck.isSelected() ? "636" : "389");
             }
@@ -97,7 +101,7 @@ public final class LdapView extends BorderPane {
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("ldap"));
 
-        HBox row1 = new HBox(8, label("Host:"), hostField, label("Port:"), portField, sslCheck, connectBtn, helpBtn);
+        HBox row1 = new HBox(8, label("Host:"), hostField, label("Port:"), portField, sslCheck, startTlsCheck, connectBtn, helpBtn);
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(10, 10, 4, 10));
         HBox row2 = new HBox(8, label("Bind:"), bindDnField, passwordField);
@@ -212,23 +216,25 @@ public final class LdapView extends BorderPane {
         try { port = Integer.parseInt(portField.getText().trim()); }
         catch (NumberFormatException ex) { statusLabel.setText("Port must be a number"); return; }
         boolean ssl = sslCheck.isSelected();
+        boolean startTls = !ssl && startTlsCheck.isSelected();
         String bindDn = Env.resolve(bindDnField.getText().trim());
         String password = Env.resolve(passwordField.getText());
 
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
-        logger.accept("LDAP connect → " + host + ":" + port + (ssl ? " (LDAPS)" : ""));
+        logger.accept("LDAP connect → " + host + ":" + port + (ssl ? " (LDAPS)" : startTls ? " (StartTLS)" : ""));
 
         Task<List<String>> task = new Task<>() {
             @Override protected List<String> call() throws Exception {
-                service.connect(host, port, bindDn, password, ssl);
+                service.connect(host, port, bindDn, password, ssl, startTls);
                 return service.namingContexts();
             }
         };
         task.setOnSucceeded(e -> {
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Connected — " + host + ":" + port);
+            statusLabel.setText("Connected — " + host + ":" + port
+                    + (ssl ? " (LDAPS)" : startTls ? " (StartTLS)" : " (cleartext)"));
             connectBtn.setText("Disconnect");
             connectBtn.setDisable(false);
             List<String> contexts = task.getValue();
