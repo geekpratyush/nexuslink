@@ -28,16 +28,32 @@ public final class GraphQLView extends BorderPane {
     private final org.fxmisc.richtext.CodeArea responseArea = com.nexuslink.ui.util.JsonView.plainArea(false);
     private final Label statusLabel = new Label("Ready");
 
+    private final GraphQLSubscriptionPanel subscriptionPanel = new GraphQLSubscriptionPanel();
+
     private Consumer<String> logger = s -> {};
 
     public GraphQLView() {
         getStyleClass().add("graphql-view");
         setTop(buildBar());
-        setCenter(buildBody());
+        setCenter(buildCenter());
     }
 
     public void setLogger(Consumer<String> logger) {
         this.logger = logger == null ? s -> {} : logger;
+        subscriptionPanel.setLogger(this.logger);
+    }
+
+    /** Query/mutation editor and the live subscription panel, as two tabs. */
+    private TabPane buildCenter() {
+        Tab queryTab = new Tab("Query / Mutation", buildBody());
+        queryTab.setClosable(false);
+        Tab subTab = new Tab("Subscription", subscriptionPanel);
+        subTab.setClosable(false);
+        // Carry the current HTTP endpoint over to the subscription panel (http→ws) when it's opened.
+        subTab.setOnSelectionChanged(e -> {
+            if (subTab.isSelected()) subscriptionPanel.prefillFromHttpEndpoint(endpointField.getText());
+        });
+        return new TabPane(queryTab, subTab);
     }
 
     /** Pre-fills the endpoint (used when opening a saved/sample connection). */

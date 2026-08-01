@@ -647,7 +647,10 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 ### 6.1 gRPC Client
 - [x] **Server reflection** — `GrpcService` auto-discovers services/methods + resolves descriptors via reflection (recursive dependency resolution); no `.proto` upload needed. **Verified live vs. grpcb.in.**
 - [x] `GrpcChannelService` — managed channel per connection (plaintext/TLS)
-- [-] `GrpcInvokerService` — **unary** done (DynamicMessage ↔ JSON via JsonFormat + ProtoUtils marshallers); _server/client/bidi streaming TODO_
+- [x] `GrpcInvokerService` — **unary** (DynamicMessage ↔ JSON via JsonFormat + ProtoUtils marshallers) and
+      **server / client / bidi streaming**: `GrpcService.openStream(service, method, listener)` drives every
+      streaming shape through the bidi machinery, returning a `StreamCall` with `send(json)` / `halfClose()` /
+      `cancel()`; server-streaming calls auto-send one request then half-close. 2 descriptor→`MethodType` tests
 - [x] **gRPC status-code registry** — pure `GrpcStatusCodes` (no `io.grpc` dep): the 17 canonical codes 0..16
       (`Code` enum, ordinal == wire number), `byNumber`/`findByNumber`/`byName`/`name`/`number`/`description`,
       a gRPC→HTTP status mapping (`httpStatus`), and an immutable `all()` for UI tables. 10 tests.
@@ -657,10 +660,15 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       `service` to parse its `rpc`s (name, input/output types incl. fully-qualified `.pkg.Type`, client/server
       streaming flags → `Method.isUnary()`). Returns a `ProtoFile(syntax, package, services, messages)`. 7 tests.
       _(GrpcView "load .proto" wiring + request-template synthesis from message fields still TODO.)_
-- [ ] Streaming panel: live message list, send message (client/bidi), end stream
+- [x] Streaming panel: picking a streaming method turns **Invoke** into a live call — messages append to the
+      response pane numbered and in order (`← #n`), with **Send** / **End stream** (half-close) / **Cancel**
+      enabled for the call's shape, and a terminal line on complete/error
 
 ### 6.2 GraphQL Client
-- [-] `GraphQLService` — HTTP POST ({query, variables}) done, pretty JSON response. **Verified live vs. Countries GraphQL.** _WebSocket subscriptions TODO._
+- [x] `GraphQLService` — HTTP POST ({query, variables}), pretty JSON response. **Verified live vs. Countries GraphQL.**
+      **Subscriptions** over `graphql-transport-ws`: pure `GraphQLWsProtocol` (connection_init / subscribe /
+      next / error / complete / ping→pong framing + tolerant `parse`, Jackson only, 11 tests) on a
+      `WebSocketService.connect(..., subprotocols)` overload that negotiates `Sec-WebSocket-Protocol`.
 - [x] Schema introspection — one-click `Introspect` button (built-in introspection query)
 - [-] Query/mutation editor — plain editor + variables JSON; schema-aware assist done: pure `GraphQLSchema`
       parses the (widened) introspection response — root operation types + every type's fields with unwrapped
@@ -668,7 +676,9 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       type→fields explorer (Query root preselected); double-click a field inserts it at the query caret.
       _(inline caret-context completion popup still TODO.)_
 - [x] Variables JSON editor
-- [ ] Subscription live stream panel
+- [x] Subscription live stream panel — `GraphQLSubscriptionPanel`, a second tab in `GraphQLView` that
+      pre-fills the ws/wss endpoint from the HTTP one; subscription + variables editors, Start/Stop
+      (Stop sends `complete`), timestamped live event list, auto-`pong`, status line per handshake stage
 - [x] `GraphQLView` wired into the shell (File menu + sidebar + GraphQL samples)
 
 ---

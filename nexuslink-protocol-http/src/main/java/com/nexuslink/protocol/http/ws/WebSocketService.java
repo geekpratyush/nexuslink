@@ -43,6 +43,14 @@ public final class WebSocketService {
      * trust-all builds a dedicated {@code HttpClient}; otherwise the shared default client is used.
      */
     public void connect(String url, Listener listener, TlsConfig tls) {
+        connect(url, listener, tls, new String[0]);
+    }
+
+    /**
+     * Opens a connection negotiating one or more WebSocket sub-protocols (via
+     * {@code Sec-WebSocket-Protocol}) — e.g. {@code graphql-transport-ws} for GraphQL subscriptions.
+     */
+    public void connect(String url, Listener listener, TlsConfig tls, String... subprotocols) {
         final HttpClient client;
         try {
             client = (tls != null && tls.isCustom())
@@ -52,9 +60,14 @@ public final class WebSocketService {
             listener.onError(e);
             return;
         }
-        client.newWebSocketBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .buildAsync(URI.create(url), new Adapter(listener))
+        WebSocket.Builder builder = client.newWebSocketBuilder()
+                .connectTimeout(Duration.ofSeconds(10));
+        if (subprotocols != null && subprotocols.length > 0) {
+            String first = subprotocols[0];
+            String[] rest = java.util.Arrays.copyOfRange(subprotocols, 1, subprotocols.length);
+            builder.subprotocols(first, rest);
+        }
+        builder.buildAsync(URI.create(url), new Adapter(listener))
                 .whenComplete((ws, err) -> {
                     if (err != null) {
                         listener.onError(err);
