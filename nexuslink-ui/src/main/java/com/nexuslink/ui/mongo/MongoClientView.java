@@ -293,6 +293,221 @@ public final class MongoClientView extends BorderPane {
         });
     }
 
+    private void dropIndexDialog() {
+        if (activeCollection == null) { statusLabel.setText("Select a collection in the tree first"); return; }
+        List<String> names;
+        try {
+            if (activeDb != null) service.useDatabase(activeDb);
+            names = service.indexNames(activeCollection).stream().filter(n -> !"_id_".equals(n)).toList();
+        } catch (Exception ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("✖ " + ex.getMessage());
+            return;
+        }
+        if (names.isEmpty()) { statusLabel.setText("'" + activeCollection + "' has no droppable indexes"); return; }
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(names.get(0), names);
+        dialog.setTitle("Drop index");
+        dialog.setHeaderText("Drop an index on '" + activeCollection + "'");
+        dialog.setContentText("Index:");
+        dialog.initOwner(getScene() == null ? null : getScene().getWindow());
+        dialog.showAndWait().ifPresent(name -> {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Drop index '" + name + "' on " + activeCollection + "? This cannot be undone.",
+                    ButtonType.OK, ButtonType.CANCEL);
+            confirm.initOwner(getScene() == null ? null : getScene().getWindow());
+            confirm.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> runStructure(() -> {
+                if (activeDb != null) service.useDatabase(activeDb);
+                service.dropIndex(activeCollection, name);
+                return "Dropped index " + name;
+            }));
+        });
+    }
+
+    /**
+     * Authentication panel — builds a SCRAM/TLS connection string from fields (so users don't have
+     * to hand-write URIs), and, when connected, shows who we are plus the users on a database
+     * with create / grant / drop.
+     */
+    private void openAuthPanel() {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle("MongoDB authentication");
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
+        d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
+
+        // --- Build a connection string ---
+        TextField host = new TextField("localhost");
+        TextField port = new TextField("27017");
+        TextField user = new TextField();
+        PasswordField pass = new PasswordField();
+        TextField authSource = new TextField("admin");
+        ComboBox<String> mech = new ComboBox<>();
+        mech.getItems().addAll("(default)", "SCRAM-SHA-256", "SCRAM-SHA-1", "MONGODB-X509", "PLAIN", "GSSAPI");
+        mech.setValue("(default)");
+        CheckBox tls = new CheckBox("TLS");
+        CheckBox srv = new CheckBox("SRV (mongodb+srv://)");
+        Label preview = new Label();
+        preview.getStyleClass().add("meta-label");
+        preview.setWrapText(true);
+        Runnable refresh = () -> preview.setText(buildUri(host.getText(), port.getText(), user.getText(),
+                pass.getText(), authSource.getText(), mech.getValue(), tls.isSelected(), srv.isSelected(), true));
+        for (TextField f : List.of(host, port, user, pass, authSource)) f.textProperty().addListener((o, a, b) -> refresh.run());
+        mech.valueProperty().addListener((o, a, b) -> refresh.run());
+        tls.selectedProperty().addListener((o, a, b) -> refresh.run());
+        srv.selectedProperty().addListener((o, a, b) -> { port.setDisable(b); refresh.run(); });
+        refresh.run();
+
+        Button apply = new Button("Use this connection string");
+        apply.getStyleClass().add("btn-primary");
+        apply.setOnAction(e -> {
+            connField.setText(buildUri(host.getText(), port.getText(), user.getText(), pass.getText(),
+                    authSource.getText(), mech.getValue(), tls.isSelected(), srv.isSelected(), false));
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("Connection string updated — press Connect");
+        });
+
+        GridPane g = new GridPane();
+        g.setHgap(10); g.setVgap(8); g.setPadding(new Insets(12, 4, 8, 4));
+        g.addRow(0, new Label("Host:"), host, new Label("Port:"), port);
+        g.addRow(1, new Label("Username:"), user, new Label("Password:"), pass);
+        g.addRow(2, new Label("Auth source:"), authSource, new Label("Mechanism:"), mech);
+        g.addRow(3, tls, srv);
+        g.add(preview, 0, 4, 4, 1);
+        g.add(apply, 0, 5, 4, 1);
+
+        // --- Live: who am I + users on a database ---
+        TextField userDb = new TextField(activeDb == null ? "admin" : activeDb);
+        ListView<String> users = new ListView<>();
+        users.setPrefHeight(160);
+        Label who = new Label("Not connected");
+        who.getStyleClass().add("meta-label");
+        who.setWrapText(true);
+        Runnable reload = () -> {
+            if (!service.isConnected()) { who.setText("Not connected"); users.getItems().clear(); return; }
+            try {
+                StringBuilder sb = new StringBuilder();
+                service.authStatus().forEach((k, v) -> sb.append(k).append(": ").append(v).append("\n"));
+                who.setText(sb.toString().trim());
+                users.getItems().setAll(service.listUsers(userDb.getText().trim()));
+            } catch (Exception ex) {
+                who.setText("✖ " + ex.getMessage());
+                users.getItems().clear();
+            }
+        };
+        Button refreshUsers = new Button("Refresh");
+        refreshUsers.getStyleClass().add("btn-secondary");
+        refreshUsers.setOnAction(e -> reload.run());
+
+        Button addUser = new Button("Create user…");
+        addUser.getStyleClass().add("btn-secondary");
+        addUser.setOnAction(e -> userDialog(userDb.getText().trim(), null, reload));
+
+        Button editRoles = new Button("Edit roles…");
+        editRoles.getStyleClass().add("btn-secondary");
+        editRoles.setOnAction(e -> {
+            String sel = userName(users.getSelectionModel().getSelectedItem());
+            if (sel != null) userDialog(userDb.getText().trim(), sel, reload);
+        });
+
+        Button dropUser = new Button("Drop user");
+        dropUser.getStyleClass().add("btn-secondary");
+        dropUser.setOnAction(e -> {
+            String sel = userName(users.getSelectionModel().getSelectedItem());
+            if (sel == null) return;
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "Drop user '" + sel + "' on " + userDb.getText().trim() + "?", ButtonType.OK, ButtonType.CANCEL);
+            confirm.initOwner(d.getDialogPane().getScene() == null ? null : d.getDialogPane().getScene().getWindow());
+            confirm.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+                try {
+                    service.dropUser(userDb.getText().trim(), sel);
+                    logger.accept("Mongo: dropped user " + sel);
+                    reload.run();
+                } catch (Exception ex) {
+                    who.setText("✖ " + ex.getMessage());
+                }
+            });
+        });
+        userDb.setOnAction(e -> reload.run());
+        reload.run();
+
+        HBox userBar = new HBox(8, new Label("Database:"), userDb, refreshUsers, addUser, editRoles, dropUser);
+        userBar.setAlignment(Pos.CENTER_LEFT);
+        VBox live = new VBox(8, who, new Separator(), userBar, users);
+        live.setPadding(new Insets(12, 4, 4, 4));
+
+        TabPane tabs = new TabPane();
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        Tab t1 = new Tab("Connection string", g);
+        Tab t2 = new Tab("Users & roles", live);
+        tabs.getTabs().addAll(t1, t2);
+        tabs.setPrefWidth(720);
+        d.getDialogPane().setContent(tabs);
+        d.showAndWait();
+    }
+
+    /** "alice  —  readWrite@app" → "alice". */
+    private static String userName(String row) {
+        if (row == null || row.isBlank()) return null;
+        int i = row.indexOf("  —  ");
+        return (i < 0 ? row : row.substring(0, i)).trim();
+    }
+
+    private void userDialog(String database, String existing, Runnable onDone) {
+        Dialog<ButtonType> d = new Dialog<>();
+        if (getScene() != null) d.initOwner(getScene().getWindow());
+        d.setTitle(existing == null ? "Create user" : "Edit roles");
+        d.setHeaderText((existing == null ? "New user on '" : "Roles for '" + existing + "' on '") + database + "'");
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        d.setOnShown(ev -> { if (d.getDialogPane().getScene() != null) com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene()); });
+        TextField name = new TextField(existing == null ? "" : existing);
+        name.setDisable(existing != null);
+        PasswordField pwd = new PasswordField();
+        TextField roles = new TextField("readWrite");
+        roles.setPromptText("readWrite, read@other-db, clusterMonitor@admin");
+        GridPane g = new GridPane();
+        g.setHgap(10); g.setVgap(8); g.setPadding(new Insets(12, 4, 4, 4));
+        g.addRow(0, new Label("User:"), name);
+        if (existing == null) g.addRow(1, new Label("Password:"), pwd);
+        g.addRow(2, new Label("Roles:"), roles);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            if (name.getText().isBlank()) return;
+            runStructure(() -> {
+                if (existing == null) {
+                    service.createUser(database, name.getText().trim(), pwd.getText(), roles.getText());
+                    return "Created user " + name.getText().trim() + " on " + database;
+                }
+                service.grantRoles(database, existing, roles.getText());
+                return "Updated roles for " + existing;
+            });
+            onDone.run();
+        });
+    }
+
+    /** Assembles a connection string; {@code maskPassword} renders it for on-screen preview. */
+    static String buildUri(String host, String port, String user, String pass, String authSource,
+                                   String mechanism, boolean tls, boolean srv, boolean maskPassword) {
+        String h = host == null || host.isBlank() ? "localhost" : host.trim();
+        StringBuilder sb = new StringBuilder(srv ? "mongodb+srv://" : "mongodb://");
+        if (user != null && !user.isBlank()) {
+            sb.append(enc(user.trim())).append(':');
+            sb.append(maskPassword ? "••••" : enc(pass == null ? "" : pass)).append('@');
+        }
+        sb.append(h);
+        if (!srv && port != null && !port.isBlank()) sb.append(':').append(port.trim());
+        sb.append('/');
+        List<String> opts = new java.util.ArrayList<>();
+        if (authSource != null && !authSource.isBlank()) opts.add("authSource=" + enc(authSource.trim()));
+        if (mechanism != null && !mechanism.startsWith("(")) opts.add("authMechanism=" + mechanism);
+        if (tls && !srv) opts.add("tls=true");
+        if (!opts.isEmpty()) sb.append('?').append(String.join("&", opts));
+        return sb.toString();
+    }
+
+    private static String enc(String s) {
+        return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
     private void runStructure(java.util.concurrent.Callable<String> action) {
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Working…");
@@ -365,7 +580,14 @@ public final class MongoClientView extends BorderPane {
         createColl.setOnAction(e -> createCollectionDialog());
         MenuItem createIndex = new MenuItem("Create Index…");
         createIndex.setOnAction(e -> createIndexDialog());
-        structureBtn.getItems().addAll(createColl, createIndex);
+        MenuItem dropIndex = new MenuItem("Drop Index…");
+        dropIndex.setOnAction(e -> dropIndexDialog());
+        structureBtn.getItems().addAll(createColl, createIndex, dropIndex);
+
+        Button authBtn = new Button("Auth…");
+        authBtn.getStyleClass().add("btn-secondary");
+        authBtn.setTooltip(new Tooltip("Build an authenticated connection string; manage users and roles"));
+        authBtn.setOnAction(e -> openAuthPanel());
 
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
@@ -373,7 +595,7 @@ public final class MongoClientView extends BorderPane {
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, pipelineBtn, exportBtn, structureBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, pipelineBtn, exportBtn, structureBtn, authBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 

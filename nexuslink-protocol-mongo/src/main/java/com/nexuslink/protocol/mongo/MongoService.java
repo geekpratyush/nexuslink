@@ -361,6 +361,105 @@ public final class MongoService implements AutoCloseable {
         return out;
     }
 
+    /** Drops a single index by name ({@code _id_} cannot be dropped — Mongo rejects it). */
+    public void dropIndex(String collection, String indexName) {
+        collection(collection).dropIndex(indexName);
+    }
+
+    /** Index names on a collection, in server order (includes the implicit {@code _id_}). */
+    public List<String> indexNames(String collection) {
+        List<String> out = new ArrayList<>();
+        for (Document d : collection(collection).listIndexes()) {
+            out.add(String.valueOf(d.get("name")));
+        }
+        return out;
+    }
+
+    // ---- users / auth ----
+
+    /** {@code connectionStatus} — the authenticated user and its roles, or empty when unauthenticated. */
+    public java.util.Map<String, String> authStatus() {
+        Document r = client.getDatabase("admin").runCommand(new Document("connectionStatus", 1));
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        Document info = (Document) r.get("authInfo");
+        List<?> users = info == null ? List.of() : (List<?>) info.getOrDefault("authenticatedUsers", List.of());
+        List<?> roles = info == null ? List.of() : (List<?>) info.getOrDefault("authenticatedUserRoles", List.of());
+        if (users.isEmpty()) {
+            out.put("Authenticated as", "(none — unauthenticated connection)");
+        } else {
+            StringBuilder names = new StringBuilder();
+            for (Object u : users) {
+                Document d = (Document) u;
+                if (names.length() > 0) names.append(", ");
+                names.append(d.get("user")).append("@").append(d.get("db"));
+            }
+            out.put("Authenticated as", names.toString());
+        }
+        StringBuilder rs = new StringBuilder();
+        for (Object o : roles) {
+            Document d = (Document) o;
+            if (rs.length() > 0) rs.append(", ");
+            rs.append(d.get("role")).append("@").append(d.get("db"));
+        }
+        out.put("Roles", rs.length() == 0 ? "(none)" : rs.toString());
+        return out;
+    }
+
+    /** Users defined on {@code database}, rendered as "name — role@db, role@db". */
+    public List<String> listUsers(String database) {
+        Document r = client.getDatabase(database).runCommand(new Document("usersInfo", 1));
+        List<String> out = new ArrayList<>();
+        for (Object o : (List<?>) r.getOrDefault("users", List.of())) {
+            Document u = (Document) o;
+            StringBuilder sb = new StringBuilder(String.valueOf(u.get("user")));
+            List<?> roles = (List<?>) u.getOrDefault("roles", List.of());
+            if (!roles.isEmpty()) {
+                sb.append("  —  ");
+                for (int i = 0; i < roles.size(); i++) {
+                    Document rd = (Document) roles.get(i);
+                    if (i > 0) sb.append(", ");
+                    sb.append(rd.get("role")).append("@").append(rd.get("db"));
+                }
+            }
+            out.add(sb.toString());
+        }
+        return out;
+    }
+
+    /**
+     * Creates a user on {@code database}. {@code roles} is a comma-separated list where each
+     * entry is {@code role} (on this database) or {@code role@db}.
+     */
+    public void createUser(String database, String user, String password, String roles) {
+        Document cmd = new Document("createUser", user).append("pwd", password)
+                .append("roles", parseRoles(database, roles));
+        client.getDatabase(database).runCommand(cmd);
+    }
+
+    /** Replaces a user's roles (same syntax as {@link #createUser}). */
+    public void grantRoles(String database, String user, String roles) {
+        client.getDatabase(database).runCommand(
+                new Document("updateUser", user).append("roles", parseRoles(database, roles)));
+    }
+
+    public void dropUser(String database, String user) {
+        client.getDatabase(database).runCommand(new Document("dropUser", user));
+    }
+
+    private static List<Document> parseRoles(String defaultDb, String roles) {
+        List<Document> out = new ArrayList<>();
+        if (roles == null || roles.isBlank()) return out;
+        for (String raw : roles.split(",")) {
+            String s = raw.trim();
+            if (s.isEmpty()) continue;
+            int at = s.indexOf('@');
+            out.add(at < 0
+                    ? new Document("role", s).append("db", defaultDb)
+                    : new Document("role", s.substring(0, at).trim()).append("db", s.substring(at + 1).trim()));
+        }
+        return out;
+    }
+
     /** Runs {@code collStats} and returns the headline figures used in the details panel. */
     public java.util.Map<String, String> collectionStats(String collection) {
         Document stats = db().runCommand(new Document("collStats", collection));

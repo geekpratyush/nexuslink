@@ -1062,8 +1062,13 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - [x] **SQL-like queries** (`executeSql`) beside the JSON filter — both options; **explain plan**; **export** results to JSON/CSV; **query history** (recall recent)
 - [x] **Schema diagram** (inferred ER from sampled docs) + **Compass-like views** (JSON / Table / Schema with field type %). JSON/document views now use a **themed syntax-highlighting `CodeArea`** (`JsonView`, RichTextFX) — keys/strings/numbers/bool/null coloured per theme, in both the read-only result pane and the editable document dialog.
 - [x] **Object explorer** (`MongoExplorer` + `ResourceExplorerView`): databases → collections → indexes tree with collStats + index definitions in the details panel
-- [-] Collection stats + index manager — stats + index listing surfaced in the explorer; _create/drop index UI TODO_
-- [-] Auth: SCRAM / x.509 / LDAP / Kerberos / TLS — supported via connection string (`mongodb+srv://`, TLS, SCRAM); _dedicated auth UI TODO_
+- [x] Collection stats + index manager — stats + index listing in the explorer, **Structure ▸ Create Index… / Drop Index…**
+      (drop lists the collection's droppable indexes, excludes `_id_`, and confirms before dropping)
+- [x] Auth: SCRAM / x.509 / LDAP / Kerberos / TLS — **Auth… panel** with two tabs: *Connection string*
+      (host/port/user/password/authSource/mechanism (SCRAM-SHA-256/-1, MONGODB-X509, PLAIN, GSSAPI)/TLS/SRV →
+      live masked preview, one click to fill the connection bar) and *Users & roles*
+      (`connectionStatus` "who am I", `usersInfo` listing per database, create user / edit roles / drop user
+      via `MongoService.createUser/grantRoles/dropUser`, roles parsed as `role` or `role@db`). 5 URI tests.
 - [x] Testing: `MongoServiceTest` spins up `mongo:7.0` via Testcontainers, gated behind `-DrunMongoIT=true` so the default build stays green without Docker (4 tests, skipped when the property is unset)
 
 ### 8.4 LDAP / Active Directory
