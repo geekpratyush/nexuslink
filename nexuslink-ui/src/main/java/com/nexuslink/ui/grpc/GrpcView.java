@@ -2,6 +2,7 @@ package com.nexuslink.ui.grpc;
 
 import com.nexuslink.protocol.grpc.GrpcService;
 import com.nexuslink.ui.env.Env;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -26,6 +27,12 @@ public final class GrpcView extends BorderPane {
     private final TextField portField = new TextField("9000");
     private final CheckBox tlsBox = new CheckBox("TLS");
     private final Button connectBtn = new Button("Connect");
+    private final Button sendBtn = new Button("Send");
+    private final Button endBtn = new Button("End stream");
+    private final Button cancelBtn = new Button("Cancel");
+    private final StringBuilder streamLog = new StringBuilder();
+    private GrpcService.StreamCall activeStream;
+    private int streamCount;
     private final Label statusLabel = new Label("Not connected");
 
     // TLS / mTLS material (shown when TLS is enabled)
@@ -149,18 +156,32 @@ public final class GrpcView extends BorderPane {
             }
             @Override public GrpcService.MethodInfo fromString(String s) { return null; }
         });
-        methodCombo.valueProperty().addListener((o, ov, m) -> { if (m != null) requestEditor.setText(m.requestTemplate()); });
+        methodCombo.valueProperty().addListener((o, ov, m) -> { if (m != null) requestEditor.setText(m.requestTemplate()); updateStreamButtons(); });
 
         Button invokeBtn = new Button("Invoke");
         invokeBtn.getStyleClass().add("btn-primary");
         invokeBtn.setOnAction(e -> invoke());
         callStatus.getStyleClass().add("meta-label");
 
+        // Streaming controls — enabled only while a streaming call is open
+        sendBtn.getStyleClass().add("btn-secondary");
+        sendBtn.setTooltip(new Tooltip("Send the request editor's message on the open stream"));
+        sendBtn.setOnAction(e -> sendOnStream());
+        endBtn.getStyleClass().add("btn-secondary");
+        endBtn.setTooltip(new Tooltip("Half-close: no more requests, keep receiving"));
+        endBtn.setOnAction(e -> { if (activeStream != null) { activeStream.halfClose(); appendStream("— request stream ended —"); updateStreamButtons(); } });
+        cancelBtn.getStyleClass().add("btn-secondary");
+        cancelBtn.setOnAction(e -> { if (activeStream != null) { activeStream.cancel(); activeStream = null; appendStream("— cancelled —"); updateStreamButtons(); } });
+        updateStreamButtons();
+
+        HBox actions = new HBox(8, invokeBtn, sendBtn, endBtn, cancelBtn, callStatus);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
         VBox left = new VBox(6,
                 section("SERVICE"), serviceCombo,
                 section("METHOD"), methodCombo,
                 section("REQUEST (JSON)"), requestEditor,
-                new HBox(8, invokeBtn, callStatus));
+                actions);
         left.setPadding(new Insets(8));
         requestEditor.getStyleClass().add("code-area");
         requestEditor.setPromptText("{ }");
@@ -227,15 +248,98 @@ public final class GrpcView extends BorderPane {
         runBg(task);
     }
 
+    /** Enables the stream buttons for the live call's shape. */
+    private void updateStreamButtons() {
+        boolean live = activeStream != null;
+        GrpcService.MethodInfo m = methodCombo.getValue();
+        boolean clientSide = live && m != null && m.clientStreaming() && !activeStream.isRequestSideClosed();
+        sendBtn.setDisable(!clientSide);
+        endBtn.setDisable(!clientSide);
+        cancelBtn.setDisable(!live);
+    }
+
+    private void appendStream(String line) {
+        streamLog.append(line).append("\n");
+        com.nexuslink.ui.util.JsonView.setSmart(responseArea, streamLog.toString());
+        responseArea.moveTo(responseArea.getLength());
+        responseArea.requestFollowCaret();
+    }
+
+    private void sendOnStream() {
+        if (activeStream == null) return;
+        String json = Env.resolve(requestEditor.getText());
+        try {
+            activeStream.send(json);
+            appendStream("→ " + json.replace("\n", " ").trim());
+        } catch (Exception ex) {
+            callStatus.getStyleClass().setAll("status-err");
+            callStatus.setText("✖ " + ex.getMessage());
+        }
+    }
+
+    /** Opens a server/client/bidi streaming call and pipes messages into the response pane. */
+    private void startStream(String svc, GrpcService.MethodInfo method) {
+        if (activeStream != null) { activeStream.cancel(); activeStream = null; }
+        streamLog.setLength(0);
+        streamCount = 0;
+        appendStream("— " + svc + "/" + method.name() + " ("
+                + (method.clientStreaming() && method.serverStreaming() ? "bidi"
+                   : method.clientStreaming() ? "client" : "server") + " streaming) —");
+        callStatus.getStyleClass().setAll("meta-label");
+        callStatus.setText("Streaming…");
+        String first = Env.resolve(requestEditor.getText());
+
+        Task<GrpcService.StreamCall> task = new Task<>() {
+            @Override protected GrpcService.StreamCall call() throws Exception {
+                GrpcService.StreamCall c = service.openStream(svc, method.name(), new GrpcService.StreamListener() {
+                    @Override public void onMessage(String json) {
+                        Platform.runLater(() -> appendStream("← #" + (++streamCount) + " " + json));
+                    }
+                    @Override public void onError(Throwable t) {
+                        Platform.runLater(() -> {
+                            appendStream("✖ " + t.getMessage());
+                            callStatus.getStyleClass().setAll("status-err");
+                            callStatus.setText("✖ " + t.getMessage());
+                            activeStream = null;
+                            updateStreamButtons();
+                        });
+                    }
+                    @Override public void onCompleted() {
+                        Platform.runLater(() -> {
+                            appendStream("— completed (" + streamCount + " message(s)) —");
+                            callStatus.getStyleClass().setAll("status-2xx");
+                            callStatus.setText("Completed — " + streamCount + " message(s)");
+                            activeStream = null;
+                            updateStreamButtons();
+                        });
+                    }
+                });
+                if (!method.clientStreaming()) {   // server streaming: one request, then half-close
+                    c.send(first);
+                    c.halfClose();
+                }
+                return c;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            activeStream = task.getValue();
+            updateStreamButtons();
+            logger.accept("gRPC stream open: " + svc + "/" + method.name());
+        });
+        task.setOnFailed(e -> {
+            callStatus.getStyleClass().setAll("status-err");
+            callStatus.setText("✖ " + task.getException().getMessage());
+            appendStream("✖ " + task.getException().getMessage());
+            updateStreamButtons();
+        });
+        runBg(task);
+    }
+
     private void invoke() {
         String svc = serviceCombo.getValue();
         GrpcService.MethodInfo method = methodCombo.getValue();
         if (svc == null || method == null) { callStatus.setText("Pick a service and method"); return; }
-        if (!method.isUnary()) {
-            callStatus.getStyleClass().setAll("status-4xx");
-            callStatus.setText("Streaming methods are not supported yet");
-            return;
-        }
+        if (!method.isUnary()) { startStream(svc, method); return; }
         callStatus.getStyleClass().setAll("meta-label");
         callStatus.setText("Invoking…");
         String json = Env.resolve(requestEditor.getText());   // resolve ${VAR} in the request body

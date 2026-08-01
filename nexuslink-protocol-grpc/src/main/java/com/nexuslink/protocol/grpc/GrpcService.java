@@ -39,7 +39,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Dynamic gRPC client driven entirely by <b>server reflection</b> — no {@code .proto} upload needed.
  * Lists services/methods, builds request messages from JSON, invokes unary methods, and prints the
- * response as JSON. Streaming methods are detected but not yet invocable.
+ * response as JSON. Server-, client- and bidirectional-streaming methods are invocable through
+ * {@link #openStream(String, String, StreamListener)}.
  */
 public final class GrpcService implements AutoCloseable {
 
@@ -159,6 +160,99 @@ public final class GrpcService implements AutoCloseable {
 
         DynamicMessage response = ClientCalls.blockingUnaryCall(channel, grpcMethod, CallOptions.DEFAULT, request);
         return JsonFormat.printer().print(response);
+    }
+
+    // ---- streaming ----
+
+    /** Callbacks for a streaming call; every method is invoked off the UI thread. */
+    public interface StreamListener {
+        /** One server message, already rendered as JSON. */
+        void onMessage(String json);
+        void onError(Throwable t);
+        void onCompleted();
+    }
+
+    /**
+     * A live streaming call. Send request messages with {@link #send(String)} (client/bidi streaming),
+     * signal "no more requests" with {@link #halfClose()}, and abandon the call with {@link #cancel()}.
+     */
+    public final class StreamCall {
+        private final StreamObserver<DynamicMessage> requests;
+        private final Descriptors.Descriptor inType;
+        private volatile boolean closed;
+
+        private StreamCall(StreamObserver<DynamicMessage> requests, Descriptors.Descriptor inType) {
+            this.requests = requests;
+            this.inType = inType;
+        }
+
+        /** Parses {@code json} against the request type and sends it. */
+        public void send(String json) throws Exception {
+            if (closed) throw new IllegalStateException("Stream is already closed");
+            DynamicMessage.Builder b = DynamicMessage.newBuilder(inType);
+            JsonFormat.parser().ignoringUnknownFields().merge(json == null || json.isBlank() ? "{}" : json, b);
+            requests.onNext(b.build());
+        }
+
+        /** Ends the request side; the server may keep sending until it completes the call. */
+        public void halfClose() {
+            if (closed) return;
+            closed = true;
+            requests.onCompleted();
+        }
+
+        public void cancel() {
+            if (closed) return;
+            closed = true;
+            requests.onError(io.grpc.Status.CANCELLED.withDescription("cancelled by user").asRuntimeException());
+        }
+
+        public boolean isRequestSideClosed() { return closed; }
+    }
+
+    /**
+     * Opens a streaming call (server, client, or bidirectional). The call is driven with the bidi
+     * machinery in every case — for server streaming, send one request then {@link StreamCall#halfClose()};
+     * for client streaming the single response arrives through {@code listener} before completion.
+     */
+    public StreamCall openStream(String service, String method, StreamListener listener) throws Exception {
+        Descriptors.ServiceDescriptor sd = resolveService(service);
+        Descriptors.MethodDescriptor m = sd.findMethodByName(method);
+        if (m == null) throw new IllegalArgumentException("No method '" + method + "' on " + service);
+        if (!m.isClientStreaming() && !m.isServerStreaming()) {
+            throw new IllegalArgumentException(method + " is unary — use invokeUnary");
+        }
+        Descriptors.Descriptor inType = m.getInputType();
+
+        io.grpc.MethodDescriptor<DynamicMessage, DynamicMessage> grpcMethod =
+                io.grpc.MethodDescriptor.<DynamicMessage, DynamicMessage>newBuilder()
+                        .setType(methodType(m))
+                        .setFullMethodName(io.grpc.MethodDescriptor.generateFullMethodName(service, method))
+                        .setRequestMarshaller(ProtoUtils.marshaller(DynamicMessage.getDefaultInstance(inType)))
+                        .setResponseMarshaller(ProtoUtils.marshaller(DynamicMessage.getDefaultInstance(m.getOutputType())))
+                        .build();
+
+        StreamObserver<DynamicMessage> requests = ClientCalls.asyncBidiStreamingCall(
+                channel.newCall(grpcMethod, CallOptions.DEFAULT),
+                new StreamObserver<>() {
+                    @Override public void onNext(DynamicMessage value) {
+                        try {
+                            listener.onMessage(JsonFormat.printer().print(value));
+                        } catch (Exception e) {
+                            listener.onMessage(value.toString());
+                        }
+                    }
+                    @Override public void onError(Throwable t) { listener.onError(t); }
+                    @Override public void onCompleted() { listener.onCompleted(); }
+                });
+        return new StreamCall(requests, inType);
+    }
+
+    static io.grpc.MethodDescriptor.MethodType methodType(Descriptors.MethodDescriptor m) {
+        if (m.isClientStreaming() && m.isServerStreaming()) return io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING;
+        if (m.isClientStreaming()) return io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING;
+        if (m.isServerStreaming()) return io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING;
+        return io.grpc.MethodDescriptor.MethodType.UNARY;
     }
 
     // ---- reflection / descriptor resolution ----
