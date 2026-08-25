@@ -44,7 +44,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~89%** — 312 done · 28 in-progress · 26 open (by checkbox). Phases 0–9 complete through §9.5; the remaining open items are the prioritised P1–P3 gaps in the two parity specs under `.agent-os/specs/` (REST↔Postman, SQL↔SQL Developer). `mvn -o test` green: **293 tests** across the reactor. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~89%** (Phases 0–9) — 312 done · 29 in-progress · 25 open (by checkbox; §10's 11 rollup boxes excluded). Phases 0–9 complete through §9.5; the remaining open items are the prioritised P1–P3 gaps in the parity specs under `.agent-os/specs/`. **Phase 10 (best-in-class parity across all thirteen clients, opened 2026-08-25) is a separate forward backlog and is deliberately NOT counted in this percentage** — see §10 and `.agent-os/specs/PROGRESS.md`. `mvn -o test` green: **306 UI tests** (2026-08-25) plus the protocol modules across the reactor. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -1430,6 +1430,61 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       Endpoint/Authentication/Parameters/Headers tabs, a live **Test connection** button, and Remove
 - [x] New in-app help topic **`llm-endpoints.md`**, wired into `HelpService` and the panel's `?`
 - [ ] _(deferred — see spec)_ streaming responses · multi-turn state · tool use from this panel
+
+---
+
+## PHASE 10 — BEST-IN-CLASS PARITY (forward backlog, opened 2026-08-25)
+
+> **Read this before touching the numbers.** Phase 10 is a *new forward backlog*, not a regression.
+> Phases 0–9 are unchanged and still complete; the Progress line above counts them only. Phase 10
+> items are tracked **inside their specs** (one checkbox per item, with stable ids like `MQ-3`), so
+> that adding ~130 new open items does not make a finished product look 60% done. The rollup below
+> is the only thing counted here: one box per spec, ticked when that spec's **P1** list is empty.
+
+Each spec was written against the **source as of 2026-08-25** — the "already built" table in each is
+an audit, not a memory of one. Build order is stated at the bottom of every spec.
+
+| § | Client | Parity target | Spec | P1 items |
+|---|--------|---------------|------|----------|
+| 10.1 | MongoDB | Compass · Studio 3T · `mongosh` | `.agent-os/specs/2026-08-25-mongo-compass-studio3t-parity/` | 7 (`MG-1`…`MG-7`) |
+| 10.2 | SQL | *(beyond every client)* — editor + 6 unbuilt capabilities | `.agent-os/specs/2026-08-25-sql-beyond-parity/` | 8 editor + `SQLX-1`…`SQLX-6` |
+| 10.3 | File transfer | FileZilla · WinSCP | `.agent-os/specs/2026-08-25-file-transfer-filezilla-parity/` | 6 (`FX-1`…`FX-6`) |
+| 10.4 | IBM MQ | MQ Explorer · Nastel AutoPilot | `.agent-os/specs/2026-08-25-ibmmq-beyond-nastel/` | 7 (`MQ-1`…`MQ-7`) |
+| 10.5 | Kafka | AKHQ · Conduktor · Kafka UI | `.agent-os/specs/2026-08-25-kafka-management-parity/` | 7 (`KF-1`…`KF-7`) |
+| 10.6 | JMS · Solace · RabbitMQ · MQTT · Redis · LDAP · SSH · SNMP · cloud · gRPC/GraphQL | HermesJMS · RedisInsight · MQTT Explorer · Apache Directory Studio · PuTTY · iReasoning | `.agent-os/specs/2026-08-25-remaining-clients-parity/` | ~20, grouped per protocol |
+| — | REST | Postman | `.agent-os/specs/2026-08-25-rest-postman-parity/` | tracked in §3.1.x |
+| — | SQL | Oracle SQL Developer | `.agent-os/specs/2026-08-25-sql-developer-parity/` | tracked in §8.1.2 |
+
+**Progress tracker:** `.agent-os/specs/PROGRESS.md` — one table, updated when items land.
+
+### 10.0 Shared foundations — build these once, five clients use them
+
+Five capabilities recur across every spec. Building the shared piece first is what keeps thirteen
+protocol clients from becoming thirteen codebases. **Start here.**
+
+- [ ] **Environment-governed destructive actions** (`SQLX-2`) — dev/stage/prod tags on a connection;
+      read-only prod, typed confirmation, coloured tab. Used by SQL, Mongo (`MG-14`), Kafka, Redis,
+      RabbitMQ (`MSG-R3`), IBM MQ
+- [ ] **DLQ browse + replay-with-preview dialog** — one dialog, four consumers: `MQ-3`, `MSG-J4`,
+      `MSG-C1`, `KF-7`
+- [ ] **Sampling + charting + threshold alerts** — `MQ-8` (queue depth), `KF-14` (lag/retention),
+      `MSG-RD3` (Redis INFO), `MSG-M4` (`$SYS`), `MSG-SN3` (SNMP polling)
+- [ ] **Saved-request/session tree with folders** — `CollectionNode` shipped for REST 2026-08-25;
+      extend to sessions (`FX-2`) and to every protocol's requests (`MSG-G3`)
+- [ ] **Diff-then-apply for configuration** — `ConfigDiff`/`SchemaDiff` exist; wire to Kafka configs
+      (`KF-1`), queue-manager drift (`MQ-15`), RabbitMQ objects (`MSG-R1`)
+
+### 10.1–10.6 rollup
+
+- [ ] **10.1 MongoDB** — P1 complete (Compass/Studio 3T parity)
+- [ ] **10.2 SQL beyond parity** — `SQLX-1` (DML undo + blast radius) and `SQLX-2` shipped
+- [ ] **10.3 File transfer** — P1 complete (FileZilla/WinSCP parity)
+- [ ] **10.4 IBM MQ** — P1 complete (PCF layer, explorer, message browser, DLQ replay)
+- [ ] **10.5 Kafka** — P1 complete (config editing, headers, serdes, cluster panel)
+- [ ] **10.6 Remaining clients** — P1 complete per protocol
+
+**Recommended first build (2026-08-26):** §10.0 governed execution → `SQLX-1` DML undo → `MQ-5`+`MQ-2`
+(the MQ client is furthest from its parity target) → `MG-2`/`MG-3` (Mongo result views).
 
 ---
 
