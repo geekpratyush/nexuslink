@@ -97,8 +97,37 @@ caches searches, and maps UI component IDs → help anchors so `F1` is context-s
 | Saved connections | JSON (secrets as vault refs) | `~/.nexuslink/connections.json` |
 | Environments (`${VAR}` sets + active id) | JSON | `~/.nexuslink/environments.json` (+ optional `~/.nexuslink/.env`) |
 | On-demand JDBC drivers | downloaded jars | `~/.nexuslink/drivers/` |
+| Driver repository settings (optional) | properties | `~/.nexuslink/maven.properties` |
 | Preferences (theme, protocol visibility) | Java Preferences API | platform store |
 | Caches | Caffeine (in-memory) | process memory |
+
+### On-demand JDBC drivers behind a corporate proxy
+
+Heavy or licensed drivers (Oracle, SQL Server, DB2, …) are not bundled; they are fetched by Maven
+coordinates on first use. In an environment with no direct internet access, `ExternalDriverLoader`
+resolves a jar in this order:
+
+1. `~/.nexuslink/drivers/` — already downloaded,
+2. the local Maven repository (`~/.m2/repository`, or `-Dmaven.repo.local`) — no network at all,
+3. the configured remote repository.
+
+`MavenRepositoryConfig` picks the remote repository from, highest precedence first:
+
+| Source | Keys |
+|--------|------|
+| System properties | `nexuslink.maven.repoUrl`, `.username`, `.password`, `.token` |
+| Environment | `NEXUSLINK_MAVEN_REPO_URL`, `NEXUSLINK_MAVEN_USERNAME`, `NEXUSLINK_MAVEN_PASSWORD`, `NEXUSLINK_MAVEN_TOKEN` |
+| `~/.nexuslink/maven.properties` | `repoUrl`, `username`, `password`, `token` |
+| `~/.m2/settings.xml` | first `<mirror>` URL + the matching `<server>` credentials |
+| _(default)_ | Maven Central, unauthenticated |
+
+A token is sent as `Authorization: Bearer …`, a username/password as basic auth. Downloads honour
+the JVM proxy settings (`-Dhttps.proxyHost=… -Dhttps.proxyPort=…`, or
+`-Djava.net.useSystemProxies=true`); a proxy or Artifactory using a private CA needs that CA in the
+JVM trust store (`-Djavax.net.ssl.trustStore=…`). Passwords encrypted with Maven's
+`settings-security.xml` are **not** decrypted — configure those explicitly via one of the sources
+above. Fully air-gapped machines can skip all of this and drop the jar into
+`~/.nexuslink/drivers/`, or pick it with **Browse for driver JAR…**.
 
 ## Protocol Service Contracts
 

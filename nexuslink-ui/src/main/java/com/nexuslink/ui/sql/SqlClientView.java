@@ -393,7 +393,9 @@ public final class SqlClientView extends BorderPane {
         ContextMenu menu = new ContextMenu();
         MenuItem browse = new MenuItem("Browse for driver JAR…");
         browse.setOnAction(e -> browseForDriver(d));
-        MenuItem download = new MenuItem("Download from Maven Central  (" + d.mavenCoords() + ")");
+        MenuItem download = new MenuItem("Download from "
+                + com.nexuslink.protocol.db.MavenRepositoryConfig.resolve().displayName()
+                + "  (" + d.mavenCoords() + ")");
         download.setOnAction(e -> downloadDriver(d));
         menu.getItems().addAll(browse, download);
         menu.show(driverBtn, javafx.geometry.Side.BOTTOM, 0, 0);
