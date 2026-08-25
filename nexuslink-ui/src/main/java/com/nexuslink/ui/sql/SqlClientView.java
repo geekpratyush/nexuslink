@@ -494,9 +494,11 @@ public final class SqlClientView extends BorderPane {
             TableRow<List<String>> row = new TableRow<>();
             MenuItem copy = new MenuItem("Copy row");
             copy.setOnAction(e -> { if (row.getItem() != null) copyToClipboard(String.join("\t", nullSafe(row.getItem()))); });
+            MenuItem form = new MenuItem("Open in form view…");
+            form.setOnAction(e -> openRecordForm(row.getItem()));
             MenuItem delete = new MenuItem("Delete row…");
             delete.setOnAction(e -> deleteRow(row.getItem()));
-            ContextMenu menu = new ContextMenu(copy, delete);
+            ContextMenu menu = new ContextMenu(copy, form, new SeparatorMenuItem(), delete);
             row.emptyProperty().addListener((o, was, empty) -> row.setContextMenu(empty ? null : menu));
             return row;
         });
@@ -896,6 +898,63 @@ public final class SqlClientView extends BorderPane {
             if (!pk.isEmpty() && currentColumns.containsAll(pk)) { editTable = table; editStmt = s; editPk.addAll(pk); }
         });
         runBg(pkTask);
+    }
+
+    /**
+     * Opens the single-record form over the displayed rows, positioned on {@code row}. Editable on
+     * the same terms as the grid: a single-table SELECT that carries the table's primary key.
+     */
+    private void openRecordForm(List<String> row) {
+        if (currentColumns.isEmpty()) return;
+        List<List<String>> visible = new ArrayList<>(resultGrid.getItems());
+        int start = Math.max(0, visible.indexOf(row));
+        boolean editable = editTable != null && !editPk.isEmpty();
+
+        RecordFormDialog.open(getScene() == null ? null : getScene().getWindow(),
+                editable ? "Record — " + editTable : "Record",
+                new ArrayList<>(currentColumns), visible, start, new ArrayList<>(editPk), editable,
+                this::applyFormEdit);
+    }
+
+    /**
+     * Turns the form's edited values into a targeted {@code UPDATE} of the changed columns only,
+     * keyed on the row's primary key, and routes it through the usual preview-then-apply gate.
+     */
+    private void applyFormEdit(List<String> original, java.util.Map<String, String> edited) {
+        List<String> assignments = new ArrayList<>();
+        for (int i = 0; i < currentColumns.size(); i++) {
+            String column = currentColumns.get(i);
+            if (editPk.contains(column)) continue; // key columns identify the row; never reassign them
+            String before = i < original.size() ? original.get(i) : null;
+            String after = edited.get(column);
+            if (after == null || java.util.Objects.equals(nullSafeCell(before), after)) continue;
+            assignments.add(quoteIdent(column) + " = " + sqlLiteral(after));
+        }
+        if (assignments.isEmpty()) {
+            statusLabel.getStyleClass().setAll("meta-label");
+            statusLabel.setText("Nothing changed in the form — no update generated");
+            return;
+        }
+
+        List<String> conditions = new ArrayList<>();
+        for (String pk : editPk) {
+            int idx = currentColumns.indexOf(pk);
+            if (idx < 0) {
+                statusLabel.getStyleClass().setAll("status-4xx");
+                statusLabel.setText("Primary key column not in result — can't update safely");
+                return;
+            }
+            conditions.add(quoteIdent(pk) + " = " + sqlLiteral(idx < original.size() ? original.get(idx) : null));
+        }
+
+        previewAndApply("UPDATE " + quoteIdent(editTable) + " SET " + String.join(", ", assignments)
+                        + " WHERE " + String.join(" AND ", conditions) + ";",
+                "Update 1 row in “" + editTable + "”?", this::rerunLastSelect);
+    }
+
+    /** The grid renders SQL NULL as the text "NULL"; normalise it back before comparing edits. */
+    private static String nullSafeCell(String cell) {
+        return cell == null ? "NULL" : cell;
     }
 
     private void deleteRow(List<String> row) {
