@@ -85,6 +85,36 @@ class SqlClientViewDriverSyncTest {
     }
 
     @Test
+    void aStoredDriverIdWinsOverWhatTheUrlImplies() throws Exception {
+        assumeTrue(fxUp, "JavaFX toolkit unavailable");
+        // CockroachDB speaks the PostgreSQL wire protocol, so only the saved id can tell them apart.
+        String id = onFx(() -> {
+            SqlClientView view = new SqlClientView();
+            view.prefill("jdbc:postgresql://roach:26257/defaultdb", "app", "", "cockroachdb");
+            @SuppressWarnings("unchecked")
+            ComboBox<DriverInfo> combo = (ComboBox<DriverInfo>) view.lookup("#sqlDbCombo");
+            return combo.getValue().id();
+        });
+        assertEquals("cockroachdb", id);
+    }
+
+    @Test
+    void connectNowSkipsADriverThatIsNotInstalled() throws Exception {
+        assumeTrue(fxUp, "JavaFX toolkit unavailable");
+        assertEquals(Boolean.FALSE, onFx(() -> {
+            SqlClientView view = new SqlClientView();
+            view.prefill("jdbc:oracle:thin:@//db.corp:1521/ORCLPDB1", "app", "secret");
+            return view.connectNow();
+        }));
+        // …but a bundled driver connects straight away, which is the point of double-click-to-open.
+        assertEquals(Boolean.TRUE, onFx(() -> {
+            SqlClientView view = new SqlClientView();
+            view.prefill("jdbc:sqlite::memory:", null, null);
+            return view.connectNow();
+        }));
+    }
+
+    @Test
     void anUnknownUrlLeavesThePickerAlone() throws Exception {
         assumeTrue(fxUp, "JavaFX toolkit unavailable");
         String[] state = prefillAndRead("jdbc:informix-sqli://host/db");

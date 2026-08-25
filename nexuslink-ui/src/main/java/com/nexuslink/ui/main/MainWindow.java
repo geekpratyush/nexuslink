@@ -640,7 +640,14 @@ public final class MainWindow {
             case SSE -> openSseTab().prefill(d.target);
             case GRAPHQL -> openGraphQLTab().prefill(d.target);
             case GRPC -> openGrpcTab().prefill(d.target);
-            case SQL -> openSqlTab().prefill(d.target, d.username, d.authProps.get("password"));
+            case SQL -> {
+                SqlClientView sql = openSqlTab();
+                sql.prefill(d.target, d.username, d.authProps.get("password"),
+                        d.properties.get("driverId"));
+                // Opening a saved database connection means "connect me" — the credentials are
+                // already there, so making the user press Connect as well is pure ceremony.
+                sql.connectNow();
+            }
             case MONGO -> openMongoTab().prefill(mongoTarget(d));
             case S3 -> openS3Tab().prefill(d.target, d.username, d.authProps.get("secretKey"));
             case KAFKA -> openKafkaTab().prefill(d.target);

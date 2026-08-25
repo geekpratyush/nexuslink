@@ -147,7 +147,7 @@ public final class SqlClientView extends BorderPane {
             var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(detailJson);
             String url = node.path("url").asText("");
             String sql = node.path("sql").asText("");
-            if (!url.isBlank()) urlField.setText(url);
+            if (!url.isBlank()) { urlField.setText(url); syncDriverToUrl(); }
             if (!sql.isBlank()) setEditorText(sql);
         } catch (Exception ignored) {
             // A malformed detail blob just leaves the editor as-is.
@@ -156,10 +156,39 @@ public final class SqlClientView extends BorderPane {
 
     /** Pre-fills connection fields (used when opening a saved/sample connection). */
     public void prefill(String url, String user, String password) {
+        prefill(url, user, password, null);
+    }
+
+    /**
+     * Pre-fills connection fields, honouring the profile's own {@code driverId} when it has one.
+     * The stored id wins over what the URL implies: it is the only way to tell apart drivers that
+     * share a wire protocol (CockroachDB vs PostgreSQL) or a user-supplied driver.
+     */
+    public void prefill(String url, String user, String password, String driverId) {
         if (url != null && !url.isBlank()) urlField.setText(url);
         if (user != null) userField.setText(user);
         if (password != null) passField.setText(password);
         syncDriverToUrl();
+        if (driverId != null && !driverId.isBlank()) {
+            JdbcDriverRegistry.byId(driverId).ifPresent(this::selectDriverQuietly);
+        }
+    }
+
+    /**
+     * Connects using the fields as they stand — the double-click-a-saved-connection path, where
+     * opening a tab and then having to press Connect is pure ceremony.
+     *
+     * <p>Skips the attempt when the selected driver still needs its jar: {@link #onDriverSelected}
+     * has already said so on screen, and a connect would only bury that with a class-not-found.
+     *
+     * @return true if a connection attempt was started
+     */
+    public boolean connectNow() {
+        if (urlField.getText() == null || urlField.getText().isBlank()) return false;
+        DriverInfo d = dbCombo.getValue();
+        if (d != null && !d.bundled() && !JdbcDriverRegistry.isAvailable(d)) return false;
+        connect();
+        return true;
     }
 
     /**
@@ -169,15 +198,7 @@ public final class SqlClientView extends BorderPane {
      */
     private void syncDriverToUrl() {
         String url = Env.resolve(urlField.getText());
-        JdbcUrls.forUrl(JdbcDriverRegistry.allIncludingUser(), url).ifPresent(d -> {
-            if (d.equals(dbCombo.getValue())) return;
-            syncingDriver = true;
-            try {
-                dbCombo.getSelectionModel().select(d);
-            } finally {
-                syncingDriver = false;
-            }
-        });
+        JdbcUrls.forUrl(JdbcDriverRegistry.allIncludingUser(), url).ifPresent(this::selectDriverQuietly);
     }
 
     /** Demo/screenshot helper: connect to in-memory SQLite, seed data, and show a query. */
@@ -1517,6 +1538,17 @@ public final class SqlClientView extends BorderPane {
             onSave.accept(p);
             logger.accept("Saved SQL connection: " + name.trim());
         });
+    }
+
+    /** Moves the picker without letting its listener replace the URL with the driver's template. */
+    private void selectDriverQuietly(DriverInfo d) {
+        if (d == null || d.equals(dbCombo.getValue())) return;
+        syncingDriver = true;
+        try {
+            dbCombo.getSelectionModel().select(d);
+        } finally {
+            syncingDriver = false;
+        }
     }
 
     private void connect() {
