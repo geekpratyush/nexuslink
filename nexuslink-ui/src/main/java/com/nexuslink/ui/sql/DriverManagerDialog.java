@@ -93,7 +93,14 @@ final class DriverManagerDialog {
         HBox buttons = new HBox(8, addBtn, removeBtn);
         buttons.setAlignment(Pos.CENTER_LEFT);
 
-        VBox left = new VBox(8, new Label("Drivers"), list, buttons);
+        // Having seen that Oracle needs installing, users reasonably ask whether Redis does too.
+        // It doesn't — these clients are bundled and speak their own wire protocols, not JDBC.
+        Label bundledNote = new Label("Bundled, no driver needed:  " + BundledClients.summary());
+        bundledNote.getStyleClass().add("meta-label");
+        bundledNote.setWrapText(true);
+        bundledNote.setMaxWidth(280);
+
+        VBox left = new VBox(8, new Label("Drivers"), list, buttons, new Separator(), bundledNote);
         VBox.setVgrow(list, Priority.ALWAYS);
 
         HBox body = new HBox(left, detail);

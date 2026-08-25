@@ -41,4 +41,6 @@ If the app can reach the internet only through an internal mirror, you can also 
 - Edit or delete a document directly from the Table view (right-click or double-click).
 
 ## Redis
+The Redis client ships with its driver (Lettuce) built in at a fixed version — there is nothing to install, and Redis does not appear in the JDBC driver manager because it speaks its own wire protocol rather than JDBC. The same is true of MongoDB.
+
 - Connect with a `redis://` / `rediss://` URI. Browse keys (value preview on select) and run commands from the console (`GET`, `SET`, `HGETALL`, `LRANGE`, `KEYS`, …).
