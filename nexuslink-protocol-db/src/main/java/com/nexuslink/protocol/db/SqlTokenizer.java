@@ -119,6 +119,10 @@ public final class SqlTokenizer {
             } else if (c == ':' && isIdentifierStart(next)) {
                 i = scanWhile(sql, i + 1, true);
                 type = SqlTokenType.PARAMETER;
+            } else if (c == '&' && isSubstitutionStart(sql, i)) {
+                // SQL*Plus / SQL Developer substitution variable: &name or &&name.
+                i = scanWhile(sql, i + (i + 1 < n && sql.charAt(i + 1) == '&' ? 2 : 1), true);
+                type = SqlTokenType.PARAMETER;
             } else if (c == '$' && isDigit(next)) {
                 int j = i + 1;
                 while (j < n && isDigit(sql.charAt(j))) {
@@ -256,6 +260,17 @@ public final class SqlTokenizer {
 
     private static boolean isDigit(char c) {
         return c >= '0' && c <= '9';
+    }
+
+    /**
+     * True when the {@code &} at {@code i} introduces a substitution variable ({@code &name} or
+     * {@code &&name}) rather than the boolean/bitwise operator. Requiring a name character right
+     * after the ampersands keeps {@code a && b} and {@code flags & 2} as operators.
+     */
+    private static boolean isSubstitutionStart(String sql, int i) {
+        int j = i + 1;
+        if (j < sql.length() && sql.charAt(j) == '&') j++;
+        return j < sql.length() && isIdentifierStart(sql.charAt(j));
     }
 
     private static boolean isIdentifierStart(char c) {

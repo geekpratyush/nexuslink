@@ -1,5 +1,6 @@
 package com.nexuslink.protocol.db;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -62,12 +63,39 @@ public final class JdbcDriverRegistry {
                     false, "com.google.cloud:google-bigquery-simba-jdbc:1.5.4", true)
     );
 
+    /** The built-in catalog only. */
     public static List<DriverInfo> all() {
         return DRIVERS;
     }
 
+    /**
+     * The store of user-added drivers. Held statically so the driver list is consistent everywhere
+     * in the app; package-private setter exists for tests.
+     */
+    private static volatile UserDriverStore userDrivers = new UserDriverStore();
+
+    public static UserDriverStore userDrivers() {
+        return userDrivers;
+    }
+
+    static void setUserDriverStore(UserDriverStore store) {
+        userDrivers = store;
+    }
+
+    /** The built-in catalog plus everything the user added from their own filesystem. */
+    public static List<DriverInfo> allIncludingUser() {
+        List<DriverInfo> merged = new ArrayList<>(DRIVERS);
+        for (UserDriver d : userDrivers.all()) merged.add(d.toDriverInfo());
+        return List.copyOf(merged);
+    }
+
     public static Optional<DriverInfo> byId(String id) {
-        return DRIVERS.stream().filter(d -> d.id().equals(id)).findFirst();
+        return allIncludingUser().stream().filter(d -> d.id().equals(id)).findFirst();
+    }
+
+    /** True when {@code id} identifies a user-added driver rather than a built-in catalog entry. */
+    public static boolean isUserDriver(String id) {
+        return id != null && id.startsWith("user:");
     }
 
     /** True if the driver's class can be loaded right now (bundled, or already loaded on demand). */

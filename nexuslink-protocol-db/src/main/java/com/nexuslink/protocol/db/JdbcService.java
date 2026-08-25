@@ -175,6 +175,38 @@ public final class JdbcService implements AutoCloseable {
         }
     }
 
+    /**
+     * Executes a statement that uses SQL Developer-style parameters, with {@code values} keyed by
+     * bare parameter name (see {@link SqlBindVariables}). {@code :name} binds go to the database as
+     * real JDBC parameters; {@code &name} substitutions are pasted into the SQL first.
+     */
+    public QueryResult execute(String sql, Map<String, String> values) {
+        SqlBindVariables.Prepared prepared = SqlBindVariables.prepare(sql, values);
+        if (prepared.isPlain()) return execute(prepared.sql());
+
+        long start = System.nanoTime();
+        if (!isConnected()) return QueryResult.error("Not connected", 0);
+        try (PreparedStatement ps = connection.prepareStatement(prepared.sql())) {
+            List<String> ordered = prepared.values();
+            for (int i = 0; i < ordered.size(); i++) {
+                String value = ordered.get(i);
+                // setString on a numeric/date column is fine: drivers coerce, and letting the
+                // driver decide is more portable than guessing a java.sql.Types here.
+                if (value == null) ps.setNull(i + 1, java.sql.Types.VARCHAR);
+                else ps.setString(i + 1, value);
+            }
+            if (ps.execute()) {
+                try (ResultSet rs = ps.getResultSet()) {
+                    return readResultSet(rs, ms(start));
+                }
+            }
+            return new QueryResult(false, List.of(), List.of(), List.of(),
+                    ps.getUpdateCount(), ms(start), false, null);
+        } catch (SQLException e) {
+            return QueryResult.error(e.getMessage(), ms(start));
+        }
+    }
+
     /** Lists table names (and views) in the current schema. */
     public List<String> listTables() throws SQLException {
         List<String> tables = new ArrayList<>();

@@ -26,6 +26,11 @@ public final class DriverShim implements Driver {
         this.delegate = delegate;
     }
 
+    /** The wrapped driver's class name — lets the loader find its own shims to deregister. */
+    public String delegateClassName() {
+        return delegate.getClass().getName();
+    }
+
     @Override public Connection connect(String url, Properties info) throws SQLException { return delegate.connect(url, info); }
     @Override public boolean acceptsURL(String url) throws SQLException { return delegate.acceptsURL(url); }
     @Override public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException { return delegate.getPropertyInfo(url, info); }

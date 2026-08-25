@@ -15,6 +15,7 @@ import java.nio.file.StandardCopyOption;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -54,6 +55,78 @@ public final class ExternalDriverLoader {
         } catch (Exception e) {
             throw new DriverLoadException("Failed to load driver " + driverClass
                     + " from " + jar + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Deregisters a driver loaded by {@link #loadFromJar} so it stops appearing as available after
+     * the user removes it from the driver list. Bundled drivers, which nothing here registered,
+     * are left alone.
+     *
+     * @return true if a shim was deregistered
+     */
+    public static synchronized boolean unload(String driverClass) {
+        if (!registeredClasses.remove(driverClass)) return false;
+        var drivers = DriverManager.drivers().toList();
+        for (Driver d : drivers) {
+            if (d instanceof DriverShim shim && shim.delegateClassName().equals(driverClass)) {
+                try {
+                    DriverManager.deregisterDriver(d);
+                } catch (Exception ignored) {
+                    // Nothing useful to do — the driver simply stays registered for this session.
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Makes {@code driver} usable without any user interaction if its jar is already on this
+     * machine — a user driver's own jar, or a jar sitting in {@link #DRIVER_DIR} (downloaded
+     * earlier, or placed there by the user running the {@code mvn} command from
+     * {@link MavenCommandHelp}). Never touches the network.
+     *
+     * @return true if the driver is available afterwards
+     */
+    public static synchronized boolean ensureLoaded(DriverInfo driver) {
+        if (JdbcDriverRegistry.isAvailable(driver)) return true;
+        Optional<Path> jar = JdbcDriverRegistry.isUserDriver(driver.id())
+                ? JdbcDriverRegistry.userDrivers().byId(driver.id())
+                        .map(d -> Path.of(d.jarPath)).filter(Files::isReadable)
+                : cachedJar(driver.mavenCoords());
+        if (jar.isEmpty()) return false;
+        try {
+            loadFromJar(jar.get(), driver.driverClass());
+            return true;
+        } catch (DriverLoadException e) {
+            return false; // a stale or corrupt jar shouldn't break driver selection
+        }
+    }
+
+    /**
+     * Finds a locally cached jar for {@code group:artifact:version} in {@link #DRIVER_DIR}. Falls
+     * back to matching on artifact name alone, so a jar fetched at a slightly different version
+     * than the catalog's default is still picked up.
+     */
+    public static Optional<Path> cachedJar(String mavenCoords) {
+        if (mavenCoords == null) return Optional.empty();
+        String[] parts = mavenCoords.split(":");
+        if (parts.length != 3) return Optional.empty();
+        String artifact = parts[1], version = parts[2];
+
+        Path exact = DRIVER_DIR.resolve(artifact + "-" + version + ".jar");
+        if (Files.isReadable(exact)) return Optional.of(exact);
+        if (!Files.isDirectory(DRIVER_DIR)) return Optional.empty();
+        try (var files = Files.list(DRIVER_DIR)) {
+            return files.filter(p -> {
+                        String name = p.getFileName().toString();
+                        return name.startsWith(artifact + "-") && name.endsWith(".jar");
+                    })
+                    .sorted() // deterministic when several versions are present
+                    .findFirst();
+        } catch (IOException e) {
+            return Optional.empty();
         }
     }
 

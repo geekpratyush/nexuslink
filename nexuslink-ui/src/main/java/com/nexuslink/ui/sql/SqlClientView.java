@@ -57,6 +57,15 @@ public final class SqlClientView extends BorderPane {
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
+    /**
+     * Live connection lamp. The session holds one open connection and reuses it for every
+     * statement, so this reflects a real, persistent connection rather than per-query dialling.
+     */
+    private final Label connectionIndicator = new Label("●");
+
+    /** Values entered for {@code &&sticky} substitution variables, reused for the rest of the session. */
+    private final java.util.Map<String, String> sessionVariables = new java.util.LinkedHashMap<>();
+
     // TLS / SSL material (driver-specific params are derived from these at connect time).
     private final TitledPane tlsPane = new TitledPane();
     private final ComboBox<SslMode> sslModeCombo = new ComboBox<>();
@@ -164,6 +173,7 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Connected: in-memory SQLite");
             setEditorText("SELECT id, name, role FROM users ORDER BY id;");
             renderResult(task.getValue());
+            updateConnectionIndicator();
             refreshExplorer();
         });
         Thread t = new Thread(task, "sql-demo");
@@ -219,16 +229,23 @@ public final class SqlClientView extends BorderPane {
         structureBtn.getItems().addAll(createTable, createIndex, new SeparatorMenuItem(), exportStructure);
 
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
-        dbCombo.getItems().setAll(JdbcDriverRegistry.all());
+        dbCombo.getItems().setAll(JdbcDriverRegistry.allIncludingUser());
         dbCombo.setButtonCell(driverCell());
         dbCombo.setCellFactory(lv -> driverCell());
         dbCombo.valueProperty().addListener((o, ov, d) -> onDriverSelected(d));
         dbCombo.getSelectionModel().select(JdbcDriverRegistry.byId("sqlite").orElseThrow());
 
         driverBtn.getStyleClass().add("btn-secondary");
-        driverBtn.setOnAction(e -> showDriverMenu());
+        driverBtn.setOnAction(e -> openDriverManager());
         driverBtn.setVisible(false);
         driverBtn.setManaged(false);
+
+        // Always-available entry point to the driver list, independent of what's selected.
+        Button driversBtn = new Button("Drivers…");
+        driversBtn.getStyleClass().add("btn-secondary");
+        driversBtn.setTooltip(new Tooltip("Manage JDBC drivers: see what's installed, add one from a "
+                + "JAR, or get the mvn command to fetch it"));
+        driversBtn.setOnAction(e -> openDriverManager());
 
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
@@ -242,12 +259,14 @@ public final class SqlClientView extends BorderPane {
         codeBtn.setOnAction(e -> com.nexuslink.ui.rest.CodeGenDialog.show(
                 getScene() == null ? null : getScene().getWindow(), codeGenRequest()));
 
-        HBox row = new HBox(8, lbl, dbCombo, driverBtn, urlField, userField, passField, connectBtn, saveBtn, builderBtn, erBtn, structureBtn, codeBtn, helpBtn);
+        HBox row = new HBox(8, lbl, dbCombo, driversBtn, driverBtn, urlField, userField, passField,
+                connectBtn, saveBtn, builderBtn, erBtn, structureBtn, codeBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
         statusLabel.getStyleClass().add("meta-label");
-        HBox statusRow = new HBox(statusLabel);
+        HBox statusRow = new HBox(8, connectionIndicator, statusLabel);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
         statusRow.setPadding(new Insets(0, 10, 6, 10));
         return new VBox(row, buildTlsPane(), statusRow);
     }
@@ -373,67 +392,41 @@ public final class SqlClientView extends BorderPane {
 
     private void onDriverSelected(DriverInfo d) {
         if (d == null) return;
-        urlField.setText(d.sampleUrl());
+        if (d.sampleUrl() != null && !d.sampleUrl().isBlank()) urlField.setText(d.sampleUrl());
+        // A jar fetched earlier (downloaded, or placed here by the user's own mvn run) makes the
+        // driver usable straight away, so check that before declaring it missing.
+        ExternalDriverLoader.ensureLoaded(d);
         boolean needsDriver = !d.bundled() && !JdbcDriverRegistry.isAvailable(d);
         driverBtn.setVisible(needsDriver);
         driverBtn.setManaged(needsDriver);
         if (needsDriver) {
             statusLabel.getStyleClass().setAll("status-4xx");
-            statusLabel.setText("Driver for " + d.displayName() + " is not loaded — click \"Load Driver…\""
-                    + (d.requiresLicenseAck() ? "  (licensed — accept terms before download)" : ""));
+            statusLabel.setText("Driver for " + d.displayName() + " is not installed — click \"Drivers…\""
+                    + (d.requiresLicenseAck() ? "  (licensed — accept the vendor's terms first)" : ""));
         } else {
             statusLabel.getStyleClass().setAll("meta-label");
             statusLabel.setText("Not connected");
         }
     }
 
-    private void showDriverMenu() {
-        DriverInfo d = dbCombo.getValue();
-        if (d == null) return;
-        ContextMenu menu = new ContextMenu();
-        MenuItem browse = new MenuItem("Browse for driver JAR…");
-        browse.setOnAction(e -> browseForDriver(d));
-        MenuItem download = new MenuItem("Download from "
-                + com.nexuslink.protocol.db.MavenRepositoryConfig.resolve().displayName()
-                + "  (" + d.mavenCoords() + ")");
-        download.setOnAction(e -> downloadDriver(d));
-        menu.getItems().addAll(browse, download);
-        menu.show(driverBtn, javafx.geometry.Side.BOTTOM, 0, 0);
+    /**
+     * Opens the driver manager, then rebuilds the picker so anything installed or removed there is
+     * reflected immediately — no restart, which is the whole point of the on-demand driver model.
+     */
+    private void openDriverManager() {
+        DriverInfo before = dbCombo.getValue();
+        String selected = DriverManagerDialog.open(getScene() == null ? null : getScene().getWindow())
+                .orElse(before == null ? null : before.id());
+        reloadDriverList(selected);
     }
 
-    private void browseForDriver(DriverInfo d) {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Select " + d.displayName() + " JDBC driver JAR");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JAR files", "*.jar"));
-        var file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
-        if (file == null) return;
-        runDriverLoad(() -> ExternalDriverLoader.loadFromJar(file.toPath(), d.driverClass()), d);
-    }
-
-    private void downloadDriver(DriverInfo d) {
-        statusLabel.setText("Downloading " + d.mavenCoords() + "…");
-        runDriverLoad(() -> { ExternalDriverLoader.downloadAndLoad(d.mavenCoords(), d.driverClass()); return true; }, d);
-    }
-
-    private void runDriverLoad(java.util.concurrent.Callable<Boolean> action, DriverInfo d) {
-        logger.accept("Loading driver: " + d.displayName());
-        Task<Boolean> task = new Task<>() {
-            @Override protected Boolean call() throws Exception { return action.call(); }
-        };
-        task.setOnSucceeded(e -> {
-            statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText(d.displayName() + " driver loaded — ready to connect");
-            logger.accept(d.displayName() + " driver loaded");
-            driverBtn.setVisible(false);
-            driverBtn.setManaged(false);
-            dbCombo.setButtonCell(driverCell()); // refresh ✓ mark
-        });
-        task.setOnFailed(e -> {
-            statusLabel.getStyleClass().setAll("status-err");
-            statusLabel.setText("Driver load failed: " + task.getException().getMessage());
-            logger.accept("Driver load FAILED: " + task.getException().getMessage());
-        });
-        runBg(task);
+    /** Refreshes the database picker from the registry, reselecting {@code driverId} if it still exists. */
+    private void reloadDriverList(String driverId) {
+        dbCombo.getItems().setAll(JdbcDriverRegistry.allIncludingUser());
+        JdbcDriverRegistry.byId(driverId)
+                .ifPresentOrElse(dbCombo.getSelectionModel()::select,
+                        () -> dbCombo.getSelectionModel().selectFirst());
+        onDriverSelected(dbCombo.getValue());
     }
 
     private SplitPane buildBody() {
@@ -1465,6 +1458,7 @@ public final class SqlClientView extends BorderPane {
             autoCommitBox.setDisable(false);
             autoCommitBox.setSelected(true);
             updateTxnButtons();
+            updateConnectionIndicator();
             refreshExplorer();
         });
         task.setOnFailed(e -> {
@@ -1472,8 +1466,21 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Connect failed: " + task.getException().getMessage());
             logger.accept("JDBC connect FAILED: " + task.getException().getMessage());
             connectBtn.setDisable(false);
+            updateConnectionIndicator();
         });
         runBg(task);
+    }
+
+    /**
+     * Repaints the connection lamp: green when the session's connection is open and reusable,
+     * grey when there is none. Called after anything that can change connection state.
+     */
+    private void updateConnectionIndicator() {
+        boolean connected = service.isConnected();
+        connectionIndicator.getStyleClass().setAll(connected ? "status-2xx" : "meta-label");
+        connectionIndicator.setTooltip(new Tooltip(connected
+                ? "Connected — this connection stays open and is reused for every statement"
+                : "Not connected"));
     }
 
     private void refreshExplorer() {
@@ -1697,10 +1704,50 @@ public final class SqlClientView extends BorderPane {
     /** Result of running a block: which result to display, plus a per-statement message log. */
     private record RunOutcome(QueryResult display, String displayStmt, String messages) {}
 
+    /**
+     * Collects values for any {@code :name} / {@code &name} parameters across {@code statements},
+     * prompting only for the ones that still need a value — a {@code &&name} answered earlier in
+     * the session is reused, as in SQL*Plus.
+     *
+     * @return the values to run with, or {@code null} if the user cancelled the prompt
+     */
+    private java.util.Map<String, String> promptForVariables(List<String> statements) {
+        java.util.LinkedHashMap<String, com.nexuslink.protocol.db.SqlBindVariables.Variable> needed =
+                new java.util.LinkedHashMap<>();
+        for (String s : statements) {
+            for (var v : com.nexuslink.protocol.db.SqlBindVariables.scan(Env.resolve(s))) {
+                if (v.sticky() && sessionVariables.containsKey(v.name())) continue;
+                needed.putIfAbsent(v.name(), v);
+            }
+        }
+        if (needed.isEmpty()) return new java.util.LinkedHashMap<>(sessionVariables);
+
+        var entered = BindVariableDialog.prompt(getScene() == null ? null : getScene().getWindow(),
+                List.copyOf(needed.values()), sessionVariables);
+        if (entered.isEmpty()) return null;
+
+        // Remember only the &&sticky ones; a plain & or :bind re-prompts next time, as it should.
+        needed.values().stream().filter(v -> v.sticky())
+                .forEach(v -> sessionVariables.put(v.name(), entered.get().get(v.name())));
+
+        java.util.LinkedHashMap<String, String> all = new java.util.LinkedHashMap<>(sessionVariables);
+        all.putAll(entered.get());
+        return all;
+    }
+
     private void runStatements(String block) {
         if (block == null || block.isBlank()) return;
         List<String> statements = splitStatements(block);
         if (statements.isEmpty()) return;
+
+        // SQL Developer-style :bind / &substitution parameters — collect values before running.
+        java.util.Map<String, String> variables = promptForVariables(statements);
+        if (variables == null) {
+            resultStatus.getStyleClass().setAll("meta-label");
+            resultStatus.setText("Cancelled — no values entered for the statement's parameters");
+            return;
+        }
+
         resultStatus.getStyleClass().setAll("meta-label");
         resultStatus.setText("Running " + statements.size() + " statement" + (statements.size() == 1 ? "" : "s") + "…");
         logger.accept("SQL → " + truncate(statements.get(0)) + (statements.size() > 1 ? "  (+" + (statements.size() - 1) + " more)" : ""));
@@ -1712,7 +1759,7 @@ public final class SqlClientView extends BorderPane {
                 StringBuilder msg = new StringBuilder();
                 for (String s : statements) {
                     String stmt = Env.resolve(s);
-                    QueryResult r = service.execute(stmt);
+                    QueryResult r = service.execute(stmt, variables);
                     msg.append(r.failed() ? "✖ " : "✔ ").append(truncate(stmt)).append("  →  ")
                        .append(r.failed() ? r.errorMessage() : r.summary()).append('\n');
                     // Prefer the last statement that returned a grid; otherwise keep the last outcome.
