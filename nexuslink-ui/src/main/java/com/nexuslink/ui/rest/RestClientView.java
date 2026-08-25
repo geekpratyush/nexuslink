@@ -61,6 +61,9 @@ public final class RestClientView extends BorderPane {
     /** Every request/response executed in this tab, retained so the session can be exported as HAR. */
     private final List<HarExporter.Entry> harEntries = new ArrayList<>();
 
+    private SplitPane workspace;
+    private CollectionsPanel collectionsPanel;
+
     private ComboBox<String> methodCombo;
     private TextField urlField;
     private Button sendButton;
@@ -132,7 +135,7 @@ public final class RestClientView extends BorderPane {
         getStyleClass().add("rest-client-view");
         seedTimeoutDefaults();
         setTop(buildMethodBar());
-        setCenter(buildSplit());
+        setCenter(buildWorkspace());
         seedExample();
     }
 
@@ -379,7 +382,14 @@ public final class RestClientView extends BorderPane {
         com.nexuslink.ui.hint.HelpButton helpBtn =
                 new com.nexuslink.ui.hint.HelpButton("rest-client#url-bar", "Help for the REST client");
 
-        HBox bar = new HBox(8, methodCombo, urlField, sendButton, codeBtn, curlBtn, saveBtn, harBtn, traceBtn, helpBtn);
+        ToggleButton collectionsBtn = new ToggleButton("Collections");
+        collectionsBtn.setId("restCollectionsToggle");
+        collectionsBtn.getStyleClass().add("btn-secondary");
+        collectionsBtn.setTooltip(new Tooltip("Show saved collections, folders and requests"));
+        collectionsBtn.selectedProperty().addListener((o, was, is) -> toggleCollections(is));
+
+        HBox bar = new HBox(8, methodCombo, urlField, sendButton, collectionsBtn, codeBtn, curlBtn,
+                saveBtn, harBtn, traceBtn, helpBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10));
 
@@ -394,6 +404,34 @@ public final class RestClientView extends BorderPane {
     }
 
     // ---- Request editor + response (vertical split) ----
+
+    /**
+     * The collections sidebar beside the request/response split. The sidebar is created lazily on
+     * first reveal so a tab that never opens it pays no disk read.
+     */
+    private SplitPane buildWorkspace() {
+        workspace = new SplitPane();
+        workspace.getItems().add(buildSplit());
+        return workspace;
+    }
+
+    /** Shows or hides the collections sidebar. */
+    private void toggleCollections(boolean show) {
+        if (show && collectionsPanel == null) {
+            collectionsPanel = new CollectionsPanel(
+                    new com.nexuslink.protocol.http.rest.RestCollectionStore(),
+                    this::serializeRequest, this::loadRequest, s -> logger.accept(s));
+            SplitPane.setResizableWithParent(collectionsPanel, false);
+        }
+        if (show) {
+            if (!workspace.getItems().contains(collectionsPanel)) {
+                workspace.getItems().add(0, collectionsPanel);
+                workspace.setDividerPositions(0.22);
+            }
+        } else if (collectionsPanel != null) {
+            workspace.getItems().remove(collectionsPanel);
+        }
+    }
 
     private SplitPane buildSplit() {
         SplitPane split = new SplitPane();

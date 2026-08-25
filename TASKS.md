@@ -402,9 +402,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 > The spec holds the full capability table (what's already at or beyond Postman) and the reasoning.
 > Summary of what remains:
 
-- [ ] **P1** **Collections & folders** — a request tree with folders, ordering, and collection-level
-      variables + auth that a request inherits. Today requests are saved flat as connection profiles;
-      this is the biggest structural gap against Postman and a prerequisite for the runner
+- [-] **P1** **Collections & folders** — **DONE:** `CollectionNode`/`RestCollectionTree`/`RestCollectionStore`
+      (protocol-http, `~/.nexuslink/rest-collections.json`) + the `CollectionsPanel` sidebar in the REST
+      client — collections, nested folders, save/open/update/rename/duplicate/delete, drag-to-reorder,
+      JSON import/export. Saved requests reuse the view's own serializer, so every request field is kept.
+      **Remaining:** collection-level variables + auth that a request inherits
 - [ ] **P1** **Collection runner** — run a folder in order, N iterations, optional CSV/JSON data file,
       pass/fail report. The assertion engine (`ResponseAssertions`) already exists; the driver doesn't
 - [ ] **P1** Form-data body UI with a file picker per row _(the RFC 7578 `MultipartFormData` encoder is
