@@ -4,14 +4,31 @@
 > **On context loss:** Resume by reading this file first, then check `src/` for what exists.  
 > **Convention:** `[x]` done · `[-]` in-progress · `[ ]` not started · `[!]` blocked
 
+> ### This file is the *status ledger*, not the instructions
+> Product context, house standards and per-feature specs live in **`.agent-os/`** — read those
+> first in a new session; they are short, and they answer *why* and *how*, which this file does not:
+>
+> | Question | File |
+> |----------|------|
+> | What are we building and for whom? | `.agent-os/product/mission.md` |
+> | What's next and why that order? | `.agent-os/product/roadmap.md` |
+> | Why is it built *this* way? | `.agent-os/product/decisions.md` |
+> | How should the code read / be tested? | `.agent-os/standards/` |
+> | What is this specific feature? | `.agent-os/specs/<date>-<slug>/spec.md` |
+>
+> Feature backlogs now live in specs rather than being buried in this file. The two open ones:
+> **`.agent-os/specs/2026-08-25-rest-postman-parity/`** and
+> **`.agent-os/specs/2026-08-25-sql-developer-parity/`** — each an audit of the real code with a
+> prioritised gap list.
+
 ---
 
 ## HOW TO RESUME AFTER TOKEN EXPIRY
 
-1. Read this file (`TASKS.md`) completely
-2. Run `find src/ -name "*.java" | head -60` to see what exists
-3. Check `PROGRESS_LOG.md` for the last session's notes
-4. Continue from the first `[ ]` task in the current active phase
+1. Read `.agent-os/product/roadmap.md` — the altitude view and the ordered next items
+2. Read this file (`TASKS.md`) for the detailed status of the phase you're resuming
+3. **Verify against the code, not these notes** — `grep` the class before believing a checkbox
+4. Continue from the first `[ ]` task in the current active phase, or the first P1 in an open spec
 
 ---
 
@@ -27,7 +44,7 @@
 | DB | SQLite (history), AES-256-GCM encrypted JSON (profiles/vault) |
 | Cache | Caffeine (in-memory) |
 | Spec | `NexusLink_Specification.md` |
-| Progress | **~88%** — 286 done · 37 in-progress · 10 open (by checkbox). Phases 0–4, 6, **7 (file transfer)** & **9 (monitoring/tracing/vaults/code-gen/packaging)** complete; **Phase 9.4 External Secret Vaults complete**; **MQTT complete** (Paho v5 + v5 properties + persistent message history). `mvn test` green across 30 modules. Docker `test-env/` live-verifies 17 protocol families |
+| Progress | **~89%** — 312 done · 28 in-progress · 26 open (by checkbox). Phases 0–9 complete through §9.5; the remaining open items are the prioritised P1–P3 gaps in the two parity specs under `.agent-os/specs/` (REST↔Postman, SQL↔SQL Developer). `mvn -o test` green: **293 tests** across the reactor. Docker `test-env/` live-verifies 17 protocol families |
 
 ---
 
@@ -380,6 +397,25 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       hit/miss stats (8 tests). **Wired** into `NetworkProbes.dnsResolve` so every Diagnose run shares one
       30s cache (detail shows "(cached)" on a hit); injectable-cache overload tested. TLS session resumption
       is handled natively by the JDK `SSLSessionContext` (no app-level cache needed).
+
+#### 3.1.x Postman parity — **audit + backlog: `.agent-os/specs/2026-08-25-rest-postman-parity/`**
+> The spec holds the full capability table (what's already at or beyond Postman) and the reasoning.
+> Summary of what remains:
+
+- [ ] **P1** **Collections & folders** — a request tree with folders, ordering, and collection-level
+      variables + auth that a request inherits. Today requests are saved flat as connection profiles;
+      this is the biggest structural gap against Postman and a prerequisite for the runner
+- [ ] **P1** **Collection runner** — run a folder in order, N iterations, optional CSV/JSON data file,
+      pass/fail report. The assertion engine (`ResponseAssertions`) already exists; the driver doesn't
+- [ ] **P1** Form-data body UI with a file picker per row _(the RFC 7578 `MultipartFormData` encoder is
+      done and tested — only the Body-tab wiring is missing)_
+- [ ] **P1** Post-response scripts / extract a JSON path into an environment variable (request chaining)
+- [ ] **P1** Binary/file request body · save response body to file
+- [ ] **P2** OpenAPI/Swagger import → generate a collection · Postman collection v2.1 import/export
+- [ ] **P2** Editable cookie manager · bulk-edit headers/params as text · response diff · visualizer
+- [ ] **P3** Proxy capture/interceptor · mock server · CLI runner (Newman equivalent)
+- **Excluded:** monitors / scheduled runs (mission non-goal); hosted team workspaces — collaboration
+  stays file-based (§9.3)
 
 ### 3.2 WebSocket Client
 - [x] `WebSocketService` — JDK `java.net.http.WebSocket`, text frame reassembly _(auto-reconnect TODO)_
@@ -993,6 +1029,23 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       opens a header-aware column-mapping dialog (auto-matches by name/position), previews the INSERTs, then
       runs them as one all-or-nothing transaction (`JdbcService.executeAll`) and re-runs the SELECT.
 
+- [x] **Bind & substitution variables (SQL Developer semantics)** — pure `SqlBindVariables` scans a
+      statement over `SqlTokenizer` output (so a `:` in a literal or comment is never a parameter)
+      and classifies `:name` as a **bind** (sent as a real JDBC parameter — user input never enters
+      the SQL text), `&name` as a **substitution** (pasted into the text, which is what makes
+      `SELECT * FROM &table` work) and `&&name` as a session-sticky substitution. `prepare()`
+      rewrites binds to positional `?` with values repeated per occurrence;
+      `JdbcService.execute(sql, values)` runs them through a `PreparedStatement`. `BindVariableDialog`
+      prompts once per run, labels each parameter's kind, and reuses `&&` answers for the session.
+      **10 tests.** See Decisions Log #16.
+- [x] **Single-record form view** — `RecordFormDialog`: right-click a row → *Open in form view…* for
+      one labelled field per column with Previous/Next. Editable on the same terms as the grid
+      (single-table SELECT carrying the PK); **Save** generates an `UPDATE` of only the changed
+      columns, keyed on the PK, through the existing preview-then-apply gate. PK fields are
+      read-only so the target row can't shift under the edit.
+- [x] **Connection indicator** — a green lamp in the connection bar reflecting the single session
+      connection that every statement reuses (no per-query dialling)
+
 #### 8.1.1 JDBC Driver Strategy — **bundle the light ones, load the rest on demand**
 > Decision (see Decisions Log #9): do NOT bundle every driver. Bundle small + permissively
 > licensed + common drivers; everything heavy or licensed loads on demand via a driver
@@ -1016,13 +1069,59 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 **Driver manager (the mechanism that makes on-demand work):**
 - [x] `JdbcDriverRegistry` — catalog (class name, Maven coords, sample URL, bundled flag,
-      license-ack flag); `isAvailable()` / `isDriverLoaded()`. **3/3 registry tests pass.**
-- [x] `ExternalDriverLoader` — `loadFromJar()` + `downloadAndLoad()` (Maven Central →
-      `~/.nexuslink/drivers/`), idempotent registration
+      license-ack flag); `isAvailable()` / `isDriverLoaded()`; `allIncludingUser()` merges the
+      built-in catalog with the user's own drivers. **4/4 registry tests pass.**
+- [x] `ExternalDriverLoader` — `loadFromJar()` + `downloadAndLoad()`, idempotent registration,
+      plus `ensureLoaded()` (uses an already-present jar, no network) and `unload()`
 - [x] `DriverShim` — wraps an externally-loaded driver so `DriverManager` accepts it
       (works around the child-classloader visibility rule)
-- [x] "Load Driver…" UI — database picker + Browse-for-jar / Download-from-Maven menu
 - [x] Per-driver license-ack flag surfaced in the UI for Oracle/DB2
+
+#### 8.1.2 Driver management in a locked-down network — **spec: `.agent-os/specs/2026-08-25-driver-management/`**
+> The original download hard-coded `repo1.maven.org` with a bare `HttpClient` — no proxy, no
+> credentials, no alternative host — so in an org that mirrors Maven through Artifactory and blocks
+> direct egress, on-demand drivers could **never** be installed. Three independent install routes
+> now exist so no single blocked path stops the user. See Decisions Log #14.
+
+- [x] **Configurable repository** — `MavenRepositoryConfig` resolves the remote repo from system
+      properties (`nexuslink.maven.repoUrl`/`.username`/`.password`/`.token`) → `NEXUSLINK_MAVEN_*`
+      env → `~/.nexuslink/maven.properties` → the first `<mirror>` + matching `<server>` in
+      `~/.m2/settings.xml` (auto-detected) → Maven Central. Bearer or basic auth; encrypted
+      `settings-security.xml` passwords detected and skipped. **10 tests**
+- [x] **Proxy-aware download** via `ProxySelector.getDefault()`; failures name the repository tried
+      and both escape hatches
+- [x] **Local-first resolution** — `~/.nexuslink/drivers` → `~/.m2/repository` → remote, so a primed
+      `~/.m2` needs no network at all
+- [x] **`mvn` command generator** — `MavenCommandHelp` renders `dependency:copy` per shell
+      (bash/zsh, PowerShell, cmd) with correct quoting + home-dir syntax, a matching mkdir, and
+      step-by-step instructions. Lets the user fetch the jar with the Maven their org already
+      configured. **8 tests**
+- [x] **Attach a jar from disk** — `JarDriverInspector` reads `META-INF/services/java.sql.Driver`
+      (falls back to `*Driver` class-name scan), so adding a driver is a confirm. **4 tests**
+- [x] **User drivers persist + are removable** — `UserDriver` + `UserDriverStore`
+      (`~/.nexuslink/user-drivers.json`), `user:`-namespaced ids, jar referenced in place and never
+      deleted on remove. **7 tests**
+- [x] **Driver manager UI** — `DriverManagerDialog`: one list of every driver with a ready/not-installed
+      lamp, detail pane with driver class + sample URL, **Try direct download**, per-shell command +
+      **Copy command**, **Add from JAR…** (`AddDriverDialog`), **Remove**. Replaces the old two-item
+      "Load Driver…" menu; reachable from a permanent **Drivers…** button
+- [x] **Dynamic registration** — an added driver is usable immediately, no restart; a cached jar is
+      picked up on driver selection and on opening the manager
+- [x] In-app help rewritten (`databases.md`) with the three install routes and the mirror settings
+
+#### 8.1.3 SQL Developer parity — **audit + backlog: `.agent-os/specs/2026-08-25-sql-developer-parity/`**
+> Full capability table and prioritised gaps live in the spec. Summary of what remains:
+
+- [ ] **P1** Execute a stored procedure/function with an IN/OUT parameter form (`CallableStatement`)
+- [ ] **P1** Server output panel (`DBMS_OUTPUT`) drained after each execution
+- [ ] **P1** Export as INSERT statements / XML / HTML / delimited-with-options; export a whole table
+- [ ] **P1** In-tab SQL history with recall into the editor
+- [ ] **P1** Grid: aggregate footer, column freeze, find-in-results, copy-as-INSERT/Markdown
+- [ ] **P2** PL/SQL program editing + compile with error line mapping
+- [ ] **P2** Bind parameter typing + explicit NULL in the prompt (today every bind is a string)
+- [ ] **P2** Sessions/locks panel · snippets library · multiple pinned result tabs · schema diff
+- [ ] **P3** _(deferred)_ PL/SQL debugger · Data Modeler · user reports · unit-test framework
+- **Excluded:** job/scheduler management (mission non-goal)
 
 ### 8.2 Redis Client (separate driver — not JDBC)
 - [x] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack.
@@ -1299,6 +1398,37 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (−75%)**, the app launches and runs on the trimmed runtime with no exceptions, and an HTTPS
       round-trip succeeds on it (proving the crypto providers survived the trim).
 
+### 9.5 Configurable LLM Endpoints — **spec: `.agent-os/specs/2026-08-25-llm-endpoints/`**
+> The AI tester could only reach `api.anthropic.com` via the vendor SDK with `ANTHROPIC_API_KEY`
+> from the environment, at hard-coded parameters. In an org the model sits behind an internal
+> gateway on a private hostname, authenticated with an OIDC token from the company IdP. See
+> Decisions Log #17.
+
+- [x] **`LlmEndpointConfig`** — a complete endpoint description: base URL + path, **wire format**
+      (Anthropic Messages `/v1/messages` or OpenAI-compatible `/v1/chat/completions` — decoupled from
+      vendor, since gateways commonly front other models with an OpenAI API), auth mode, gateway
+      headers, and every generation parameter (max tokens, temperature, top_p, top_k, stop sequences,
+      thinking budget, `anthropic-version`, connect/read timeouts). Normalising constructor +
+      `validationErrors()`. **10 tests**
+- [x] **Auth: none / API key in a named header / bearer / OIDC client-credentials.** `OidcTokenSource`
+      performs the exchange (form body + basic header, for broad IdP compatibility), caches the token
+      until 30s before expiry, and honours the JVM proxy
+- [x] **`LlmRequestBuilder`** — renders the exact body per format; **a parameter the user didn't set is
+      omitted entirely** rather than defaulted, because strict gateways reject unknown/null fields.
+      **7 tests** asserting the wire bytes
+- [x] **`LlmResponseParser`** — text + usage + stop reason from either format (thinking blocks
+      excluded from the answer), lenient about wrapped/trimmed gateway responses; error bodies
+      rendered with an actionable hint per status. **10 tests**
+- [x] **`HttpLlmClient`** — proxy-aware, never throws (failures return a failed `Result` for the panel
+      to render)
+- [x] **`LlmEndpointStore`** (`~/.nexuslink/llm-endpoints.json`) — **literal secrets are stripped on
+      save; only `${ENV_VAR}` references persist.** A typed secret lives for the session and the UI
+      says so. **7 tests.** See Decisions Log #15
+- [x] **UI** — endpoint picker (SDK path stays the default) + `LlmEndpointDialog` with
+      Endpoint/Authentication/Parameters/Headers tabs, a live **Test connection** button, and Remove
+- [x] New in-app help topic **`llm-endpoints.md`**, wired into `HelpService` and the panel's `?`
+- [ ] _(deferred — see spec)_ streaming responses · multi-turn state · tool use from this panel
+
 ---
 
 ## KEYBOARD SHORTCUTS REFERENCE
@@ -1349,6 +1479,11 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 | 7 | Help content in Markdown | Easy to author, version-control friendly, renderable in-app |
 | 8 | Build Help System in Phase 2 | Every feature after it can register contextual help |
 | 9 | **JDBC drivers: bundle light/permissive, load heavy/licensed on demand** | Bundling all drivers bloats the installer (Oracle `ojdbc11` alone is ~7MB), creates version conflicts, and drags in licensed jars (Oracle OTN, DB2) we can't legally redistribute. JDBC's `ServiceLoader` SPI means a dropped-in jar self-registers, so on-demand loading is clean. This is exactly how DBeaver/DataGrip work. Bundle: SQLite/H2/Postgres/MySQL/MariaDB (small, Apache/EPL/BSD/MIT). On-demand: Oracle/SQL Server/DB2/Snowflake/etc. Non-JDBC stores (Mongo, Redis) live in their own modules and bundle their own driver, loaded only when that protocol is used. |
+| 10–13 | _(see `.agent-os/product/decisions.md`)_ | Older decisions recorded inline in the phase sections above |
+| 14 | **Driver installation must never depend on internet access** | The app cannot reliably reproduce an org's Artifactory mirror, credentials, proxy and private CA — the user's own Maven already has all four. So: a configurable repository for direct download, a generated per-shell `mvn` command as the always-works route, and attach-a-jar as the offline floor. Jars already in `~/.nexuslink/drivers` or `~/.m2/repository` are used before any network call. |
+| 15 | **Never write a plaintext secret to disk** | A credential sitting in a world-readable JSON file in `~` is a worse default than making the user re-enter it. Config files persist secrets only as `${ENV_VAR}` references; a literal typed value lives for the session, and the dialog says so before the user types. Applies to `llm-endpoints.json`; `connections.json` uses vault references for the same reason. |
+| 16 | **SQL parameters follow SQL Developer semantics exactly** | Users arrive with queries written for SQL Developer. Treating `&table_name` as a bind would break `SELECT * FROM &table_name` (most of why substitutions exist); treating `:id` as a substitution would turn a bound value into SQL text and reintroduce injection. Detection runs over the tokenizer, never a regex, so a `:` in a literal or comment is not a parameter. |
+| 17 | **Any outbound endpoint is configurable** | In the target environment the vendor's public hostname is unreachable and access is federated through the company IdP. Base URL, auth (incl. OIDC client-credentials) and headers are configuration, with the vendor default as *a* choice rather than the only one. Corollary: request bodies omit parameters the user didn't set, since strict gateways reject unknown/null fields. |
 
 ---
 

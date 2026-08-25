@@ -92,7 +92,7 @@ public final class LlmTesterView extends BorderPane {
 
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
-        helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("plugins"));
+        helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("llm-endpoints"));
 
         Label endpointLbl = new Label("Endpoint:");
         endpointLbl.getStyleClass().add("meta-label");
