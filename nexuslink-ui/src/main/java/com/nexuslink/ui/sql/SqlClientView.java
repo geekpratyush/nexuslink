@@ -8,6 +8,7 @@ import com.nexuslink.protocol.db.CsvReader;
 import com.nexuslink.protocol.db.DriverInfo;
 import com.nexuslink.protocol.db.ExternalDriverLoader;
 import com.nexuslink.protocol.db.JdbcDriverRegistry;
+import com.nexuslink.protocol.db.JdbcUrls;
 import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.JdbcTlsParams;
@@ -50,6 +51,9 @@ public final class SqlClientView extends BorderPane {
     private final JdbcService service = new JdbcService();
 
     private final ComboBox<DriverInfo> dbCombo = new ComboBox<>();
+
+    /** True while the picker is being moved to match the URL, so it must not rewrite that URL. */
+    private boolean syncingDriver;
     private final Button driverBtn = new Button("Load Driver…");
     private final TextField urlField = new TextField("jdbc:sqlite::memory:");
     private final TextField userField = new TextField();
@@ -155,6 +159,25 @@ public final class SqlClientView extends BorderPane {
         if (url != null && !url.isBlank()) urlField.setText(url);
         if (user != null) userField.setText(user);
         if (password != null) passField.setText(password);
+        syncDriverToUrl();
+    }
+
+    /**
+     * Points the Database picker at the driver the current URL actually addresses. Without this a
+     * tab opened on a saved MySQL or Oracle connection still reads "SQLite" — the picker's default —
+     * which also fed the wrong driver id to the TLS parameter mapping.
+     */
+    private void syncDriverToUrl() {
+        String url = Env.resolve(urlField.getText());
+        JdbcUrls.forUrl(JdbcDriverRegistry.allIncludingUser(), url).ifPresent(d -> {
+            if (d.equals(dbCombo.getValue())) return;
+            syncingDriver = true;
+            try {
+                dbCombo.getSelectionModel().select(d);
+            } finally {
+                syncingDriver = false;
+            }
+        });
     }
 
     /** Demo/screenshot helper: connect to in-memory SQLite, seed data, and show a query. */
@@ -229,6 +252,8 @@ public final class SqlClientView extends BorderPane {
         structureBtn.getItems().addAll(createTable, createIndex, new SeparatorMenuItem(), exportStructure);
 
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
+        dbCombo.setId("sqlDbCombo");
+        urlField.setId("sqlUrl");
         dbCombo.getItems().setAll(JdbcDriverRegistry.allIncludingUser());
         dbCombo.setButtonCell(driverCell());
         dbCombo.setCellFactory(lv -> driverCell());
@@ -392,7 +417,11 @@ public final class SqlClientView extends BorderPane {
 
     private void onDriverSelected(DriverInfo d) {
         if (d == null) return;
-        if (d.sampleUrl() != null && !d.sampleUrl().isBlank()) urlField.setText(d.sampleUrl());
+        // When the picker is following the URL (not the other way round), keep the URL the user
+        // actually connected with — overwriting it with the template would discard their host/db.
+        if (!syncingDriver && d.sampleUrl() != null && !d.sampleUrl().isBlank()) {
+            urlField.setText(d.sampleUrl());
+        }
         // A jar fetched earlier (downloaded, or placed here by the user's own mvn run) makes the
         // driver usable straight away, so check that before declaring it missing.
         ExternalDriverLoader.ensureLoaded(d);
@@ -1491,6 +1520,9 @@ public final class SqlClientView extends BorderPane {
     }
 
     private void connect() {
+        // A hand-typed or pasted URL may name a different database than the picker shows; follow
+        // the URL, since that is what we are about to connect to.
+        syncDriverToUrl();
         connectBtn.setDisable(true);
         statusLabel.setText("Connecting…");
         // Resolve ${VAR} against the active environment for the JDBC URL + credentials.
