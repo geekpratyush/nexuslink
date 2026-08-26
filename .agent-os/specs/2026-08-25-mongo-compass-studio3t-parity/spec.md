@@ -54,7 +54,15 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
       `MongoService.findDetailed`. UI: a collapsible **Query options** bar — projection, sort, skip —
       beside the filter, with **Save query** favourites per collection. 8 tests. as first-class inputs beside the
       filter, plus a saved-query list per collection (favourites), matching Compass's bar.
-- [ ] **MG-5 Import / export a collection** — JSON and CSV, field-mapped, with a preview and a progress
+- [x] **MG-5 Import / export a collection** *(2026-08-26)* Pure `CollectionTransfer`: JSON array,
+      JSON lines and CSV, with nested fields as dotted columns on the way out and dotted headers
+      rebuilding the nesting on the way in; CSV values are typed by what they look like (Int32/Int64 by
+      size, Double, Boolean, ISO-8601 Date, JSON document/array, blank → null) because a string-only
+      import leaves a collection unqueryable. `MongoService.exportCollection` **streams** to the file
+      (a collection bigger than the heap still exports) with progress; `importDocuments` inserts in
+      unordered batches. UI: **Export whole collection…** (format + filter) and **Import into
+      collection…** with a CSV field-mapping table, type toggle and live first-document preview.
+      14 unit tests + `MongoTransferLiveIT` (5 tests incl. a 250-document round trip). — JSON and CSV, field-mapped, with a preview and a progress
       bar; export the whole collection, not just the visible page. (CSV import machinery already exists
       for SQL in `CsvImportPlanner` — the mapping UI is reusable.)
 - [x] **MG-6 Index usage and suggestions.** *(2026-08-26)* Pure `IndexAdvice`: reads `$indexStats`

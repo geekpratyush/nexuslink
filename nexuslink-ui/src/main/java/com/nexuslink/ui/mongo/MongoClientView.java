@@ -224,6 +224,247 @@ public final class MongoClientView extends BorderPane {
         }
     }
 
+    /**
+     * Exports the whole collection — not the page on screen — streaming straight to the file, so the
+     * size of the collection is not bounded by the heap. The current filter is offered as the export
+     * filter, since "export what I am looking at" is the common case.
+     */
+    private void exportCollectionDialog() {
+        if (!service.isConnected() || activeCollection == null) {
+            statusLabel.setText("Select a collection in the tree first");
+            return;
+        }
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Export collection");
+        dialog.setHeaderText("Export every document of " + activeCollection);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        ChoiceBox<com.nexuslink.protocol.mongo.CollectionTransfer.Format> format =
+                new ChoiceBox<>(javafx.collections.FXCollections.observableArrayList(
+                        com.nexuslink.protocol.mongo.CollectionTransfer.Format.values()));
+        format.setValue(com.nexuslink.protocol.mongo.CollectionTransfer.Format.JSON_LINES);
+        TextField filter = new TextField(queryEditor.getText().trim());
+        filter.setPromptText("{} — every document");
+        filter.setPrefColumnCount(36);
+        Label note = new Label("JSON lines streams and keeps every field. CSV needs its columns up "
+                + "front, so they are taken from the first 200 documents.");
+        note.getStyleClass().add("meta-label");
+        note.setWrapText(true);
+
+        GridPane form = new GridPane();
+        form.setHgap(8);
+        form.setVgap(8);
+        form.setPadding(new Insets(12));
+        form.addRow(0, new Label("Format:"), format);
+        form.addRow(1, new Label("Filter:"), filter);
+        form.add(note, 0, 2, 2, 1);
+        dialog.getDialogPane().setContent(form);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        var chosen = format.getValue();
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Export collection");
+        chooser.setInitialFileName(activeCollection + "." + chosen.extension());
+        java.io.File file = chooser.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+
+        String collection = activeCollection;
+        String filterJson = Env.resolve(filter.getText().trim());
+        Task<Long> task = new Task<>() {
+            @Override protected Long call() throws Exception {
+                return service.exportCollection(collection, filterJson, chosen, file.toPath(), 200,
+                        written -> Platform.runLater(() ->
+                                statusLabel.setText("Exported " + written + " document(s)…")));
+            }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Exported " + task.getValue() + " document(s) → " + file.getName());
+            logger.accept("Mongo export: " + task.getValue() + " document(s) from " + collection);
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Export failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /**
+     * Imports a JSON or CSV file into the active collection. JSON arrays and JSON lines are told
+     * apart automatically; CSV gets a field-mapping table — one row per column, with the target
+     * field path pre-filled from the header — and a preview of the first document, because a CSV
+     * import that guesses wrong is tedious to undo.
+     */
+    private void importCollectionDialog() {
+        if (!service.isConnected() || activeCollection == null) {
+            statusLabel.setText("Select a collection in the tree first");
+            return;
+        }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Import into " + activeCollection);
+        chooser.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("JSON / JSON lines", "*.json", "*.jsonl"),
+                new javafx.stage.FileChooser.ExtensionFilter("CSV", "*.csv"),
+                new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+        java.io.File file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+
+        String text;
+        try {
+            text = java.nio.file.Files.readString(file.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not read " + file.getName() + ": " + ex.getMessage());
+            return;
+        }
+
+        java.util.List<org.bson.Document> documents;
+        boolean csv = file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".csv");
+        if (csv) {
+            documents = csvImportDialog(text);
+            if (documents == null) return;
+        } else {
+            try {
+                documents = com.nexuslink.protocol.mongo.CollectionTransfer.fromJson(text);
+            } catch (RuntimeException ex) {
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("Import failed: " + ex.getMessage());
+                return;
+            }
+        }
+        if (documents.isEmpty()) { statusLabel.setText("Nothing to import — the file has no documents"); return; }
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Insert " + documents.size() + " document(s) into " + activeCollection + "?",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Import");
+        if (getScene() != null) confirm.initOwner(getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        String collection = activeCollection;
+        java.util.List<org.bson.Document> batch = documents;
+        Task<Long> task = new Task<>() {
+            @Override protected Long call() {
+                return service.importDocuments(collection, batch, 500,
+                        done -> Platform.runLater(() ->
+                                statusLabel.setText("Imported " + done + " of " + batch.size() + "…")));
+            }
+        };
+        task.setOnSucceeded(e -> {
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Imported " + task.getValue() + " document(s) into " + collection);
+            logger.accept("Mongo import: " + task.getValue() + " document(s) into " + collection);
+            run();
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Import failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /**
+     * The CSV field-mapping step: one row per column with its target field path (dotted paths build
+     * nested documents), a toggle for type inference, and a preview of the first document as it would
+     * be stored.
+     *
+     * @return the documents to insert, or {@code null} if the user cancelled
+     */
+    private java.util.List<org.bson.Document> csvImportDialog(String csvText) {
+        java.util.List<java.util.List<String>> rows = parseCsv(csvText);
+        if (rows.isEmpty()) { statusLabel.setText("The CSV file is empty"); return null; }
+        java.util.List<String> header = rows.get(0);
+        java.util.List<java.util.List<String>> dataRows = rows.subList(1, rows.size());
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Import CSV");
+        dialog.setHeaderText(dataRows.size() + " row(s) → " + activeCollection
+                + "\nMap each column to a field; leave one blank to skip it. Dotted paths nest.");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        java.util.List<TextField> targets = new java.util.ArrayList<>();
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(4);
+        grid.setPadding(new Insets(12));
+        grid.addRow(0, boldLabel("CSV column"), boldLabel("First value"), boldLabel("Field path"));
+        for (int i = 0; i < header.size(); i++) {
+            TextField target = new TextField(header.get(i).trim());
+            targets.add(target);
+            String sample = dataRows.isEmpty() || i >= dataRows.get(0).size() ? "" : dataRows.get(0).get(i);
+            grid.addRow(i + 1, new Label(header.get(i)), metaLabel(sample), target);
+        }
+        CheckBox typed = new CheckBox("Infer types (numbers, booleans, dates) instead of storing text");
+        typed.setSelected(true);
+        Label preview = new Label();
+        preview.getStyleClass().add("meta-label");
+        preview.setWrapText(true);
+        Runnable refresh = () -> {
+            java.util.List<String> mapping = targets.stream().map(TextField::getText).toList();
+            var sample = com.nexuslink.protocol.mongo.CollectionTransfer.fromCsvRows(
+                    mapping, dataRows.isEmpty() ? java.util.List.of() : java.util.List.of(dataRows.get(0)),
+                    typed.isSelected());
+            preview.setText(sample.isEmpty() ? "(nothing mapped)"
+                    : "First document: " + sample.get(0).toJson());
+        };
+        typed.setOnAction(e -> refresh.run());
+        for (TextField t : targets) t.textProperty().addListener((o, ov, nv) -> refresh.run());
+        refresh.run();
+
+        VBox content = new VBox(8, new ScrollPane(grid), typed, preview);
+        content.setPadding(new Insets(6));
+        ((ScrollPane) content.getChildren().get(0)).setFitToWidth(true);
+        ((ScrollPane) content.getChildren().get(0)).setPrefHeight(320);
+        dialog.getDialogPane().setContent(content);
+        dialog.setResizable(true);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return null;
+
+        return com.nexuslink.protocol.mongo.CollectionTransfer.fromCsvRows(
+                targets.stream().map(TextField::getText).toList(), dataRows, typed.isSelected());
+    }
+
+    private static Label boldLabel(String text) {
+        Label l = new Label(text);
+        l.setStyle("-fx-font-weight: bold;");
+        return l;
+    }
+
+    /** A minimal RFC 4180 reader — quoted fields, doubled quotes, CRLF or LF. */
+    private static java.util.List<java.util.List<String>> parseCsv(String text) {
+        java.util.List<java.util.List<String>> rows = new java.util.ArrayList<>();
+        java.util.List<String> row = new java.util.ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (quoted) {
+                if (c == '"') {
+                    if (i + 1 < text.length() && text.charAt(i + 1) == '"') { field.append('"'); i++; }
+                    else quoted = false;
+                } else field.append(c);
+                continue;
+            }
+            switch (c) {
+                case '"' -> quoted = true;
+                case ',' -> { row.add(field.toString()); field.setLength(0); }
+                case '\r' -> { }
+                case '\n' -> {
+                    row.add(field.toString());
+                    field.setLength(0);
+                    rows.add(row);
+                    row = new java.util.ArrayList<>();
+                }
+                default -> field.append(c);
+            }
+        }
+        if (field.length() > 0 || !row.isEmpty()) { row.add(field.toString()); rows.add(row); }
+        return rows;
+    }
+
     private void exportResults(boolean csv) {
         if (lastDocs.isEmpty()) { statusLabel.setText("Run a find/SQL query first"); return; }
         javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
@@ -594,7 +835,12 @@ public final class MongoClientView extends BorderPane {
         exportJson.setOnAction(e -> exportResults(false));
         MenuItem exportCsv = new MenuItem("Export CSV…");
         exportCsv.setOnAction(e -> exportResults(true));
-        exportBtn.getItems().addAll(exportJson, exportCsv);
+        MenuItem exportCollection = new MenuItem("Export whole collection…");
+        exportCollection.setOnAction(e -> exportCollectionDialog());
+        MenuItem importCollection = new MenuItem("Import into collection…");
+        importCollection.setOnAction(e -> importCollectionDialog());
+        exportBtn.getItems().addAll(exportJson, exportCsv, new SeparatorMenuItem(),
+                exportCollection, importCollection);
 
         MenuButton structureBtn = new MenuButton("Structure");
         structureBtn.getStyleClass().add("btn-secondary");

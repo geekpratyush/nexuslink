@@ -1568,7 +1568,10 @@ protocol clients from becoming thirteen codebases. **Start here.**
 
 ### 10.1–10.6 rollup
 
-- [ ] **10.1 MongoDB** — P1 complete (Compass/Studio 3T parity)
+- [x] **10.1 MongoDB** — **all 7 P1 items shipped 2026-08-26** (Compass/Studio 3T parity): MG-1 mongosh-style
+      shell · MG-2 tree/table/JSON views · MG-3 typed in-place editing · MG-4 query bar + saved queries ·
+      MG-5 collection import/export · MG-6 index usage + advice · MG-7 schema analyser. P2/P3 remain —
+      see the spec.
 - [ ] **10.2 SQL beyond parity** — `SQLX-1` (DML undo + blast radius) and `SQLX-2` shipped
 - [ ] **10.3 File transfer** — P1 complete (FileZilla/WinSCP parity)
 - [ ] **10.4 IBM MQ** — P1 complete (PCF layer, explorer, message browser, DLQ replay)

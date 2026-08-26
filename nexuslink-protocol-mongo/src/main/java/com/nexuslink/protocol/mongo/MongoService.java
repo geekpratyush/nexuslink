@@ -561,6 +561,82 @@ public final class MongoService implements AutoCloseable {
     // ---- users / auth ----
 
     /**
+     * Exports a whole collection to a file, streaming rather than loading it into memory: documents
+     * are written as they arrive from the cursor, so a collection larger than the heap still exports.
+     *
+     * <p>CSV needs a header before the first row, so the column set is taken from a bounded sample
+     * first ({@code headerSample} documents) — otherwise it could only be known after reading
+     * everything. Fields outside that sample are not exported to CSV; JSON has no such limit.
+     *
+     * @param progress called with the running document count, for a progress bar
+     * @return the number of documents written
+     */
+    public long exportCollection(String collection, String filterJson, CollectionTransfer.Format format,
+                                 java.nio.file.Path file, int headerSample,
+                                 java.util.function.LongConsumer progress) throws java.io.IOException {
+        Bson filter = parseFilter(filterJson);
+        List<String> columns = List.of();
+        if (format == CollectionTransfer.Format.CSV) {
+            List<Document> sample = new ArrayList<>();
+            for (Document d : collection(collection).find(filter).limit(Math.max(1, headerSample))) {
+                sample.add(d);
+            }
+            columns = CollectionTransfer.columnsOf(sample);
+        }
+
+        long written = 0;
+        try (java.io.BufferedWriter out = java.nio.file.Files.newBufferedWriter(file,
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            if (format == CollectionTransfer.Format.CSV) {
+                out.write(CollectionTransfer.toCsvHeader(columns));
+                out.write("\n");
+            } else if (format == CollectionTransfer.Format.JSON_ARRAY) {
+                out.write("[\n");
+            }
+            boolean first = true;
+            for (Document d : collection(collection).find(filter)) {
+                switch (format) {
+                    case CSV -> { out.write(CollectionTransfer.toCsvRow(d, columns)); out.write("\n"); }
+                    case JSON_LINES -> { out.write(CollectionTransfer.toJsonLine(d)); out.write("\n"); }
+                    case JSON_ARRAY -> {
+                        if (!first) out.write(",\n");
+                        out.write("  ");
+                        out.write(CollectionTransfer.toJsonLine(d));
+                    }
+                }
+                first = false;
+                written++;
+                if (progress != null && written % 500 == 0) progress.accept(written);
+            }
+            if (format == CollectionTransfer.Format.JSON_ARRAY) out.write("\n]\n");
+        }
+        if (progress != null) progress.accept(written);
+        return written;
+    }
+
+    /**
+     * Inserts documents in batches, reporting progress as it goes. Batching is what makes an import
+     * of any size finish in reasonable time; the batch is deliberately unordered so one bad document
+     * does not stop the rest.
+     *
+     * @return the number of documents inserted
+     */
+    public long importDocuments(String collection, List<Document> documents, int batchSize,
+                                java.util.function.LongConsumer progress) {
+        if (documents == null || documents.isEmpty()) return 0;
+        int size = Math.max(1, Math.min(batchSize, 10_000));
+        var options = new com.mongodb.client.model.InsertManyOptions().ordered(false);
+        long inserted = 0;
+        for (int i = 0; i < documents.size(); i += size) {
+            List<Document> batch = documents.subList(i, Math.min(documents.size(), i + size));
+            collection(collection).insertMany(batch, options);
+            inserted += batch.size();
+            if (progress != null) progress.accept(inserted);
+        }
+        return inserted;
+    }
+
+    /**
      * Samples up to {@code sampleSize} documents and profiles their shape — the schema analyser.
      * Sampling uses {@code $sample} so it is spread across the collection rather than being the first
      * page, which is what makes an optional field show up at all.
