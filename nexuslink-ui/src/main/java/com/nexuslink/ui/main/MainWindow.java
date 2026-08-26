@@ -513,6 +513,8 @@ public final class MainWindow {
         view.setLogger(this::log);
         view.setOnSave(this::saveConnection);
         addTab("Mongo " + (++newTabCounter), view);
+        // A change stream runs on its own thread; stop it (and the connection) with the tab.
+        workspace.getTabs().get(workspace.getTabs().size() - 1).setOnClosed(e -> view.dispose());
         return view;
     }
 

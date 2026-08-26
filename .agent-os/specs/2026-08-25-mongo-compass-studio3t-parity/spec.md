@@ -90,7 +90,13 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
       stages** button, a per-stage result list (failures red, the emptying stage amber) and the sample
       documents for the selected stage. 17 unit tests + live coverage. — output documents and a count after each stage,
       the feature Studio 3T's pipeline editor is actually bought for.
-- [ ] **MG-9 Change streams panel** — watch a collection/database, stream inserts/updates/deletes into a
+- [x] **MG-9 Change streams panel** *(2026-08-26)* `watchChanges` opens a change stream on a collection
+      or the whole database on a daemon thread; `ChangeEvent` flattens each change into a log line
+      (operation · namespace · `_id` · the *updated fields*, not the whole document). A standalone is
+      refused up front with "change streams need a replica set", not a driver error. UI: a **Watch**
+      tab with start/stop, a text filter and a bounded log; the watch stops with the tab.
+      **Live-verified** against a new single-node replica-set fixture (`mongo-rs`, port 27018) —
+      inserts/updates/deletes all arrive, and stopping the watch genuinely ends it. — watch a collection/database, stream inserts/updates/deletes into a
       bounded log with a filter, like the MQTT/Redis pub-sub panels already do.
 - [x] **MG-10 `currentOp` / kill-op and the profiler** *(2026-08-26)* `currentOperations(minSeconds)`
       (longest first, with opid), `killOperation`, `setProfilingLevel`/`profilingStatus` and
@@ -104,7 +110,11 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
 - [x] **MG-13 Replica-set / sharding status panel** *(2026-08-26)* `topologyStatus()` renders replica-set
       members with role, health and **seconds behind primary**, or a cluster's shards (flagging draining
       ones); a standalone says so rather than showing an empty table. UI: **Server… ▸ Topology**. — `rs.status()`, `sh.status()`, member lag and roles.
-- [ ] **MG-14 Bulk update/delete guardrail** — count-first, "this touches 12,431 documents", typed
+- [x] **MG-14 Bulk update/delete guardrail** *(2026-08-26)* `updateMany`/`deleteMany` now count first
+      and confirm: "Update 12,431 document(s) in orders?" with the filter shown. An **unfiltered** write
+      — the `deleteMany({})` that empties a collection — additionally requires typing the collection
+      name before the button enables, because a dialog you can dismiss with Enter is not a guardrail.
+      Nothing matching is reported without a dialog at all. — count-first, "this touches 12,431 documents", typed
       confirmation on a production-tagged connection. Shares the SQL client's governed-execution work
       (`SQLX-2`).
 - [x] **MG-15 Explain for aggregate**, and a readable plan rendering *(2026-08-26)* Pure

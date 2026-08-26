@@ -59,6 +59,19 @@ services:
       timeout: 5s
       retries: 20
 
+  # A single-node replica set on 27018. Change streams and transactions need an oplog, so a
+  # standalone mongod cannot exercise them at all — this is the fixture for MG-9 / MG-13.
+  mongo-rs:                                    # SSPL (run-only test fixture)
+    image: mongo:7
+    ports: ["27018:27018"]
+    command: ["mongod", "--replSet", "nexusrs", "--port", "27018", "--bind_ip_all"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--quiet", "--eval",
+             "try { rs.status().ok } catch (e) { rs.initiate({_id:'nexusrs',members:[{_id:0,host:'localhost:27018'}]}).ok }"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
   # ---- PHASE 8: Redis ----
   redis:                                       # BSD-3-Clause
     image: redis:7-alpine

@@ -276,6 +276,72 @@ public final class MongoService implements AutoCloseable {
     }
 
     /**
+     * Watches a collection (or the whole database when {@code collection} is blank) and reports each
+     * change as it happens — the change-streams panel.
+     *
+     * <p>Change streams need an oplog, so they only exist on a replica set or a sharded cluster; a
+     * standalone is refused up front with that explanation rather than a driver error. The returned
+     * handle stops the watch and closes the cursor.
+     *
+     * @param onChange called on the watching thread for every change event
+     * @param onError  called once if the stream ends unexpectedly
+     */
+    public ChangeWatch watchChanges(String collection, String pipelineJson,
+                                    java.util.function.Consumer<ChangeEvent> onChange,
+                                    java.util.function.Consumer<String> onError) {
+        if (!serverInfo().supportsChangeStreams()) {
+            throw new UnsupportedOperationException(
+                    "Change streams need a replica set or a sharded cluster; this is a standalone server");
+        }
+        List<Document> pipeline = pipelineJson == null || pipelineJson.isBlank()
+                ? List.of() : PipelinePlan.parse(pipelineJson);
+        var stream = collection == null || collection.isBlank()
+                ? db().watch(pipeline) : collection(collection).watch(pipeline);
+
+        java.util.concurrent.atomic.AtomicBoolean running = new java.util.concurrent.atomic.AtomicBoolean(true);
+        // The cursor is held so stopping can close it: the watching thread blocks inside hasNext()
+        // waiting for the next change, so a flag alone would not take effect until one arrived — and
+        // that change would be delivered after the caller had already stopped watching.
+        java.util.concurrent.atomic.AtomicReference<com.mongodb.client.MongoCursor<?>> cursorRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread thread = new Thread(() -> {
+            try (var cursor = stream.cursor()) {
+                cursorRef.set(cursor);
+                while (running.get() && cursor.hasNext()) {
+                    var change = cursor.next();
+                    if (!running.get()) break;
+                    onChange.accept(ChangeEvent.of(change));
+                }
+            } catch (RuntimeException e) {
+                if (running.get() && onError != null) onError.accept(e.getMessage());
+            }
+        }, "mongo-change-stream");
+        thread.setDaemon(true);
+        thread.start();
+        return () -> {
+            running.set(false);
+            var cursor = cursorRef.get();
+            if (cursor != null) {
+                try { cursor.close(); } catch (RuntimeException ignored) { }
+            }
+        };
+    }
+
+    /** Stops a change-stream watch. */
+    @FunctionalInterface
+    public interface ChangeWatch extends AutoCloseable {
+        @Override void close();
+    }
+
+    /**
+     * Counts what a filter would touch <em>before</em> the write runs — the guardrail behind bulk
+     * update and delete. "This matches 12,431 documents" is the sentence that stops the accident.
+     */
+    public long countAffected(String collection, String filterJson) {
+        return countDocuments(collection, filterJson);
+    }
+
+    /**
      * {@code explain} for a find, read down to the numbers that matter — which index was used and how
      * many documents were examined per document returned. The raw plan is still available through
      * {@link #explain}; this is the readable rendering.

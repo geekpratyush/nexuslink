@@ -52,6 +52,11 @@ public final class MongoClientView extends BorderPane {
     private final TextArea shellOutput = new TextArea();
     private final java.util.LinkedList<String> shellHistory = new java.util.LinkedList<>();
     private int shellHistoryIndex = -1;
+    // Change streams: a bounded, filterable log of what is happening in the collection right now.
+    private final TextArea watchLog = new TextArea();
+    private final TextField watchFilter = new TextField();
+    private com.nexuslink.protocol.mongo.MongoService.ChangeWatch activeWatch;
+    private final java.util.concurrent.atomic.AtomicLong watchCount = new java.util.concurrent.atomic.AtomicLong();
     private final org.fxmisc.richtext.CodeArea resultArea = com.nexuslink.ui.util.JsonView.area(false);
     private final org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> resultScroll =
             new org.fxmisc.flowless.VirtualizedScrollPane<>(resultArea);
@@ -1187,7 +1192,9 @@ public final class MongoClientView extends BorderPane {
         queryTab.setClosable(false);
         Tab shellTab = new Tab("Shell", buildShellPane());
         shellTab.setClosable(false);
-        TabPane rightTabs = new TabPane(queryTab, shellTab);
+        Tab watchTab = new Tab("Watch", buildWatchPane());
+        watchTab.setClosable(false);
+        TabPane rightTabs = new TabPane(queryTab, shellTab, watchTab);
         rightTabs.getStyleClass().add("editor-tabs");
 
         SplitPane sp = new SplitPane(explorer, rightTabs);
@@ -1354,6 +1361,117 @@ public final class MongoClientView extends BorderPane {
         return pane;
     }
 
+    /**
+     * The change-streams panel: watch a collection (or the whole database) and log inserts, updates,
+     * replaces and deletes as they happen — the same shape as the MQTT and Redis pub/sub panels.
+     *
+     * <p>Change streams need an oplog, so a standalone server is told that plainly rather than being
+     * left with a driver error. The log is bounded, and a text filter keeps only matching lines.
+     */
+    private javafx.scene.Node buildWatchPane() {
+        watchLog.setEditable(false);
+        watchLog.getStyleClass().add("code-area");
+        watchLog.setPromptText("Start watching to see inserts, updates and deletes as they happen");
+        VBox.setVgrow(watchLog, Priority.ALWAYS);
+
+        watchFilter.getStyleClass().add("nl-field");
+        watchFilter.setPromptText("only log lines containing…");
+        HBox.setHgrow(watchFilter, Priority.ALWAYS);
+
+        CheckBox wholeDatabase = new CheckBox("Whole database");
+        wholeDatabase.setTooltip(new Tooltip("Watch every collection in the database, not just the selected one"));
+
+        Button start = new Button("Start watching");
+        start.getStyleClass().add("btn-primary");
+        Button stop = new Button("Stop");
+        stop.getStyleClass().add("btn-secondary");
+        stop.setDisable(true);
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> { watchLog.clear(); watchCount.set(0); });
+
+        Label watchStatus = new Label("Not watching");
+        watchStatus.getStyleClass().add("meta-label");
+
+        start.setOnAction(e -> {
+            if (!service.isConnected()) { watchStatus.setText("Connect first"); return; }
+            String target = wholeDatabase.isSelected() ? null : activeCollection;
+            if (target == null && !wholeDatabase.isSelected()) {
+                watchStatus.setText("Select a collection, or tick Whole database");
+                return;
+            }
+            if (activeDb != null) service.useDatabase(activeDb);
+            try {
+                activeWatch = service.watchChanges(target, "",
+                        event -> Platform.runLater(() -> appendWatch(event)),
+                        error -> Platform.runLater(() -> {
+                            watchStatus.getStyleClass().setAll("status-err");
+                            watchStatus.setText("Stream ended: " + error);
+                            start.setDisable(false);
+                            stop.setDisable(true);
+                        }));
+            } catch (UnsupportedOperationException unsupported) {
+                watchStatus.getStyleClass().setAll("status-4xx");
+                watchStatus.setText(unsupported.getMessage());
+                return;
+            } catch (RuntimeException ex) {
+                watchStatus.getStyleClass().setAll("status-err");
+                watchStatus.setText("Could not start: " + ex.getMessage());
+                return;
+            }
+            watchStatus.getStyleClass().setAll("status-2xx");
+            watchStatus.setText("Watching " + (target == null ? activeDb + " (whole database)" : target));
+            start.setDisable(true);
+            stop.setDisable(false);
+        });
+        stop.setOnAction(e -> {
+            stopWatching();
+            watchStatus.getStyleClass().setAll("meta-label");
+            watchStatus.setText("Stopped after " + watchCount.get() + " change(s)");
+            start.setDisable(false);
+            stop.setDisable(true);
+        });
+
+        HBox tools = new HBox(8, start, stop, clear, wholeDatabase, watchStatus);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        HBox filterRow = new HBox(8, metaLabel("Filter:"), watchFilter);
+        filterRow.setAlignment(Pos.CENTER_LEFT);
+        VBox pane = new VBox(6, tools, filterRow, watchLog);
+        pane.setPadding(new Insets(8));
+        return pane;
+    }
+
+    /** Appends one change to the bounded log, honouring the text filter. */
+    private void appendWatch(com.nexuslink.protocol.mongo.ChangeEvent event) {
+        String line = event.line();
+        String filter = watchFilter.getText();
+        if (filter != null && !filter.isBlank()
+                && !line.toLowerCase(java.util.Locale.ROOT).contains(filter.toLowerCase(java.util.Locale.ROOT))) {
+            return;
+        }
+        watchCount.incrementAndGet();
+        // Bounded: an active collection would otherwise fill the pane (and the heap) unattended.
+        if (watchLog.getLength() > 200_000) watchLog.deleteText(0, 100_000);
+        watchLog.appendText(line + "\n");
+    }
+
+    /**
+     * Releases the tab's resources: stops any change stream and closes the connection. Called by the
+     * main window when the tab is closed, so a watch thread does not outlive the tab that started it.
+     */
+    public void dispose() {
+        stopWatching();
+        service.close();
+    }
+
+    /** Stops any active watch — also called when the tab closes. */
+    private void stopWatching() {
+        if (activeWatch != null) {
+            activeWatch.close();
+            activeWatch = null;
+        }
+    }
+
     /** Runs the shell line, printing the command and its reply into the transcript. */
     private void runShellLine() {
         String line = shellInput.getText();
@@ -1481,6 +1599,17 @@ public final class MongoClientView extends BorderPane {
         String collection = activeCollection;
         int limit = parseLimit();
         com.nexuslink.protocol.mongo.MongoQuerySpec spec = currentSpec();
+
+        // Bulk writes are counted first and confirmed: "this touches 12,431 documents" is the
+        // sentence that stops the accident, and Compass will happily let you deleteMany({}).
+        if ("updateMany".equals(mode) || "deleteMany".equals(mode)) {
+            String filterPart = "updateMany".equals(mode)
+                    ? body.split("\\|\\|\\|", 2)[0].trim() : body;
+            if (!confirmBulkWrite(mode, collection, filterPart)) {
+                resultStatus.setText("Cancelled");
+                return;
+            }
+        }
         resultStatus.setText("Running " + mode + "…");
         logger.accept("Mongo " + mode + (collection == null ? "" : " → " + collection));
 
@@ -1505,6 +1634,7 @@ public final class MongoClientView extends BorderPane {
                         yield service.updateMany(collection, parts[0].trim(), parts[1].trim()) + " document(s) modified";
                     }
                     case "deleteMany" -> service.deleteMany(collection, body) + " document(s) deleted";
+
                     default -> "";
                 };
             }
@@ -1533,6 +1663,66 @@ public final class MongoClientView extends BorderPane {
      * Renders a detailed find, keeping the driver's decoded documents rather than re-parsing the JSON
      * we just printed — that round trip is what loses Int64 / Decimal128 / Date types in the tree.
      */
+    /**
+     * Counts what a bulk write would touch and asks before running it. An unfiltered write — the
+     * {@code deleteMany({})} that empties a collection — has to be typed out to proceed, because a
+     * dialog you can dismiss with Enter is not a guardrail.
+     *
+     * @return {@code true} to go ahead
+     */
+    private boolean confirmBulkWrite(String mode, String collection, String filterJson) {
+        long affected;
+        try {
+            affected = service.countAffected(collection, filterJson);
+        } catch (RuntimeException e) {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Could not count what this would touch: " + e.getMessage());
+            return false;
+        }
+        if (affected == 0) {
+            resultStatus.getStyleClass().setAll("meta-label");
+            resultStatus.setText("Nothing matches that filter — nothing to do");
+            return false;
+        }
+        boolean unfiltered = filterJson == null || filterJson.isBlank() || filterJson.trim().equals("{}");
+        String verb = "deleteMany".equals(mode) ? "Delete" : "Update";
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Confirm bulk " + ("deleteMany".equals(mode) ? "delete" : "update"));
+        dialog.setHeaderText(verb + " " + affected + " document(s) in " + collection + "?");
+        ButtonType go = new ButtonType(verb + " " + affected, ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(go, ButtonType.CANCEL);
+
+        VBox content = new VBox(8);
+        content.setPadding(new Insets(12));
+        Label filterLabel = new Label("Filter: " + (unfiltered ? "{}  — every document in the collection"
+                : filterJson));
+        filterLabel.setWrapText(true);
+        content.getChildren().add(filterLabel);
+
+        TextField confirmField = new TextField();
+        if (unfiltered) {
+            Label warn = new Label("This has no filter: it touches the whole collection and cannot be undone.");
+            warn.getStyleClass().add("status-err");
+            warn.setWrapText(true);
+            confirmField.setPromptText("type the collection name to confirm");
+            content.getChildren().addAll(warn, new Label("Type “" + collection + "” to continue:"),
+                    confirmField);
+        }
+        dialog.getDialogPane().setContent(content);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        if (unfiltered) {
+            Platform.runLater(() -> {
+                var button = dialog.getDialogPane().lookupButton(go);
+                if (button != null) {
+                    button.disableProperty().bind(confirmField.textProperty().isEqualTo(collection).not());
+                }
+            });
+        }
+        return dialog.showAndWait().orElse(ButtonType.CANCEL) == go;
+    }
+
     private String renderFind(com.nexuslink.protocol.mongo.MongoFindResult r) {
         if (!r.success()) throw new RuntimeException(r.error());
         Platform.runLater(() -> resultStatus.setText(r.count() + " doc(s) · " + r.durationMs() + " ms"));

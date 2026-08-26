@@ -1570,8 +1570,12 @@ protocol clients from becoming thirteen codebases. **Start here.**
 
 - [x] **10.1 MongoDB** — **all 7 P1 items shipped 2026-08-26** (Compass/Studio 3T parity): MG-1 mongosh-style
       shell · MG-2 tree/table/JSON views · MG-3 typed in-place editing · MG-4 query bar + saved queries ·
-      MG-5 collection import/export · MG-6 index usage + advice · MG-7 schema analyser. P2/P3 remain —
-      see the spec.
+      MG-5 collection import/export · MG-6 index usage + advice · MG-7 schema analyser.
+      **6 of 8 P2 also shipped:** MG-8 stage-by-stage pipeline preview · MG-9 change streams panel
+      (new `mongo-rs` replica-set fixture in `test-env`) · MG-10 currentOp/kill-op + profiler ·
+      MG-13 replica-set/sharding status · MG-14 bulk-write guardrail · MG-15 readable explain +
+      explain for aggregate. **Remaining: MG-11** (collection compare/sync) and **MG-12** (GridFS
+      browser), plus the three P3s — see the spec.
 - [ ] **10.2 SQL beyond parity** — `SQLX-1` (DML undo + blast radius) and `SQLX-2` shipped
 - [ ] **10.3 File transfer** — P1 complete (FileZilla/WinSCP parity)
 - [ ] **10.4 IBM MQ** — P1 complete (PCF layer, explorer, message browser, DLQ replay)
