@@ -275,6 +275,196 @@ public final class MongoService implements AutoCloseable {
         return t;
     }
 
+    /**
+     * {@code explain} for a find, read down to the numbers that matter — which index was used and how
+     * many documents were examined per document returned. The raw plan is still available through
+     * {@link #explain}; this is the readable rendering.
+     */
+    public ExplainSummary explainSummary(String collection, String filterJson) {
+        try {
+            Document plan = collection(collection).find(parseFilter(filterJson))
+                    .explain(com.mongodb.ExplainVerbosity.EXECUTION_STATS);
+            return ExplainSummary.of(plan);
+        } catch (RuntimeException e) {
+            return ExplainSummary.unknown();
+        }
+    }
+
+    /**
+     * {@code explain} for an aggregation pipeline — the gap the find-only explain left. Returns the
+     * raw plan as shell JSON, since an aggregation plan is per-stage and has no single winning plan
+     * to summarise.
+     */
+    public String explainAggregate(String collection, String pipelineJson) {
+        List<Document> stages = PipelinePlan.parse(pipelineJson);
+        Document plan = collection(collection).aggregate(stages)
+                .explain(com.mongodb.ExplainVerbosity.EXECUTION_STATS);
+        return plan == null ? "(no plan returned)" : plan.toJson(SHELL);
+    }
+
+    /**
+     * Replica-set or sharding status: members, their roles and their replication lag, or the shards
+     * of a cluster. Empty when the deployment is a standalone, which has neither.
+     */
+    public List<String> topologyStatus() {
+        MongoServerInfo info = serverInfo();
+        List<String> out = new ArrayList<>();
+        if (info.topology() == MongoServerInfo.Topology.STANDALONE) {
+            out.add("Standalone deployment — no replica set or shards");
+            return out;
+        }
+        try {
+            if (info.topology() == MongoServerInfo.Topology.SHARDED) {
+                Document shards = client.getDatabase("admin").runCommand(new Document("listShards", 1));
+                for (Object shard : (List<?>) shards.getOrDefault("shards", List.of())) {
+                    Document d = (Document) shard;
+                    out.add(d.get("_id") + " → " + d.get("host")
+                            + (Boolean.TRUE.equals(d.get("draining")) ? "  (draining)" : ""));
+                }
+                return out;
+            }
+            Document status = client.getDatabase("admin").runCommand(new Document("replSetGetStatus", 1));
+            out.add("Replica set: " + status.get("set"));
+            Object primaryOptime = null;
+            for (Object member : (List<?>) status.getOrDefault("members", List.of())) {
+                Document m = (Document) member;
+                if ("PRIMARY".equals(m.get("stateStr"))) primaryOptime = m.get("optimeDate");
+            }
+            for (Object member : (List<?>) status.getOrDefault("members", List.of())) {
+                Document m = (Document) member;
+                StringBuilder line = new StringBuilder(String.valueOf(m.get("name")))
+                        .append("  ").append(m.get("stateStr"));
+                if (m.get("optimeDate") instanceof java.util.Date optime
+                        && primaryOptime instanceof java.util.Date primary) {
+                    long lagSeconds = (primary.getTime() - optime.getTime()) / 1000;
+                    if (lagSeconds > 0) line.append("  · ").append(lagSeconds).append("s behind primary");
+                }
+                if (m.get("health") instanceof Number health && health.intValue() != 1) {
+                    line.append("  · UNHEALTHY");
+                }
+                out.add(line.toString());
+            }
+        } catch (RuntimeException e) {
+            out.add("Could not read topology status: " + e.getMessage());
+        }
+        return out;
+    }
+
+    /**
+     * The operations running right now ({@code currentOp}), longest first — the panel that answers
+     * "what is the server doing". Each line names the operation, how long it has been running, and
+     * its {@code opid}, which is what {@link #killOperation} needs.
+     */
+    public List<String> currentOperations(long minimumSeconds) {
+        List<String> out = new ArrayList<>();
+        try {
+            Document result = client.getDatabase("admin").runCommand(new Document("currentOp", 1)
+                    .append("secs_running", new Document("$gte", Math.max(0, minimumSeconds))));
+            List<?> operations = (List<?>) result.getOrDefault("inprog", List.of());
+            List<Document> sorted = new ArrayList<>();
+            for (Object o : operations) sorted.add((Document) o);
+            sorted.sort((a, b) -> Long.compare(seconds(b), seconds(a)));
+            for (Document op : sorted) {
+                out.add("opid " + op.get("opid") + "  ·  " + seconds(op) + "s  ·  "
+                        + op.getOrDefault("op", "?") + " on " + op.getOrDefault("ns", "?")
+                        + (op.get("client") == null ? "" : "  ·  " + op.get("client")));
+            }
+            if (out.isEmpty()) out.add("No operations running longer than " + minimumSeconds + "s");
+        } catch (RuntimeException e) {
+            out.add("Could not read currentOp: " + e.getMessage());
+        }
+        return out;
+    }
+
+    private static long seconds(Document operation) {
+        Object secs = operation.get("secs_running");
+        return secs instanceof Number n ? n.longValue() : 0;
+    }
+
+    /** Kills a running operation by its {@code opid}. */
+    public void killOperation(Object opid) {
+        client.getDatabase("admin").runCommand(new Document("killOp", 1).append("op", opid));
+    }
+
+    /**
+     * The database profiler's level: 0 off, 1 slow operations only, 2 everything. {@code slowMs} sets
+     * the threshold for level 1.
+     */
+    public void setProfilingLevel(int level, int slowMs) {
+        db().runCommand(new Document("profile", Math.max(0, Math.min(2, level)))
+                .append("slowms", Math.max(0, slowMs)));
+    }
+
+    /** The current profiler level and slow-operation threshold. */
+    public String profilingStatus() {
+        try {
+            Document result = db().runCommand(new Document("profile", -1));
+            return "level " + result.getOrDefault("was", "?")
+                    + " · slowms " + result.getOrDefault("slowms", "?");
+        } catch (RuntimeException e) {
+            return "unavailable: " + e.getMessage();
+        }
+    }
+
+    /** The slowest profiled operations from {@code system.profile}, newest first. */
+    public List<String> slowOperations(int limit) {
+        List<String> out = new ArrayList<>();
+        try {
+            for (Document d : db().getCollection("system.profile")
+                    .find().sort(new Document("ts", -1)).limit(Math.max(1, limit))) {
+                out.add(d.getOrDefault("millis", "?") + " ms  ·  " + d.getOrDefault("op", "?")
+                        + " on " + d.getOrDefault("ns", "?") + "  ·  " + d.getOrDefault("ts", ""));
+            }
+            if (out.isEmpty()) out.add("Nothing profiled yet — set the profiler level to start collecting");
+        } catch (RuntimeException e) {
+            out.add("Could not read system.profile: " + e.getMessage());
+        }
+        return out;
+    }
+
+    /**
+     * Runs an aggregation pipeline one stage at a time, reporting after each what survived: the
+     * document count, how it moved, and a sample of the output.
+     *
+     * <p>Each stage costs two cheap queries (a {@code $count} and a {@code $limit}ed sample) rather
+     * than materialising the pipeline, and a stage that fails stops the walk — everything after it
+     * would fail the same way, and the first error is the one worth reading.
+     */
+    public List<StagePreview> previewPipeline(String collection, String pipelineJson, int sampleSize) {
+        List<Document> stages;
+        try {
+            stages = PipelinePlan.parse(pipelineJson);
+        } catch (PipelinePlan.PipelineException e) {
+            return List.of(StagePreview.failed(Math.max(0, e.stageIndex()), "pipeline", e.getMessage(), 0));
+        }
+        List<StagePreview> out = new ArrayList<>(stages.size());
+        long previous = -1;
+        for (int i = 0; i < stages.size(); i++) {
+            long start = System.nanoTime();
+            String name = PipelinePlan.stageName(stages.get(i));
+            try {
+                long count = 0;
+                Document counted = collection(collection)
+                        .aggregate(PipelinePlan.countAt(stages, i)).first();
+                if (counted != null) {
+                    Object value = counted.get("count");
+                    count = value instanceof Number n ? n.longValue() : 1;
+                }
+                List<String> sample = new ArrayList<>();
+                for (Document d : collection(collection)
+                        .aggregate(PipelinePlan.sampleAt(stages, i, sampleSize))) {
+                    sample.add(d.toJson(SHELL));
+                }
+                out.add(new StagePreview(i, name, count, previous, sample, ms(start), null));
+                previous = count;
+            } catch (RuntimeException e) {
+                out.add(StagePreview.failed(i, name, e.getMessage(), ms(start)));
+                break;   // every later stage would fail on the same input
+            }
+        }
+        return out;
+    }
+
     public long countDocuments(String collection, String filterJson) {
         return collection(collection).countDocuments(parseFilter(filterJson));
     }

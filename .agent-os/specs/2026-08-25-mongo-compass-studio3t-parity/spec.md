@@ -82,22 +82,37 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
 
 ## Gaps — P2 (heavy / operational users)
 
-- [ ] **MG-8 Aggregation pipeline stage-by-stage preview** — output documents and a count after each stage,
+- [x] **MG-8 Aggregation pipeline stage-by-stage preview** *(2026-08-26)* Pure `PipelinePlan` builds the
+      prefix, sample (`+ $limit`) and count (`+ $count`) queries per stage and validates each stage is a
+      single `$operator`, naming the offending stage index; `StagePreview` reports the count, the delta
+      from the previous stage and flags **the stage where the documents run out**. `previewPipeline`
+      walks the stages, stopping at the first failure. UI: the pipeline builder gained a **Preview
+      stages** button, a per-stage result list (failures red, the emptying stage amber) and the sample
+      documents for the selected stage. 17 unit tests + live coverage. — output documents and a count after each stage,
       the feature Studio 3T's pipeline editor is actually bought for.
 - [ ] **MG-9 Change streams panel** — watch a collection/database, stream inserts/updates/deletes into a
       bounded log with a filter, like the MQTT/Redis pub-sub panels already do.
-- [ ] **MG-10 `currentOp` / kill-op and the profiler** — running operations, slow-query profile level
+- [x] **MG-10 `currentOp` / kill-op and the profiler** *(2026-08-26)* `currentOperations(minSeconds)`
+      (longest first, with opid), `killOperation`, `setProfilingLevel`/`profilingStatus` and
+      `slowOperations` reading `system.profile`. UI: **Server… ▸ Operations** (filter by duration, kill
+      with a confirm) and **▸ Profiler** (level + slow-ms, slowest operations). Live-verified. — running operations, slow-query profile level
       control, and a slow-op table. No desktop client does this well.
 - [ ] **MG-11 Collection compare / sync between two connections** (Studio 3T's Data Compare) — document diff
       by `_id`, then a generated apply script. Reuse the `DirectoryDiff` mental model from the file commander.
 - [ ] **MG-12 GridFS browser** — list buckets/files, upload, download, delete. The file commander's
       `FileSystem` seam already fits: a `GridFsFileSystem` gives the whole two-pane commander for free.
-- [ ] **MG-13 Replica-set / sharding status panel** — `rs.status()`, `sh.status()`, member lag and roles.
+- [x] **MG-13 Replica-set / sharding status panel** *(2026-08-26)* `topologyStatus()` renders replica-set
+      members with role, health and **seconds behind primary**, or a cluster's shards (flagging draining
+      ones); a standalone says so rather than showing an empty table. UI: **Server… ▸ Topology**. — `rs.status()`, `sh.status()`, member lag and roles.
 - [ ] **MG-14 Bulk update/delete guardrail** — count-first, "this touches 12,431 documents", typed
       confirmation on a production-tagged connection. Shares the SQL client's governed-execution work
       (`SQLX-2`).
-- [ ] **MG-15 Explain for aggregate**, and a readable plan rendering (winning plan, index used, docs
-      examined vs returned) instead of raw JSON.
+- [x] **MG-15 Explain for aggregate**, and a readable plan rendering *(2026-08-26)* Pure
+      `ExplainSummary` walks the winning plan to its leaf and pulls out the plan stage, index name and
+      key, documents/keys examined, documents returned and the **examined-per-returned ratio** — the
+      whole diagnosis — plus a plain-language verdict ("Collection scan — every document was read…").
+      The explain mode now shows that above the raw plan, and a new **explain aggregate** mode covers
+      pipelines. 9 unit tests + live coverage.
 
 ## Gaps — P3
 

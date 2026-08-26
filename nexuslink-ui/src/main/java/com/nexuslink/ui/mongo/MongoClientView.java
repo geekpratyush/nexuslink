@@ -7,6 +7,7 @@ import com.nexuslink.protocol.mongo.MongoExplorer;
 import com.nexuslink.protocol.mongo.BsonNode;
 import com.nexuslink.protocol.mongo.BsonValueParser;
 import com.nexuslink.protocol.mongo.MongoQueryResult;
+import com.nexuslink.protocol.mongo.StagePreview;
 import com.nexuslink.protocol.mongo.MongoService;
 import com.nexuslink.ui.env.Env;
 import com.nexuslink.ui.explorer.ResourceExplorerView;
@@ -156,6 +157,164 @@ public final class MongoClientView extends BorderPane {
             "$unwind", "$count", "$lookup", "$addFields", "$set", "$facet"
     };
 
+    /**
+     * The server panel: what the deployment is, what it is doing, and what has been slow.
+     *
+     * <ul>
+     *   <li><b>Topology</b> — replica-set members with their roles and replication lag, or the shards
+     *       of a cluster. A standalone says so rather than showing an empty table.</li>
+     *   <li><b>Operations</b> — {@code currentOp} filtered by how long they have been running,
+     *       longest first, with kill-by-opid. No desktop Mongo client does this well.</li>
+     *   <li><b>Profiler</b> — the level and slow threshold, plus the slowest profiled operations.</li>
+     * </ul>
+     */
+    private void openServerPanel() {
+        if (!service.isConnected()) { statusLabel.setText("Connect first"); return; }
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Server");
+        dialog.setHeaderText(service.serverInfo().label());
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.setResizable(true);
+
+        ListView<String> topology = new ListView<>();
+        topology.setPlaceholder(new Label("Loading…"));
+        Button refreshTopology = new Button("Refresh");
+        refreshTopology.getStyleClass().add("btn-secondary");
+        Runnable loadTopology = () -> loadInto(topology, service::topologyStatus);
+        refreshTopology.setOnAction(e -> loadTopology.run());
+        loadTopology.run();
+        VBox topologyPane = new VBox(6, topology, refreshTopology);
+        topologyPane.setPadding(new Insets(8));
+        VBox.setVgrow(topology, Priority.ALWAYS);
+
+        ListView<String> operations = new ListView<>();
+        operations.setPlaceholder(new Label("Loading…"));
+        TextField minSeconds = new TextField("0");
+        minSeconds.setPrefWidth(70);
+        Runnable loadOps = () -> {
+            long min;
+            try { min = Long.parseLong(minSeconds.getText().trim()); }
+            catch (NumberFormatException e) { min = 0; }
+            long threshold = min;
+            loadInto(operations, () -> service.currentOperations(threshold));
+        };
+        Button refreshOps = new Button("Refresh");
+        refreshOps.getStyleClass().add("btn-secondary");
+        refreshOps.setOnAction(e -> loadOps.run());
+        Button kill = new Button("Kill selected…");
+        kill.getStyleClass().add("btn-secondary");
+        kill.setOnAction(e -> killSelectedOperation(operations, loadOps));
+        loadOps.run();
+        HBox opTools = new HBox(8, metaLabel("Running at least"), minSeconds, metaLabel("seconds"),
+                refreshOps, kill);
+        opTools.setAlignment(Pos.CENTER_LEFT);
+        VBox opsPane = new VBox(6, operations, opTools);
+        opsPane.setPadding(new Insets(8));
+        VBox.setVgrow(operations, Priority.ALWAYS);
+
+        ListView<String> slow = new ListView<>();
+        slow.setPlaceholder(new Label("Loading…"));
+        Label profileStatus = new Label();
+        profileStatus.getStyleClass().add("meta-label");
+        ChoiceBox<String> level = new ChoiceBox<>(javafx.collections.FXCollections
+                .observableArrayList("0 — off", "1 — slow only", "2 — everything"));
+        level.setValue("0 — off");
+        TextField slowMs = new TextField("100");
+        slowMs.setPrefWidth(70);
+        Runnable loadSlow = () -> {
+            loadInto(slow, () -> service.slowOperations(50));
+            Task<String> status = new Task<>() {
+                @Override protected String call() { return service.profilingStatus(); }
+            };
+            status.setOnSucceeded(e -> profileStatus.setText("Profiler: " + status.getValue()));
+            runBg(status);
+        };
+        Button apply = new Button("Apply");
+        apply.getStyleClass().add("btn-secondary");
+        apply.setOnAction(e -> {
+            int chosen = level.getValue().startsWith("2") ? 2 : level.getValue().startsWith("1") ? 1 : 0;
+            int ms;
+            try { ms = Integer.parseInt(slowMs.getText().trim()); }
+            catch (NumberFormatException ex) { ms = 100; }
+            int threshold = ms;
+            Task<Void> task = new Task<>() {
+                @Override protected Void call() { service.setProfilingLevel(chosen, threshold); return null; }
+            };
+            task.setOnSucceeded(ev -> loadSlow.run());
+            task.setOnFailed(ev -> profileStatus.setText("Could not set the profiler: "
+                    + task.getException().getMessage()));
+            runBg(task);
+        });
+        Button refreshSlow = new Button("Refresh");
+        refreshSlow.getStyleClass().add("btn-secondary");
+        refreshSlow.setOnAction(e -> loadSlow.run());
+        loadSlow.run();
+        HBox profileTools = new HBox(8, metaLabel("Level:"), level, metaLabel("slow ms:"), slowMs,
+                apply, refreshSlow);
+        profileTools.setAlignment(Pos.CENTER_LEFT);
+        VBox profilePane = new VBox(6, profileStatus, slow, profileTools);
+        profilePane.setPadding(new Insets(8));
+        VBox.setVgrow(slow, Priority.ALWAYS);
+
+        TabPane tabs = new TabPane(
+                closedTab("Topology", topologyPane),
+                closedTab("Operations", opsPane),
+                closedTab("Profiler", profilePane));
+        tabs.setPrefSize(720, 460);
+        dialog.getDialogPane().setContent(tabs);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        dialog.showAndWait();
+    }
+
+    private static Tab closedTab(String title, javafx.scene.Node content) {
+        Tab tab = new Tab(title, content);
+        tab.setClosable(false);
+        return tab;
+    }
+
+    /** Fills a list from a background call, showing the failure in the placeholder rather than a dialog. */
+    private void loadInto(ListView<String> list, java.util.function.Supplier<java.util.List<String>> source) {
+        Task<java.util.List<String>> task = new Task<>() {
+            @Override protected java.util.List<String> call() { return source.get(); }
+        };
+        task.setOnSucceeded(e -> list.getItems().setAll(task.getValue()));
+        task.setOnFailed(e -> {
+            list.getItems().clear();
+            list.setPlaceholder(new Label("Failed: " + task.getException().getMessage()));
+        });
+        runBg(task);
+    }
+
+    /** Kills the selected running operation, after a confirm — its opid is in the line. */
+    private void killSelectedOperation(ListView<String> operations, Runnable reload) {
+        String selected = operations.getSelectionModel().getSelectedItem();
+        if (selected == null || !selected.startsWith("opid ")) {
+            statusLabel.setText("Select a running operation first");
+            return;
+        }
+        String opid = selected.substring(5, selected.indexOf(' ', 5) < 0
+                ? selected.length() : selected.indexOf(' ', 5)).trim();
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Kill operation " + opid + "?\nThe client that issued it will see it fail.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Kill operation");
+        if (getScene() != null) confirm.initOwner(getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() {
+                Object id;
+                try { id = Long.parseLong(opid); } catch (NumberFormatException e) { id = opid; }
+                service.killOperation(id);
+                return null;
+            }
+        };
+        task.setOnSucceeded(e -> { logger.accept("Mongo killOp " + opid); reload.run(); });
+        task.setOnFailed(e -> statusLabel.setText("Kill failed: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
     /** Visual aggregation pipeline builder: add/remove stages, then run (or load into the editor). */
     private void openPipelineBuilder() {
         Dialog<ButtonType> d = new Dialog<>();
@@ -186,10 +345,47 @@ public final class MongoClientView extends BorderPane {
 
         ScrollPane scroll = new ScrollPane(stagesBox);
         scroll.setFitToWidth(true);
-        scroll.setPrefSize(560, 380);
-        VBox content = new VBox(8, scroll, addBtn);
+        scroll.setPrefSize(560, 320);
+
+        // Stage-by-stage preview: what survives each stage, and where the documents run out.
+        ListView<StagePreview> stageResults = new ListView<>();
+        stageResults.setPrefHeight(150);
+        stageResults.setPlaceholder(new Label("Press Preview to see what each stage produces"));
+        TextArea stageSample = new TextArea();
+        stageSample.setEditable(false);
+        stageSample.getStyleClass().add("code-area");
+        stageSample.setPrefRowCount(8);
+        stageSample.setPromptText("Select a stage above to see its output documents");
+        stageResults.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(StagePreview item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : (item.index() + 1) + ".  " + item.summary());
+                getStyleClass().removeAll("status-err", "status-4xx");
+                if (item != null && !empty) {
+                    if (item.isFailed()) getStyleClass().add("status-err");
+                    else if (item.emptiedThePipeline()) getStyleClass().add("status-4xx");
+                }
+            }
+        });
+        stageResults.getSelectionModel().selectedItemProperty().addListener((o, ov, nv) ->
+                stageSample.setText(nv == null ? ""
+                        : nv.isFailed() ? nv.error()
+                        : nv.sample().isEmpty() ? "(no documents at this stage)"
+                        : String.join("\n", nv.sample())));
+
+        Button previewBtn = new Button("Preview stages");
+        previewBtn.getStyleClass().add("btn-secondary");
+        previewBtn.setTooltip(new Tooltip("Run the pipeline one stage at a time and show what survives each"));
+        previewBtn.setOnAction(e -> previewStages(buildPipeline(stages), stageResults));
+
+        HBox tools = new HBox(8, addBtn, previewBtn);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox content = new VBox(8, scroll, tools,
+                new Label("Stage output"), stageResults, stageSample);
+        ((Label) content.getChildren().get(2)).getStyleClass().add("meta-label");
         content.setPadding(new Insets(10, 4, 4, 4));
         d.getDialogPane().setContent(content);
+        d.setResizable(true);
 
         java.util.Optional<ButtonType> result = d.showAndWait();
         if (result.isEmpty() || result.get() == ButtonType.CANCEL) return;
@@ -197,6 +393,36 @@ public final class MongoClientView extends BorderPane {
         modeCombo.setValue("aggregate");
         queryEditor.setText(pipeline);
         if (result.get() == runType) run();
+    }
+
+    /**
+     * Runs the pipeline stage by stage and fills the preview list — the count after each stage, how
+     * it moved, and a sample of the documents. A stage that fails stops the walk and is shown in red;
+     * the stage where the count reaches zero is flagged, since that is almost always the bug.
+     */
+    private void previewStages(String pipelineJson, ListView<StagePreview> target) {
+        if (activeCollection == null) {
+            target.setPlaceholder(new Label("Select a collection in the tree first"));
+            target.getItems().clear();
+            return;
+        }
+        String collection = activeCollection;
+        target.setPlaceholder(new Label("Running…"));
+        Task<java.util.List<StagePreview>> task = new Task<>() {
+            @Override protected java.util.List<StagePreview> call() {
+                return service.previewPipeline(collection, Env.resolve(pipelineJson), 10);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            target.getItems().setAll(task.getValue());
+            target.setPlaceholder(new Label("The pipeline has no stages yet"));
+            if (!task.getValue().isEmpty()) target.getSelectionModel().select(task.getValue().size() - 1);
+        });
+        task.setOnFailed(e -> {
+            target.getItems().clear();
+            target.setPlaceholder(new Label("Preview failed: " + task.getException().getMessage()));
+        });
+        runBg(task);
     }
 
     private String buildPipeline(java.util.List<StageRow> stages) {
@@ -857,13 +1083,18 @@ public final class MongoClientView extends BorderPane {
         authBtn.setTooltip(new Tooltip("Build an authenticated connection string; manage users and roles"));
         authBtn.setOnAction(e -> openAuthPanel());
 
+        Button serverBtn = new Button("Server…");
+        serverBtn.getStyleClass().add("btn-secondary");
+        serverBtn.setTooltip(new Tooltip("Replica set / sharding status, running operations, and the profiler"));
+        serverBtn.setOnAction(e -> openServerPanel());
+
         Button helpBtn = new Button("?");
         helpBtn.getStyleClass().add("btn-secondary");
         helpBtn.setOnAction(e -> com.nexuslink.ui.help.HelpDialog.open("databases"));
 
         Label lbl = new Label("Connection:");
         lbl.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, pipelineBtn, exportBtn, structureBtn, authBtn, helpBtn);
+        HBox row = new HBox(8, lbl, connField, connectBtn, saveBtn, diagramBtn, pipelineBtn, exportBtn, structureBtn, authBtn, serverBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -887,7 +1118,8 @@ public final class MongoClientView extends BorderPane {
         });
 
         // Right: query editor + result
-        modeCombo.getItems().addAll("find", "sql", "aggregate", "explain", "insertOne", "updateMany", "deleteMany");
+        modeCombo.getItems().addAll("find", "sql", "aggregate", "explain", "explain aggregate",
+                "insertOne", "updateMany", "deleteMany");
         modeCombo.setValue("find");
         modeCombo.valueProperty().addListener((o, ov, m) -> updateEditorHint(m));
 
@@ -1259,7 +1491,12 @@ public final class MongoClientView extends BorderPane {
                     // decoded documents so the tree can show real BSON types.
                     case "find" -> renderFind(service.findDetailed(collection, spec));
                     case "sql" -> renderDocs(service.executeSql(body));
-                    case "explain" -> service.explain(collection, body);
+                    // Explain, read down to the numbers that decide whether an index did its job —
+                    // the raw plan follows for anyone who wants it.
+                    case "explain" -> String.join("\n",
+                            service.explainSummary(collection, body).asLines())
+                            + "\n\n--- raw plan ---\n" + service.explain(collection, body);
+                    case "explain aggregate" -> service.explainAggregate(collection, body);
                     case "aggregate" -> renderDocs(service.aggregate(collection, body));
                     case "insertOne" -> "Inserted _id: " + service.insertOne(collection, body);
                     case "updateMany" -> {
