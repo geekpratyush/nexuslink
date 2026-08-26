@@ -1,0 +1,113 @@
+<!doctype html><meta charset="utf-8"><style>
+:root {
+  --ink:#070B19; --ink-2:#0A1128; --line:#1E293B;
+  --fg:#F8FAFC; --muted:#93A6C4; --blue:#3B82F6; --deep:#0047AB; --red:#E31837;
+  --sans:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'Cascadia Code',Consolas,'DejaVu Sans Mono',monospace;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:1920px; height:1080px; }
+body {
+  background:var(--ink); color:var(--fg); font-family:var(--sans);
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(0,71,171,.38), transparent 46%),
+    radial-gradient(circle at 84% 78%, rgba(227,24,55,.18), transparent 44%);
+}
+body.plain { background-image:none; }
+body.transparent { background:transparent; background-image:none; }
+.grid {
+  position:absolute; inset:0; z-index:0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.075) 1px, transparent 1px);
+  background-size:80px 80px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 45%, #000 30%, transparent 74%);
+}
+.stage { position:relative; z-index:1; width:1520px; }
+.eyebrow {
+  font-size:22px; letter-spacing:.42em; text-transform:uppercase; color:var(--blue);
+  font-weight:600; margin-bottom:26px;
+}
+h1 { font-size:118px; line-height:1.02; letter-spacing:-.045em; font-weight:600; }
+h1 .lk { color:var(--red); }
+h2 { font-size:82px; line-height:1.06; letter-spacing:-.035em; font-weight:600; }
+.sub { font-size:34px; color:var(--muted); margin-top:30px; line-height:1.5; max-width:1180px; }
+.tag {
+  font-size:26px; letter-spacing:.3em; text-transform:uppercase; color:var(--muted);
+  margin-top:26px; font-weight:500;
+}
+.mark { width:150px; height:150px; margin-bottom:44px; }
+.mark svg, .icon svg { width:100%; height:100%; display:block; }
+.rule { width:96px; height:6px; background:var(--red); border-radius:3px; margin:40px 0; }
+.cols { display:flex; gap:26px; margin-top:60px; }
+.card {
+  flex:1; border:1px solid var(--line); border-radius:20px; padding:34px 32px;
+  background:rgba(255,255,255,.032);
+}
+.card .k { font-size:52px; font-weight:600; letter-spacing:-.03em; }
+.card .k.red { color:var(--red); } .card .k.blue { color:var(--blue); }
+.card .t { font-size:26px; color:var(--muted); margin-top:12px; line-height:1.4; }
+.wall { display:flex; flex-wrap:wrap; gap:16px; margin-top:56px; max-width:1520px; }
+.chip {
+  border:1px solid var(--line); border-radius:14px; padding:16px 26px; font-size:30px;
+  background:rgba(255,255,255,.03); letter-spacing:.01em;
+}
+.chip.hot { border-color:rgba(59,130,246,.65); background:rgba(59,130,246,.14); font-weight:600; }
+.steps { margin-top:56px; display:flex; flex-direction:column; gap:30px; }
+.step { display:flex; align-items:flex-start; gap:28px; }
+.step .n {
+  width:66px; height:66px; border-radius:50%; background:var(--blue); color:#061024;
+  font-size:32px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none;
+}
+.step .b { font-size:38px; font-weight:600; }
+.step .s { font-size:26px; color:var(--muted); margin-top:8px; }
+.step code { font-family:var(--mono); font-size:30px; color:#DCE5F5;
+  background:rgba(255,255,255,.06); padding:4px 14px; border-radius:8px; }
+.rows { margin-top:52px; display:flex; flex-direction:column; gap:2px; }
+.row { display:flex; align-items:center; gap:28px; padding:22px 4px; border-bottom:1px solid var(--line); }
+.row .a { flex:1; font-size:34px; }
+.row .b { width:300px; font-size:30px; color:var(--muted); text-align:right; }
+.row .c { width:300px; font-size:30px; text-align:right; color:var(--blue); font-weight:600; }
+.row.head { border-bottom-color:#334155; }
+.row.head div { font-size:22px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
+.fill { color:var(--red); font-family:var(--mono); }
+.foot { position:absolute; left:0; right:0; bottom:54px; text-align:center;
+  font-size:22px; letter-spacing:.28em; text-transform:uppercase; color:#5C6B85; z-index:1; }
+</style><body class="transparent">
+<div style="position:absolute;inset:150px 220px;border-radius:34px;
+            background:rgba(10,17,40,.55);backdrop-filter:blur(26px);
+            border:1px solid rgba(148,163,184,.30);
+            box-shadow:0 40px 120px rgba(0,0,0,.55);
+            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px">
+  <div class="icon" style="width:170px;height:170px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="NexusLink">
+  <title>NexusLink</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E1A38"/>
+      <stop offset="1" stop-color="#060B18"/>
+    </linearGradient>
+    <linearGradient id="blue" gradientUnits="userSpaceOnUse" x1="160" y1="250" x2="352" y2="396">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#0047AB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="116" fill="url(#tile)"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#1E293B" stroke-width="3"/>
+
+  <!-- the canopy: one console over everything below it -->
+  <path d="M 116 196 C 178 100 334 100 396 196" fill="none" stroke="#E31837" stroke-width="36" stroke-linecap="round"/>
+  <g fill="none" stroke="url(#blue)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 158 400 L 158 246"/>
+    <path d="M 158 246 L 354 400"/>
+    <path d="M 354 400 L 354 246"/>
+  </g>
+  <circle cx="158" cy="246" r="23" fill="#93C5FD"/>
+  <circle cx="354" cy="400" r="23" fill="#93C5FD"/>
+</svg>
+</div>
+  <div style="font-size:96px;font-weight:600;letter-spacing:-.04em">Nexus<span style="color:#E31837">Link</span></div>
+  <div style="font-size:26px;letter-spacing:.3em;text-transform:uppercase;color:#93A6C4">
+    One Console &middot; Every Protocol &middot; Zero Context Switching</div>
+</div></body>

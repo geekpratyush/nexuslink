@@ -146,6 +146,16 @@ public final class MainWindow {
             openSecretVaultsTab();
         }
 
+        // Demo hook: open named tabs, in order, for screenshots and demos —
+        // NEXUSLINK_OPEN_TABS=sql,kafka,mongo   (or -Dnexuslink.opentabs=…). Unknown names are ignored.
+        String wanted = System.getProperty("nexuslink.opentabs", System.getenv("NEXUSLINK_OPEN_TABS"));
+        if (wanted != null && !wanted.isBlank()) {
+            int before = workspace.getTabs().size();
+            for (String name : wanted.split(",")) openNamedTab(name.trim().toLowerCase(java.util.Locale.ROOT));
+            // Select the first tab the hook opened, not the REST tab that was already there.
+            if (workspace.getTabs().size() > before) workspace.getSelectionModel().select(before);
+        }
+
         // Demo hook: auto-send the first request on startup (for screenshots/smoke test)
         if (System.getProperty("nexuslink.autosend") != null
                 || "1".equals(System.getenv("NEXUSLINK_AUTOSEND"))) {
@@ -574,6 +584,45 @@ public final class MainWindow {
         view.setLogger(this::log);
         addTab("Secret Vaults " + (++newTabCounter), view);
         return view;
+    }
+
+    /** Opens the tab a demo hook asked for by name. Unknown names are ignored on purpose. */
+    private void openNamedTab(String name) {
+        switch (name) {
+            case "rest" -> openRestTab();
+            case "ws", "websocket" -> openWebSocketTab();
+            case "sse" -> openSseTab();
+            case "graphql" -> openGraphQLTab();
+            case "grpc" -> openGrpcTab();
+            case "sql", "jdbc" -> openSqlTab();
+            case "mongo", "mongodb" -> openMongoTab();
+            case "redis" -> openRedisTab();
+            case "kafka" -> openKafkaTab();
+            case "mqtt" -> openMqttTab();
+            case "rabbitmq", "rabbit" -> openRabbitMqTab();
+            case "jms" -> openJmsTab();
+            case "mq", "ibmmq" -> openMqTab();
+            case "solace" -> openSolaceTab();
+            case "sqs", "sns" -> openSqsTab();
+            case "pubsub" -> openPubSubTab();
+            case "servicebus" -> openServiceBusTab();
+            case "s3" -> openS3Tab();
+            case "azure", "blob" -> openAzureTab();
+            case "gcs" -> openGcsTab();
+            case "sftp" -> openSftpTab();
+            case "ftp" -> openFtpTab();
+            case "ldap" -> openLdapTab();
+            case "snmp" -> openSnmpTab();
+            case "ssh" -> openSshTab();
+            case "mcp" -> openMcpTab();
+            case "llm", "ai" -> openLlmTab();
+            case "agent" -> openAgentTab();
+            case "certs", "certificates" -> openCertManagerTab();
+            case "env", "environments" -> openEnvironmentsTab();
+            case "metrics" -> openMetricsTab();
+            case "vaults", "secrets" -> openSecretVaultsTab();
+            default -> log("demo hook: unknown tab name '" + name + "'");
+        }
     }
 
     private void addTab(String title, javafx.scene.Node content) {

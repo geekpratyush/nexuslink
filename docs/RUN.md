@@ -79,8 +79,25 @@ cd nexuslink-app && NEXUSLINK_AUTOSEND=1 mvn javafx:run
 java ... com.nexuslink.app.NexusLinkLauncher -Dnexuslink.autohelp=getting-started
 # Auto-open Help and run a search
 java ... com.nexuslink.app.NexusLinkLauncher -Dnexuslink.autosearch=oauth
+
+# Open named tabs on startup (comma-separated; unknown names are ignored)
+NEXUSLINK_OPEN_TABS=sql,kafka,mongo java -jar nexuslink-app/target/nexuslink.jar
+java -Dnexuslink.opentabs=graphql,s3 -jar nexuslink-app/target/nexuslink.jar
+
+# Snapshot the window to a PNG and exit — the application's own pixels, never the desktop
+java -Dnexuslink.screenshot=/tmp/shot.png -Dnexuslink.screenshot.delay=8 \
+     -jar nexuslink-app/target/nexuslink.jar
 ```
 (Pass `-D…` before `-cp`/main class as a JVM arg.)
+
+`-Dnexuslink.screenshot` renders `Scene.snapshot(...)` to a PNG after the delay (default 6 seconds,
+enough for views that populate asynchronously) and exits with 0 on success. It reads only the
+scene graph, so a capture can never contain anything but NexusLink — no window manager, mouse or
+screen-grab tool is involved, and nothing else on the desktop can leak into the image.
+
+`video-assets/src/shoot.sh` wraps both hooks for the marketing screenshots, adding a throwaway
+`-Duser.home` so captures show a clean profile rather than the operator's own connections and
+history. Note that `$HOME` alone will not do it — Java derives `user.home` from the passwd entry.
 
 ## Console messages you can ignore
 
