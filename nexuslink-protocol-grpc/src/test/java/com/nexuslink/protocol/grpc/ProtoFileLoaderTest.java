@@ -111,4 +111,95 @@ class ProtoFileLoaderTest {
         assertTrue(p.messages().isEmpty());
         assertTrue(ProtoFileLoader.parse("   ").services().isEmpty());
     }
+
+    @Test
+    void parsesMessageFieldsWithLabelsAndTypes() {
+        ProtoFileLoader.ProtoFile p = ProtoFileLoader.parse(PROTO);
+        ProtoFileLoader.MessageType point = p.message("Point");
+        assertNotNull(point);
+        assertEquals(List.of("latitude", "longitude"),
+                point.fields().stream().map(ProtoFileLoader.Field::name).toList());
+        assertEquals("int32", point.fields().get(0).type());
+
+        ProtoFileLoader.MessageType feature = p.message("Feature");
+        assertEquals("Point", feature.fields().get(1).type());
+        assertFalse(feature.fields().get(1).repeated());
+    }
+
+    @Test
+    void repeatedMapsNestedTypesAndEnumsAreRecognised() {
+        String proto = """
+                syntax = "proto3";
+                enum Level { LEVEL_LOW = 0; LEVEL_HIGH = 1; }
+                message Outer {
+                  repeated string tags = 1;
+                  map<string, int32> counts = 2;
+                  Level level = 3;
+                  message Inner { bool ok = 1; }
+                  Inner inner = 4;
+                  oneof choice { string a = 5; int64 b = 6; }
+                  reserved 7;
+                }
+                """;
+        ProtoFileLoader.ProtoFile p = ProtoFileLoader.parse(proto);
+        ProtoFileLoader.MessageType outer = p.message("Outer");
+        assertEquals(List.of("tags", "counts", "level", "inner", "a", "b"),
+                outer.fields().stream().map(ProtoFileLoader.Field::name).toList());
+        assertTrue(outer.fields().get(0).repeated());
+        assertTrue(outer.fields().get(1).map());
+        assertNotNull(p.message("Inner"), "a nested message is hoisted under its simple name");
+        assertEquals(List.of("LEVEL_LOW", "LEVEL_HIGH"), p.enumType("Level").values());
+    }
+
+    @Test
+    void requestTemplateUsesProto3JsonDefaults() {
+        String template = ProtoFileLoader.parse(PROTO).requestTemplate("Feature");
+        assertEquals("""
+                {
+                  "name": "",
+                  "location": {
+                    "latitude": 0,
+                    "longitude": 0
+                  }
+                }""", template);
+    }
+
+    @Test
+    void requestTemplateHandlesRepeatedMapsEnumsAndUnknownTypes() {
+        String proto = """
+                syntax = "proto3";
+                enum Level { LEVEL_LOW = 0; }
+                message Req {
+                  repeated string tags = 1;
+                  map<string, int32> counts = 2;
+                  Level level = 3;
+                  int64 total = 4;
+                  bool ok = 5;
+                  google.protobuf.Timestamp at = 6;
+                }
+                """;
+        assertEquals("""
+                {
+                  "tags": [],
+                  "counts": {},
+                  "level": "LEVEL_LOW",
+                  "total": "0",
+                  "ok": false,
+                  "at": {}
+                }""", ProtoFileLoader.parse(proto).requestTemplate("Req"));
+    }
+
+    @Test
+    void requestTemplateStopsAtRecursionAndUnknownMessages() {
+        String proto = """
+                syntax = "proto3";
+                message Node { string id = 1; Node next = 2; }
+                """;
+        assertEquals("""
+                {
+                  "id": "",
+                  "next": {}
+                }""", ProtoFileLoader.parse(proto).requestTemplate("Node"));
+        assertEquals("{}", ProtoFileLoader.parse(proto).requestTemplate("Nope"));
+    }
 }

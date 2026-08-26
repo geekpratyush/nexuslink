@@ -1,6 +1,7 @@
 package com.nexuslink.ui.grpc;
 
 import com.nexuslink.protocol.grpc.GrpcService;
+import com.nexuslink.protocol.grpc.ProtoFileLoader;
 import com.nexuslink.ui.env.Env;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -17,7 +18,9 @@ import java.util.function.Consumer;
 
 /**
  * gRPC client tab — connect to a server with <b>reflection</b> enabled, pick a service + method,
- * edit the request as JSON, and invoke (unary). No {@code .proto} file needed.
+ * edit the request as JSON, and invoke. No {@code .proto} file needed; for a server with reflection
+ * turned off, <b>Load .proto…</b> fills the same pickers from a local file and pre-fills the request
+ * editor with a skeleton synthesised from the input message's fields.
  */
 public final class GrpcView extends BorderPane {
 
@@ -47,6 +50,9 @@ public final class GrpcView extends BorderPane {
     private final TextArea requestEditor = new TextArea();
     private final org.fxmisc.richtext.CodeArea responseArea = com.nexuslink.ui.util.JsonView.plainArea(false);
     private final Label callStatus = new Label();
+
+    /** Services/methods read from a local .proto — the offline alternative to server reflection. */
+    private final java.util.Map<String, List<GrpcService.MethodInfo>> protoMethods = new java.util.LinkedHashMap<>();
 
     private Consumer<String> logger = s -> {};
 
@@ -88,7 +94,13 @@ public final class GrpcView extends BorderPane {
 
         Label h = new Label("Host:"); h.getStyleClass().add("meta-label");
         Label p = new Label("Port:"); p.getStyleClass().add("meta-label");
-        HBox row = new HBox(8, h, hostField, p, portField, tlsBox, connectBtn, helpBtn);
+        Button protoBtn = new Button("Load .proto…");
+        protoBtn.getStyleClass().add("btn-secondary");
+        protoBtn.setTooltip(new Tooltip(
+                "Fill the service and method pickers from a local .proto file, for servers without reflection"));
+        protoBtn.setOnAction(e -> loadProtoFile());
+
+        HBox row = new HBox(8, h, hostField, p, portField, tlsBox, connectBtn, protoBtn, helpBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(10));
 
@@ -148,7 +160,11 @@ public final class GrpcView extends BorderPane {
 
     private SplitPane buildBody() {
         serviceCombo.setMaxWidth(Double.MAX_VALUE);
-        serviceCombo.valueProperty().addListener((o, ov, svc) -> { if (svc != null) loadMethods(svc); });
+        serviceCombo.valueProperty().addListener((o, ov, svc) -> {
+            if (svc == null) return;
+            List<GrpcService.MethodInfo> fromProto = protoMethods.get(svc);
+            if (fromProto != null) showMethods(fromProto); else loadMethods(svc);
+        });
         methodCombo.setMaxWidth(Double.MAX_VALUE);
         methodCombo.setConverter(new StringConverter<>() {
             @Override public String toString(GrpcService.MethodInfo m) {
@@ -220,6 +236,7 @@ public final class GrpcView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             List<String> services = task.getValue();
+            protoMethods.clear();                 // reflection is authoritative once connected
             serviceCombo.setItems(FXCollections.observableArrayList(services));
             statusLabel.getStyleClass().setAll("status-2xx");
             statusLabel.setText("Connected — " + services.size() + " service(s) via reflection");
@@ -236,14 +253,69 @@ public final class GrpcView extends BorderPane {
         runBg(task);
     }
 
+    /**
+     * Reads a local {@code .proto} and fills the pickers from it — what you use against a server that
+     * has reflection turned off. Parsing is pure ({@link ProtoFileLoader}); the request editor is
+     * pre-filled with a JSON skeleton synthesised from the input message's fields. Invoking still
+     * needs a connection: the channel is where the call actually goes.
+     */
+    private void loadProtoFile() {
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("Load a .proto file");
+        fc.getExtensionFilters().addAll(
+                new javafx.stage.FileChooser.ExtensionFilter("Protocol buffer definition", "*.proto"),
+                new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+        java.io.File file = fc.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+
+        Task<ProtoFileLoader.ProtoFile> task = new Task<>() {
+            @Override protected ProtoFileLoader.ProtoFile call() throws Exception {
+                return ProtoFileLoader.parse(java.nio.file.Files.readString(file.toPath()));
+            }
+        };
+        task.setOnSucceeded(e -> applyProtoFile(file.getName(), task.getValue()));
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not read " + file.getName() + ": " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Fills the pickers from a parsed proto, qualifying service names with its package. */
+    private void applyProtoFile(String fileName, ProtoFileLoader.ProtoFile proto) {
+        protoMethods.clear();
+        String pkg = proto.packageName().isBlank() ? "" : proto.packageName() + ".";
+        for (ProtoFileLoader.Service svc : proto.services()) {
+            List<GrpcService.MethodInfo> methods = svc.methods().stream()
+                    .map(m -> new GrpcService.MethodInfo(m.name(), m.clientStreaming(), m.serverStreaming(),
+                            proto.requestTemplate(m.inputType())))
+                    .toList();
+            protoMethods.put(pkg + svc.name(), methods);
+        }
+        if (protoMethods.isEmpty()) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText(fileName + " declares no service");
+            return;
+        }
+        serviceCombo.setItems(FXCollections.observableArrayList(protoMethods.keySet()));
+        serviceCombo.setValue(serviceCombo.getItems().get(0));
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText(fileName + " — " + protoMethods.size()
+                + " service(s) from the file; connect to invoke");
+        logger.accept("gRPC loaded " + fileName + " — " + protoMethods.size() + " service(s)");
+    }
+
+    /** Puts a method list into the picker and selects the first. */
+    private void showMethods(List<GrpcService.MethodInfo> methods) {
+        methodCombo.setItems(FXCollections.observableArrayList(methods));
+        if (!methods.isEmpty()) methodCombo.setValue(methods.get(0));
+    }
+
     private void loadMethods(String svc) {
         Task<List<GrpcService.MethodInfo>> task = new Task<>() {
             @Override protected List<GrpcService.MethodInfo> call() throws Exception { return service.listMethods(svc); }
         };
-        task.setOnSucceeded(e -> {
-            methodCombo.setItems(FXCollections.observableArrayList(task.getValue()));
-            if (!task.getValue().isEmpty()) methodCombo.setValue(task.getValue().get(0));
-        });
+        task.setOnSucceeded(e -> showMethods(task.getValue()));
         task.setOnFailed(e -> callStatus.setText("✖ " + task.getException().getMessage()));
         runBg(task);
     }

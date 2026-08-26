@@ -700,11 +700,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (`Code` enum, ordinal == wire number), `byNumber`/`findByNumber`/`byName`/`name`/`number`/`description`,
       a gRPC→HTTP status mapping (`httpStatus`), and an immutable `all()` for UI tables. 10 tests.
 - [x] `GrpcView` — host/port/TLS bar, service picker, method picker (streaming-flagged), request JSON editor, response panel; wired into the shell (gRPC sample = grpcb.in)
-- [-] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection) — pure dependency-free
-      proto3 parser done: strips comments, extracts syntax + package + message names, and brace-matches each
-      `service` to parse its `rpc`s (name, input/output types incl. fully-qualified `.pkg.Type`, client/server
-      streaming flags → `Method.isUnary()`). Returns a `ProtoFile(syntax, package, services, messages)`. 7 tests.
-      _(GrpcView "load .proto" wiring + request-template synthesis from message fields still TODO.)_
+- [x] `ProtoFileLoader` — parse local `.proto` files (alternative to reflection) — pure dependency-free
+      proto3 parser: strips comments, extracts syntax + package, brace-matches each `service` to parse its
+      `rpc`s (name, input/output types incl. fully-qualified `.pkg.Type`, client/server streaming flags →
+      `Method.isUnary()`), and reads every **message's fields** (label, type, `map<>`, nested messages and
+      `oneof` flattened, nested types hoisted) plus **enums** and their values. `requestTemplate(type)`
+      synthesises a JSON request skeleton at proto3 defaults — 64-bit ints as strings, `[]` for repeated,
+      `{}` for maps and unknown types, the first value for an enum, nested messages expanded with a
+      recursion cut-off. **12 tests.** Wired into `GrpcView` behind **Load .proto…**: the file fills the
+      service (package-qualified) and method pickers with streaming flags, and selecting a method pre-fills
+      the request editor from the template; connecting re-reads the server by reflection, which wins.
 - [x] Streaming panel: picking a streaming method turns **Invoke** into a live call — messages append to the
       response pane numbered and in order (`← #n`), with **Send** / **End stream** (half-close) / **Cancel**
       enabled for the call's shape, and a terminal line on complete/error
