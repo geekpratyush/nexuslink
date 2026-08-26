@@ -84,6 +84,8 @@ public final class KafkaView extends BorderPane {
     private final TextField produceTimestamp = new TextField();
     private final TextArea produceHeaders = new TextArea();
     private final CheckBox tombstoneBox = new CheckBox("Tombstone (null value)");
+    /** Decode registry-framed payloads (Avro / JSON Schema) when browsing. */
+    private final CheckBox schemaAware = new CheckBox("Decode with Schema Registry");
     private final ComboBox<PayloadFormatter.Format> formatCombo = new ComboBox<>();
 
     // Live message-browser filter (AND-combined key/value/partition predicates over the consumed list).
@@ -619,9 +621,14 @@ public final class KafkaView extends BorderPane {
         formatCombo.setValue(PayloadFormatter.Format.STRING);
         // Re-render key/value cells through the newly selected formatter (raw data is untouched).
         formatCombo.valueProperty().addListener((o, a, b) -> messageTable.refresh());
+        schemaAware.setTooltip(new Tooltip("Read the schema id from each payload and decode it with "
+                + "the Schema Registry — an Avro topic is unreadable without this"));
+        schemaAware.selectedProperty().addListener((o, was, on) ->
+                service.useSchemaRegistry(on ? registryClient() : null));
 
         HBox top = new HBox(8, label("Topic:"), consumeTopic, label("Group:"), consumeGroup,
-                fromBeginning, consumeToggle, browse, label("Format:"), formatCombo, exportJson, exportCsv, clear);
+                fromBeginning, consumeToggle, browse, label("Format:"), formatCombo, schemaAware,
+                exportJson, exportCsv, clear);
         top.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8, top, buildFilterBar(), messageTable, consumeLog);
         box.setPadding(new Insets(8));
@@ -1535,7 +1542,13 @@ public final class KafkaView extends BorderPane {
         boolean fromStart = fromBeginning.isSelected();
         append("👁 browsing " + topic + " (no commit)…");
         Task<List<KafkaService.KafkaMessage>> task = new Task<>() {
-            @Override protected List<KafkaService.KafkaMessage> call() { return service.browse(topic, 100, fromStart); }
+            @Override protected List<KafkaService.KafkaMessage> call() {
+                // Schema-aware when the registry toggle is on: an Avro topic renders as JSON rather
+                // than as the binary it actually is on the wire.
+                return schemaAware.isSelected()
+                        ? service.browseDecoded(topic, 100, fromStart)
+                        : service.browse(topic, 100, fromStart);
+            }
         };
         task.setOnSucceeded(e -> {
             consumedMessages.setAll(task.getValue());

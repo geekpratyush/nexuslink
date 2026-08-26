@@ -15,7 +15,7 @@ forward work only (`TASKS.md` §10).
 | [MongoDB ↔ Compass / Studio 3T](2026-08-25-mongo-compass-studio3t-parity/) | `MG-` | 7 | 8 | 3 | **all 7 P1 + all 8 P2** | P1+P2 complete |
 | [File transfer ↔ FileZilla / WinSCP](2026-08-25-file-transfer-filezilla-parity/) | `FX-` | 6 | 7 | 3 | 0 | not started |
 | [IBM MQ ↔ MQ Explorer / Nastel](2026-08-25-ibmmq-beyond-nastel/) | `MQ-` | 7 | 7 | 3 | 0 | not started |
-| [Kafka ↔ AKHQ / Conduktor](2026-08-25-kafka-management-parity/) | `KF-` | 7 | 8 | 3 | 6 of 7 P1 (all but KF-5 serdes) | in progress |
+| [Kafka ↔ AKHQ / Conduktor](2026-08-25-kafka-management-parity/) | `KF-` | 7 | 8 | 3 | **all 7 P1** | P1 complete |
 | [Remaining clients](2026-08-25-remaining-clients-parity/) | `MSG-` | ~20 grouped per protocol | — | — | 0 | not started |
 | [Driver management](2026-08-25-driver-management/) | — | — | — | — | shipped | ✅ complete |
 | [LLM endpoints](2026-08-25-llm-endpoints/) | — | — | — | — | shipped | ✅ complete |

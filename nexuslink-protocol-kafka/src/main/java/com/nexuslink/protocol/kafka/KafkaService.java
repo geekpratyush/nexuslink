@@ -241,6 +241,74 @@ public final class KafkaService implements AutoCloseable {
         return out;
     }
 
+    // ---- schema-aware browsing (KF-5) ----
+
+    /** The decoder used for schema-registered payloads; null until a registry is attached. */
+    private SchemaAwareDecoder decoder;
+
+    /**
+     * Attaches a Schema Registry so framed payloads decode instead of browsing as mojibake. Pass
+     * {@code null} to go back to plain-string reads.
+     */
+    public void useSchemaRegistry(SchemaRegistryClient registry) {
+        this.decoder = registry == null ? null : new SchemaAwareDecoder(registry);
+    }
+
+    /** {@code true} when a registry is attached and records will be decoded against it. */
+    public boolean isSchemaAware() { return decoder != null; }
+
+    /**
+     * Browses with the payload bytes decoded through the Schema Registry: an Avro record renders as
+     * JSON rather than as unreadable binary. Falls back to plain text for any record that is not
+     * schema-framed, so a mixed topic still reads.
+     *
+     * <p>The record's schema is reported in a {@code schema} header on the returned message, so the
+     * browser can show which schema each record was written with.
+     */
+    public List<KafkaMessage> browseDecoded(String topic, int maxMessages, boolean fromBeginning) {
+        if (decoder == null) return browse(topic, maxMessages, fromBeginning);
+
+        Properties props = base();
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+
+        List<KafkaMessage> out = new ArrayList<>();
+        try (KafkaConsumer<byte[], byte[]> c = new KafkaConsumer<>(props)) {
+            List<PartitionInfo> parts = c.partitionsFor(topic, Duration.ofSeconds(10));
+            if (parts == null || parts.isEmpty()) return out;
+            List<TopicPartition> tps = new ArrayList<>();
+            for (PartitionInfo p : parts) tps.add(new TopicPartition(topic, p.partition()));
+            c.assign(tps);
+            if (fromBeginning) c.seekToBeginning(tps); else c.seekToEnd(tps);
+
+            int emptyPolls = 0;
+            while (out.size() < maxMessages && emptyPolls < 3) {
+                var records = c.poll(Duration.ofMillis(500));
+                if (records.isEmpty()) { emptyPolls++; continue; }
+                emptyPolls = 0;
+                for (var r : records) {
+                    SchemaAwareDecoder.Decoded value = decoder.decode(r.value());
+                    SchemaAwareDecoder.Decoded key = decoder.decode(r.key());
+                    List<ProduceSpec.Header> headers = new ArrayList<>();
+                    r.headers().forEach(h -> headers.add(new ProduceSpec.Header(h.key(),
+                            h.value() == null ? null
+                                    : new String(h.value(), java.nio.charset.StandardCharsets.UTF_8))));
+                    if (value.schemaId() > 0) {
+                        headers.add(new ProduceSpec.Header("schema", value.label()));
+                    }
+                    out.add(new KafkaMessage(r.partition(), r.offset(), r.timestamp(),
+                            r.key() == null ? null : key.text(),
+                            r.value() == null ? null : value.text(), headers));
+                    if (out.size() >= maxMessages) break;
+                }
+            }
+        }
+        return out;
+    }
+
     // ---- seek and replay (KF-7) ----
 
     /**

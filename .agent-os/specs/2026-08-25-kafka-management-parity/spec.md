@@ -45,7 +45,15 @@ Audited against the source on 2026-08-25 (`KafkaService`, `KafkaExplorer`, `Sche
       column, a **Show headers…** dialog, and a tombstone rendered as *(tombstone — null value)* in
       amber rather than as an ordinary empty record. Live-verified round trip. — rendered as a table per message, and filterable.
       `KafkaMessage` does not carry them yet.
-- [ ] **KF-5 Serde support: Avro / Protobuf / JSON Schema** via the existing Schema Registry client, on
+- [x] **KF-5 Serde support: Avro / Protobuf / JSON Schema** *(2026-08-26)* Pure `ConfluentWireFormat`
+      parses the five-byte frame (magic byte + schema id, plus Protobuf's message-index array) and can
+      write it; `SchemaAwareDecoder` fetches the schema by id and decodes — **Avro binary → JSON** via
+      Apache Avro (added as an Apache-2.0 dependency), JSON Schema payloads as the JSON behind the
+      header, and Protobuf reported honestly as framed-but-needing-its-descriptor rather than shown as
+      garbage. A missing or mismatched schema is reported, never guessed. `browseDecoded` reads with
+      byte deserializers and tags each record with a `schema` header. UI: a **Decode with Schema
+      Registry** toggle on the Consume tab. **19 unit tests + 4 live** against the broker and the
+      registry, including the "unreadable without the schema, JSON with it" comparison. via the existing Schema Registry client, on
       both produce and consume, with the schema id resolved from the payload's magic byte. Without this the
       Schema Registry tab is informational only and Avro topics browse as mojibake.
 - [x] **KF-6 Consumer group administration** *(2026-08-26)* `consumerGroupState`, `consumerGroupMembers`
