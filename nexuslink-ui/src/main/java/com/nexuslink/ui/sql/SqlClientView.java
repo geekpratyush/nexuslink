@@ -14,6 +14,7 @@ import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.JdbcTlsParams;
 import com.nexuslink.protocol.db.JdbcTlsSpec;
 import com.nexuslink.protocol.db.CallResult;
+import com.nexuslink.protocol.db.ColumnAggregates;
 import com.nexuslink.protocol.db.CallableSpec;
 import com.nexuslink.protocol.db.QueryResult;
 import com.nexuslink.protocol.db.ResultGridExporter;
@@ -119,6 +120,14 @@ public final class SqlClientView extends BorderPane {
     private final FilteredList<List<String>> filteredRows = new FilteredList<>(masterRows, r -> true);
     private final SortedList<List<String>> sortedRows = new SortedList<>(filteredRows);
     private final TextField filterField = new TextField();
+    // Find-in-results (walks to matches instead of hiding rows) and the aggregate footer.
+    private final TextField findField = new TextField();
+    private final ChoiceBox<String> statsColumn = new ChoiceBox<>();
+    private final Label aggregateFooter = new Label();
+    // Column freeze: JavaFX has no pinned columns, so the frozen ones live in their own table to
+    // the left of the grid, sharing its rows, selection and vertical scroll position.
+    private final TableView<List<String>> frozenGrid = new TableView<>();
+    private int frozenCount = 0;
 
     // In-tab statement history: newest first, capped, each entry recallable into the editor.
     private static final int HISTORY_LIMIT = 200;
@@ -550,17 +559,26 @@ public final class SqlClientView extends BorderPane {
         // constrained policy ballooning one column. Widths are computed per query in renderResult.
         resultGrid.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         resultGrid.setPlaceholder(new Label("Run a query to see results"));
+        // Multi-row selection so a block of rows can be copied out as Markdown or CSV in one go.
+        resultGrid.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 
         // Right-click a result row → copy it, or delete it (via the preview-then-apply gate).
         resultGrid.setRowFactory(tv -> {
             TableRow<List<String>> row = new TableRow<>();
             MenuItem copy = new MenuItem("Copy row");
             copy.setOnAction(e -> { if (row.getItem() != null) copyToClipboard(String.join("\t", nullSafe(row.getItem()))); });
+            MenuItem copyInsert = new MenuItem("Copy row as INSERT");
+            copyInsert.setOnAction(e -> copyRowsAs(row.getItem(), "insert"));
+            MenuItem copyMarkdown = new MenuItem("Copy selection as Markdown");
+            copyMarkdown.setOnAction(e -> copyRowsAs(row.getItem(), "markdown"));
+            MenuItem copyCsv = new MenuItem("Copy selection as CSV");
+            copyCsv.setOnAction(e -> copyRowsAs(row.getItem(), "csv"));
             MenuItem form = new MenuItem("Open in form view…");
             form.setOnAction(e -> openRecordForm(row.getItem()));
             MenuItem delete = new MenuItem("Delete row…");
             delete.setOnAction(e -> deleteRow(row.getItem()));
-            ContextMenu menu = new ContextMenu(copy, form, new SeparatorMenuItem(), delete);
+            ContextMenu menu = new ContextMenu(copy, copyInsert, copyMarkdown, copyCsv,
+                    new SeparatorMenuItem(), form, new SeparatorMenuItem(), delete);
             row.emptyProperty().addListener((o, was, empty) -> row.setContextMenu(empty ? null : menu));
             return row;
         });
@@ -589,11 +607,59 @@ public final class SqlClientView extends BorderPane {
                 + "or a delimited file with your own options"));
         exportBtn.setOnAction(e -> showExportDialog());
 
-        HBox gridTools = new HBox(8, filterField, insertBtn, importCsvBtn, exportBtn);
+        // Find-in-results: unlike the filter, it hides nothing — it walks to the next matching row
+        // and selects it, so the surrounding rows stay on screen.
+        findField.getStyleClass().add("nl-field");
+        findField.setPromptText("Find… (Enter for next)");
+        findField.setPrefWidth(180);
+        findField.setOnAction(e -> findInResults(true));
+        Button findNext = new Button("▼");
+        findNext.getStyleClass().add("btn-secondary");
+        findNext.setTooltip(new Tooltip("Find next match"));
+        findNext.setOnAction(e -> findInResults(true));
+        Button findPrev = new Button("▲");
+        findPrev.getStyleClass().add("btn-secondary");
+        findPrev.setTooltip(new Tooltip("Find previous match"));
+        findPrev.setOnAction(e -> findInResults(false));
+
+        statsColumn.setPrefWidth(150);
+        statsColumn.setTooltip(new Tooltip("Column to summarise in the footer below the grid"));
+        statsColumn.valueProperty().addListener((o, ov, nv) -> updateAggregateFooter());
+        sortedRows.addListener((javafx.collections.ListChangeListener<List<String>>) c -> updateAggregateFooter());
+
+        HBox gridTools = new HBox(8, filterField, findField, findPrev, findNext,
+                insertBtn, importCsvBtn, exportBtn);
         gridTools.setAlignment(Pos.CENTER_LEFT);
         gridTools.setPadding(new Insets(0, 0, 6, 0));
 
-        VBox gridPane = new VBox(6, gridTools, resultGrid);
+        aggregateFooter.getStyleClass().add("muted");
+        HBox footer = new HBox(8, new Label("Summarise:"), statsColumn, aggregateFooter);
+        footer.setAlignment(Pos.CENTER_LEFT);
+        footer.setPadding(new Insets(4, 0, 0, 0));
+
+        frozenGrid.setItems(sortedRows);
+        frozenGrid.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
+        frozenGrid.setVisible(false);
+        frozenGrid.setManaged(false);
+        frozenGrid.getStyleClass().add("frozen-grid");
+        syncScroll(resultGrid, frozenGrid);
+        resultGrid.getSelectionModel().selectedIndexProperty().addListener((o, ov, i) -> {
+            if (frozenGrid.isManaged() && i.intValue() != frozenGrid.getSelectionModel().getSelectedIndex()) {
+                frozenGrid.getSelectionModel().clearAndSelect(i.intValue());
+            }
+        });
+        frozenGrid.getSelectionModel().selectedIndexProperty().addListener((o, ov, i) -> {
+            if (frozenGrid.isManaged() && i.intValue() >= 0
+                    && i.intValue() != resultGrid.getSelectionModel().getSelectedIndex()) {
+                resultGrid.getSelectionModel().clearAndSelect(i.intValue());
+            }
+        });
+
+        HBox gridRow = new HBox(frozenGrid, resultGrid);
+        HBox.setHgrow(resultGrid, Priority.ALWAYS);
+        VBox.setVgrow(gridRow, Priority.ALWAYS);
+
+        VBox gridPane = new VBox(6, gridTools, gridRow, footer);
         VBox.setVgrow(resultGrid, Priority.ALWAYS);
         gridPane.setPadding(new Insets(6));
 
@@ -923,6 +989,140 @@ public final class SqlClientView extends BorderPane {
             statusLabel.setText("Call failed: " + task.getException().getMessage());
         });
         runBg(task);
+    }
+
+    /**
+     * Copies rows to the clipboard in a pasteable shape. {@code insert} takes the clicked row alone
+     * (an {@code INSERT} for the table behind the grid, ready to replay elsewhere); {@code markdown}
+     * and {@code csv} take the whole selection, falling back to the clicked row when nothing is
+     * selected, so a grid can be pasted straight into a document or spreadsheet.
+     */
+    private void copyRowsAs(List<String> clicked, String shape) {
+        List<String> columns = gridColumnNames();
+        if (columns.isEmpty()) { resultStatus.setText("Nothing to copy"); return; }
+        List<List<String>> rows = new ArrayList<>(resultGrid.getSelectionModel().getSelectedItems());
+        if (rows.isEmpty() && clicked != null) rows.add(clicked);
+        if (rows.isEmpty()) { resultStatus.setText("Select a row to copy"); return; }
+
+        String text = switch (shape) {
+            case "insert" -> ResultGridExporter.toInsertStatements(
+                    editTable == null ? "TABLE" : editTable, columns,
+                    clicked == null ? rows : List.of(clicked));
+            case "markdown" -> ResultGridExporter.toMarkdown(columns, rows);
+            default -> ResultGridExporter.toCsv(columns, rows);
+        };
+        copyToClipboard(text);
+        resultStatus.getStyleClass().setAll("meta-label");
+        resultStatus.setText("Copied " + (("insert".equals(shape)) ? 1 : rows.size()) + " row(s) as " + shape);
+    }
+
+    /**
+     * Selects and scrolls to the next (or previous) row containing the find text, wrapping around
+     * the end. Unlike the filter above it, nothing is hidden — the match is simply brought into view.
+     */
+    private void findInResults(boolean forward) {
+        String needle = findField.getText();
+        if (needle == null || needle.isBlank()) return;
+        int size = sortedRows.size();
+        if (size == 0) { resultStatus.setText("No rows to search"); return; }
+        String lower = needle.toLowerCase(Locale.ROOT);
+        int from = resultGrid.getSelectionModel().getSelectedIndex();
+        for (int step = 1; step <= size; step++) {
+            int i = Math.floorMod(from + (forward ? step : -step), size);
+            for (String cell : sortedRows.get(i)) {
+                if (cell != null && cell.toLowerCase(Locale.ROOT).contains(lower)) {
+                    resultGrid.getSelectionModel().clearAndSelect(i);
+                    resultGrid.scrollTo(Math.max(0, i - 2));
+                    resultStatus.getStyleClass().setAll("meta-label");
+                    resultStatus.setText("Match on row " + (i + 1) + " of " + size);
+                    return;
+                }
+            }
+        }
+        resultStatus.getStyleClass().setAll("status-4xx");
+        resultStatus.setText("No match for “" + needle + "”");
+    }
+
+    /** Recomputes the footer statistics for the chosen column over the rows currently displayed. */
+    private void updateAggregateFooter() {
+        String column = statsColumn.getValue();
+        int index = currentColumns.indexOf(column);
+        if (column == null || index < 0) { aggregateFooter.setText(""); return; }
+        aggregateFooter.setText(ColumnAggregates.of(column, new ArrayList<>(sortedRows), index).footer());
+    }
+
+    /** Header menu for a result column: summarise it in the footer, or freeze the grid up to it. */
+    private ContextMenu columnMenu(int index, String name) {
+        MenuItem stats = new MenuItem("Summarise “" + name + "”");
+        stats.setOnAction(e -> statsColumn.setValue(name));
+        MenuItem freeze = new MenuItem("Freeze columns up to “" + name + "”");
+        freeze.setOnAction(e -> freezeColumns(index + 1));
+        MenuItem unfreeze = new MenuItem("Unfreeze columns");
+        unfreeze.setOnAction(e -> unfreezeColumns());
+        MenuItem copy = new MenuItem("Copy column name");
+        copy.setOnAction(e -> copyToClipboard(name));
+        return new ContextMenu(stats, new SeparatorMenuItem(), freeze, unfreeze,
+                new SeparatorMenuItem(), copy);
+    }
+
+    /**
+     * Freezes the first {@code count} columns: they move into their own table pinned to the left of
+     * the grid, so they stay put while the rest scrolls horizontally. Both tables show the same rows
+     * and share selection and vertical scroll position, so it reads as one grid.
+     */
+    private void freezeColumns(int count) {
+        unfreezeColumns();
+        int n = Math.min(count, resultGrid.getColumns().size() - 1);   // never freeze every column
+        if (n <= 0) { resultStatus.setText("Nothing left to scroll — freeze fewer columns"); return; }
+        double width = 0;
+        for (int i = 0; i < n; i++) {
+            TableColumn<List<String>, ?> tc = resultGrid.getColumns().get(0);
+            resultGrid.getColumns().remove(0);
+            frozenGrid.getColumns().add(tc);
+            width += tc.getPrefWidth();
+        }
+        frozenCount = n;
+        frozenGrid.setPrefWidth(width + 2);
+        frozenGrid.setMinWidth(width + 2);
+        frozenGrid.setMaxWidth(width + 2);
+        frozenGrid.setVisible(true);
+        frozenGrid.setManaged(true);
+        resultStatus.getStyleClass().setAll("meta-label");
+        resultStatus.setText("Froze " + n + " column(s)");
+    }
+
+    /** Returns any frozen columns to the grid, in their original order. */
+    private void unfreezeColumns() {
+        if (frozenCount == 0) return;
+        List<TableColumn<List<String>, ?>> back = new ArrayList<>(frozenGrid.getColumns());
+        frozenGrid.getColumns().clear();
+        resultGrid.getColumns().addAll(0, back);
+        frozenCount = 0;
+        frozenGrid.setVisible(false);
+        frozenGrid.setManaged(false);
+    }
+
+    /**
+     * Keeps {@code follower} scrolled to the same row as {@code leader}. The scroll bars only exist
+     * once each table has a skin, so the binding is installed the first time one appears.
+     */
+    private void syncScroll(TableView<?> leader, TableView<?> follower) {
+        leader.skinProperty().addListener((o, ov, skin) -> Platform.runLater(() -> {
+            javafx.scene.control.ScrollBar from = verticalBar(leader);
+            javafx.scene.control.ScrollBar to = verticalBar(follower);
+            if (from != null && to != null) from.valueProperty().addListener((p, was, now) -> {
+                if (follower.isManaged()) to.setValue(now.doubleValue());
+            });
+        }));
+    }
+
+    /** The table's vertical scroll bar, or null before it has one. */
+    private javafx.scene.control.ScrollBar verticalBar(TableView<?> table) {
+        for (javafx.scene.Node n : table.lookupAll(".scroll-bar")) {
+            if (n instanceof javafx.scene.control.ScrollBar bar
+                    && bar.getOrientation() == javafx.geometry.Orientation.VERTICAL) return bar;
+        }
+        return null;
     }
 
     private void copyToClipboard(String text) {
@@ -2149,9 +2349,12 @@ public final class SqlClientView extends BorderPane {
         resultStatus.setText(r.summary());
         logger.accept("SQL ok — " + r.summary());
 
+        unfreezeColumns();
         resultGrid.getColumns().clear();
         masterRows.clear();
         currentColumns.clear();
+        statsColumn.getItems().clear();
+        aggregateFooter.setText("");
         if (!r.isResultSet()) {
             setStats(0, 0, r.durationMs());
             return;
@@ -2168,11 +2371,15 @@ public final class SqlClientView extends BorderPane {
             tc.setCellFactory(c -> editableCell());
             tc.setOnEditCommit(ev -> onCellEdit(ev.getRowValue(), col, ev.getNewValue()));
             tc.setPrefWidth(contentWidth(r, col, type));
+            tc.setContextMenu(columnMenu(col, r.columns().get(i)));
             resultGrid.getColumns().add(tc);
         }
         resultGrid.setEditable(true);   // edits are gated in onCellEdit (single-table + PK only)
         masterRows.setAll(r.rows());
+        statsColumn.getItems().setAll(r.columns());
+        if (!r.columns().isEmpty()) statsColumn.setValue(r.columns().get(0));
         applyRowFilter(filterField.getText());
+        updateAggregateFooter();
         setStats(r.rowCount(), r.columns().size(), r.durationMs());
         selectTab("Result");
     }
@@ -2289,6 +2496,17 @@ public final class SqlClientView extends BorderPane {
         });
     }
 
+    /**
+     * The displayed column names. The grid's headers are custom two-line graphics rather than plain
+     * text, so the names come from the executed statement's column list.
+     */
+    private List<String> gridColumnNames() {
+        if (!currentColumns.isEmpty()) return new ArrayList<>(currentColumns);
+        List<String> names = new ArrayList<>();
+        for (TableColumn<List<String>, ?> c : resultGrid.getColumns()) names.add(c.getText());
+        return names;
+    }
+
     /** The shapes the result grid can be written out as. */
     private enum ExportFormat {
         CSV("CSV", "csv"), JSON("JSON", "json"), INSERT("INSERT statements", "sql"),
@@ -2392,8 +2610,7 @@ public final class SqlClientView extends BorderPane {
      */
     private void writeExport(File file, ExportFormat format, ResultGridExporter.Delimited delimited,
                              String tableName, boolean wholeTable) {
-        List<String> columns = new ArrayList<>();
-        for (TableColumn<List<String>, ?> c : resultGrid.getColumns()) columns.add(c.getText());
+        List<String> columns = gridColumnNames();
         List<List<String>> shown = new ArrayList<>(sortedRows);
 
         Task<String> task = new Task<>() {

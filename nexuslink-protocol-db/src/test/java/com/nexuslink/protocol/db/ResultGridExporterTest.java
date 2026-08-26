@@ -156,4 +156,20 @@ class ResultGridExporterTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new ResultGridExporter.Delimited("", '"', false, true, "\n", ""));
     }
+
+    @Test
+    void markdownRendersAHeaderAlignmentRowAndEscapedCells() {
+        String md = ResultGridExporter.toMarkdown(List.of("a", "b"),
+                List.of(List.of("x|y", "line1\nline2")));
+        String[] lines = md.split("\n");
+        assertEquals("| a | b |", lines[0]);
+        assertEquals("| --- | --- |", lines[1]);
+        assertEquals("| x\\|y | line1<br>line2 |", lines[2]);
+    }
+
+    @Test
+    void markdownMarksNullCellsApartFromEmptyStrings() {
+        String md = ResultGridExporter.toMarkdown(List.of("a", "b"), List.of(Arrays.asList(null, "")));
+        assertEquals("| _null_ |  |", md.split("\n")[2]);
+    }
 }

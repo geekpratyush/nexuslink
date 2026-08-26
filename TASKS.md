@@ -1137,7 +1137,17 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       lists every statement run in this tab (time / statement / outcome, newest first, capped at 200)
       with **Recall**, **Recall & Run**, double-click-to-recall and **Clear**. Separate from the shared
       cross-protocol history sidebar, so the last thing tried never leaves the tab
-- [ ] **P1** Grid: aggregate footer, column freeze, find-in-results, copy-as-INSERT/Markdown
+- [x] **P1** Grid: aggregate footer, column freeze, find-in-results, copy-as-INSERT/Markdown —
+      pure `ColumnAggregates.of(column, rows, index)` (count / nulls / distinct, plus sum·avg·min·max
+      when every non-null cell parses as a number; the grid's `NULL` text counts as null) drives a
+      **Summarise:** footer under the grid that follows the sort and filter. **Find** walks to the next
+      or previous matching row and selects it (wrapping) without hiding anything, beside the existing
+      filter. **Column freeze** — right-click a header ▸ *Freeze columns up to …*: the frozen columns
+      move into their own table pinned left of the grid, sharing rows, selection and vertical scroll.
+      Row menu gained **Copy row as INSERT** and **Copy selection as Markdown / CSV** (multi-row
+      selection is now on), with a new `ResultGridExporter.toMarkdown`. Also fixed: exports took their
+      headers from `TableColumn.getText()`, which is empty because the headers are custom graphics —
+      they now come from the executed statement's column list. **11 new tests**
 - [ ] **P2** PL/SQL program editing + compile with error line mapping
 - [ ] **P2** Bind parameter typing + explicit NULL in the prompt (today every bind is a string)
 - [ ] **P2** Sessions/locks panel · snippets library · multiple pinned result tabs · schema diff

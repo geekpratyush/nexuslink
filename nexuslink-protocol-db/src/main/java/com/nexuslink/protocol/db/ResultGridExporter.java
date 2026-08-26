@@ -124,6 +124,34 @@ public final class ResultGridExporter {
     }
 
     /**
+     * A GitHub-flavoured Markdown table — a header row, an alignment row, then one row per record.
+     * Pipes and newlines inside a cell are escaped so the table stays intact, and a null cell is
+     * written as {@code _null_} to keep it apart from an empty string.
+     */
+    public static String toMarkdown(List<String> columns, List<List<String>> rows) {
+        StringBuilder sb = new StringBuilder("|");
+        for (String col : columns) sb.append(' ').append(markdownCell(col)).append(" |");
+        sb.append("\n|");
+        for (int c = 0; c < columns.size(); c++) sb.append(" --- |");
+        sb.append('\n');
+        for (List<String> row : rows) {
+            sb.append('|');
+            for (int c = 0; c < columns.size(); c++) {
+                String cell = c < row.size() ? row.get(c) : null;
+                sb.append(' ').append(cell == null ? "_null_" : markdownCell(cell)).append(" |");
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** A Markdown cell: pipes escaped, newlines turned into {@code <br>} so the row stays one line. */
+    private static String markdownCell(String s) {
+        return s.replace("\\", "\\\\").replace("|", "\\|")
+                .replace("\r\n", "<br>").replace("\n", "<br>").replace("\r", "<br>");
+    }
+
+    /**
      * Options for a delimited export. {@code delimiter} separates fields, {@code quote} wraps a
      * field (doubled when it appears inside one) — pass {@code '\0'} to disable quoting entirely,
      * in which case a delimiter inside a value is escaped with a backslash. {@code quoteAll} quotes

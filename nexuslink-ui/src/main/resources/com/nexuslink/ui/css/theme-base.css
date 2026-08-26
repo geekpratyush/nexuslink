@@ -499,3 +499,13 @@
     -fx-font-size: 10px;
     -fx-background-radius: 3;
 }
+
+/* Frozen result columns live in their own table pinned left of the SQL grid. Its vertical scroll
+   bar is hidden — the main grid's bar drives both — and the right border joins the two visually. */
+.frozen-grid .scroll-bar:vertical {
+    -fx-pref-width: 0;
+    -fx-opacity: 0;
+}
+.frozen-grid {
+    -fx-border-width: 0 1 0 0;
+}
