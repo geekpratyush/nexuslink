@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/nexuslink-logo-full-dark.svg">
+    <img src="docs/assets/nexuslink-logo-full-light.svg" alt="NexusLink — One Console. Every Protocol. Zero Context Switching." width="840">
+  </picture>
+</p>
+
 # NexusLink — Universal Connectivity Workbench
 
 > **One Console. Every Protocol. Zero Context Switching.**
@@ -107,7 +114,7 @@ cd nexuslink-app
 mvn javafx:run               # launch the workbench
 ```
 
-See **`RUN.md`** for a direct-`java` launch option and troubleshooting.
+See **`docs/RUN.md`** for a direct-`java` launch option and troubleshooting.
 
 ## Features at a Glance
 
@@ -192,8 +199,11 @@ hand-rolled DI to avoid JPMS conflicts, Caffeine caching per the strategy in `TA
 | `README.md` | This file — overview and quick start |
 | `NexusLink_Specification.md` | The full product specification (the north star) |
 | `TASKS.md` | **Living** build tracker — phase-by-phase status, resume point, decisions |
-| `RUN.md` | How to build and run, plus environment notes |
+| `docs/RUN.md` | How to build and run, plus environment notes |
 | `docs/ARCHITECTURE.md` | Module layout, patterns, data flow |
+| `docs/CONTRIBUTING.md` | Forking, branching, testing, and opening a pull request |
+| `docs/DISTRIBUTION.md` | Publishing to Artifactory, and the one-command install for users |
+| `docs/javadoc/` | Generated API reference — `mvn -Pjavadoc javadoc:aggregate` |
 
 ## Testing
 

@@ -7,6 +7,26 @@ records only work that is in the code and verified.
 
 ## 2026-08-26
 
+### Brand and the public site
+
+- **A logo system** in `docs/assets/`: an icon mark — a red canopy over an `N` drawn as three linked
+  runs, the whole product in one shape — plus light and dark full lockups carrying the wordmark and
+  the tagline, and a favicon. Plain SVG with no embedded fonts, so it renders anywhere.
+- **A parallax landing page** (`docs/index.html`), rewritten from the plain install page: the hero
+  layers a grid and two colour fields that drift as you scroll, sections reveal as they come into
+  view, and the whole thing degrades to a readable static page with JavaScript off or reduced motion
+  on. Still self-contained — no external CSS, fonts or JavaScript.
+- **`docs/doc.html`** renders the repository's markdown documents in the site's own styling
+  (`doc.html?d=ARCHITECTURE.md`), from a fixed list of documents. A reader following a documentation
+  link from the site no longer lands on raw markdown.
+- **`docs/CONTRIBUTING.md`** — the whole loop written down: fork, add `upstream`, branch, build and
+  test (including which live tests are gated behind which property), commit, open the pull request,
+  rebase while it is in review, and where each kind of change belongs in the module layout.
+- **Javadoc for every module** — a `javadoc` Maven profile aggregates the API reference into
+  `docs/javadoc/`, which the site links from the hero, the documentation section and the footer.
+- `DISTRIBUTION.md`, `PACKAGING.md` and `RUN.md` moved into `docs/`, so every document the site
+  offers is inside the folder GitHub Pages serves.
+
 ### Distribution and packaging
 
 - **`dist/publish.sh` — one publish command** that behaves the same on a laptop and in CI: build,

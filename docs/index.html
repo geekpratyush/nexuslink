@@ -3,191 +3,381 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NexusLink — Universal Connectivity Workbench</title>
-<meta name="description" content="One desktop tool for REST, SQL, MongoDB, Kafka, MQ, object storage, LDAP, SSH and more. Install with a single script from your own Artifactory.">
+<title>NexusLink — One Console. Every Protocol. Zero Context Switching.</title>
+<meta name="description" content="One offline-first desktop workbench for REST, SQL, MongoDB, Redis, Kafka, MQ, object storage, LDAP, SNMP, SSH, gRPC and GraphQL — installed with a single launcher from your own Artifactory.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #ffffff; --fg: #1f2430; --muted: #5b6472; --line: #e2e6ee;
-    --card: #f7f9fc; --accent: #2f6fdd; --accent-fg: #ffffff; --code-bg: #f2f4f8;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #171a21; --fg: #e4e8f0; --muted: #99a2b3; --line: #2c313c;
-      --card: #1e222b; --accent: #5b8def; --accent-fg: #0f1218; --code-bg: #12151b;
-    }
+    --ink: #0A1128; --ink-2: #070B19; --paper: #ffffff; --paper-2: #f5f7fb;
+    --fg: #1f2430; --muted: #5b6472; --line: #e2e6ee;
+    --blue: #0047AB; --blue-lit: #3B82F6; --red: #E31837;
+    --code-bg: #0d1424; --code-fg: #dbe4f5;
+    --radius: 14px;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0; background: var(--paper); color: var(--fg);
+    font: 16px/1.7 var(--sans); -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
-  header { border-bottom: 1px solid var(--line); padding: 56px 0 40px; }
-  h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
-  .tagline { color: var(--muted); font-size: 1.15rem; margin: 0 0 24px; max-width: 62ch; }
-  h2 { font-size: 1.5rem; margin: 48px 0 12px; letter-spacing: -0.01em; }
-  h3 { font-size: 1.1rem; margin: 28px 0 8px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h2 { font-size: 2rem; letter-spacing: -0.025em; margin: 0 0 10px; font-weight: 600; }
+  h3 { font-size: 1.05rem; margin: 26px 0 8px; font-weight: 600; }
   p, li { max-width: 74ch; }
-  a { color: var(--accent); }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
-  code { background: var(--code-bg); padding: 2px 5px; border-radius: 4px; }
+  .lede { color: var(--muted); font-size: 1.1rem; margin: 0 0 34px; }
+  .eyebrow {
+    font-size: 0.76rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--blue); font-weight: 600; margin: 0 0 10px;
+  }
+  code, pre { font-family: var(--mono); font-size: 0.88em; }
+  code { background: var(--paper-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
   pre {
-    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
-    padding: 14px 16px; overflow-x: auto;
+    background: var(--code-bg); color: var(--code-fg); border-radius: var(--radius);
+    padding: 18px 20px; overflow-x: auto; line-height: 1.6;
   }
-  pre code { background: none; padding: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; display: block; overflow-x: auto; }
-  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
-  th { background: var(--card); font-weight: 600; }
-  .downloads { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 8px; }
-  .dl {
-    display: block; flex: 1 1 220px; padding: 16px 18px; border: 1px solid var(--line);
-    border-radius: 10px; background: var(--card); text-decoration: none; color: var(--fg);
+  pre code { background: none; border: 0; padding: 0; color: inherit; }
+  pre .c { color: #7f9ec4; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; display: block; overflow-x: auto; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 14px; text-align: left; vertical-align: top; }
+  th { font-weight: 600; font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  tbody tr:hover { background: var(--paper-2); }
+
+  /* ---------- sticky nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 40; backdrop-filter: blur(14px);
+    background: rgba(255,255,255,0.82); border-bottom: 1px solid transparent; transition: border-color .3s;
   }
-  .dl:hover { border-color: var(--accent); }
-  .dl strong { display: block; font-size: 1.05rem; margin-bottom: 2px; }
-  .dl span { color: var(--muted); font-size: 0.9rem; }
-  .cards { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0; }
-  .card { flex: 1 1 280px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--card); }
-  .card h3 { margin: 0 0 6px; font-size: 1rem; }
-  .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
-  .note { border-left: 3px solid var(--accent); padding: 8px 0 8px 14px; color: var(--muted); margin: 18px 0; }
-  footer { border-top: 1px solid var(--line); margin-top: 64px; padding: 28px 0 56px; color: var(--muted); font-size: 0.9rem; }
+  nav.stuck { border-bottom-color: var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 26px; height: 62px; }
+  nav img { width: 28px; height: 28px; }
+  nav .brand { font-weight: 600; letter-spacing: -0.02em; color: var(--ink); margin-right: auto; display: flex; align-items: center; gap: 10px; }
+  nav a.link { color: var(--muted); font-size: 0.93rem; }
+  nav a.link:hover { color: var(--fg); text-decoration: none; }
+  @media (max-width: 760px) { nav a.link { display: none; } }
+
+  /* ---------- hero + parallax ---------- */
+  .hero {
+    position: relative; overflow: hidden; background: var(--ink-2); color: #F8FAFC;
+    padding: 118px 0 132px; isolation: isolate;
+  }
+  .hero .layer { position: absolute; inset: -20% -10%; z-index: -1; will-change: transform; }
+  .hero .glow-a { background: radial-gradient(circle at 22% 30%, rgba(0,71,171,0.42), transparent 52%); }
+  .hero .glow-b { background: radial-gradient(circle at 80% 72%, rgba(227,24,55,0.20), transparent 48%); }
+  .hero .grid {
+    background-image: linear-gradient(rgba(148,163,184,0.10) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(148,163,184,0.10) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at 50% 35%, #000 25%, transparent 72%);
+  }
+  .hero-mark { width: 92px; height: 92px; margin-bottom: 26px; }
+  .hero h1 {
+    font-size: clamp(2.8rem, 7vw, 4.6rem); font-weight: 600; letter-spacing: -0.035em;
+    margin: 0 0 6px; line-height: 1.05;
+  }
+  .hero h1 .lk { color: var(--red); }
+  .hero .tag {
+    font-size: clamp(0.74rem, 1.5vw, 0.92rem); letter-spacing: 0.19em; text-transform: uppercase;
+    color: #93A6C4; margin: 0 0 30px; font-weight: 500; max-width: none;
+  }
+  .hero p.blurb { color: #B7C3D8; font-size: 1.12rem; max-width: 60ch; margin: 0 0 36px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-block; padding: 13px 24px; border-radius: 10px; font-weight: 600; font-size: 0.96rem;
+    border: 1px solid transparent; transition: transform .16s ease, background .16s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); }
+  .btn-primary { background: var(--blue-lit); color: #061024; }
+  .btn-primary:hover { background: #5fa0ff; }
+  .btn-ghost { border-color: rgba(148,163,184,0.42); color: #DCE5F5; }
+  .btn-ghost:hover { border-color: #93A6C4; background: rgba(148,163,184,0.10); }
+
+  /* ---------- protocol band ---------- */
+  .band { background: var(--ink); color: #93A6C4; padding: 22px 0; overflow: hidden; }
+  .band .row { display: flex; gap: 30px; padding: 0 28px; white-space: nowrap; font-size: 0.86rem;
+               letter-spacing: 0.16em; text-transform: uppercase; will-change: transform; }
+  .band .row span { opacity: 0.72; }
+
+  /* ---------- sections ---------- */
+  section { padding: 96px 0; border-bottom: 1px solid var(--line); }
+  section.alt { background: var(--paper-2); }
+  /* Content is visible by default; the reveal only applies once JS has taken over, so a page
+     without JavaScript — or one screenshotted before the observer fires — still reads fine. */
+  .reveal { opacity: 1; }
+  html.js .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+  html.js .reveal.in { opacity: 1; transform: none; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(288px, 1fr)); gap: 16px; margin-top: 26px; }
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px; background: var(--paper);
+    transition: border-color .2s, transform .2s;
+  }
+  .card:hover { border-color: #c6d2e6; transform: translateY(-2px); }
+  .card h3 { margin: 0 0 8px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+  .card .k { display: block; width: 26px; height: 3px; border-radius: 2px; background: var(--red); margin-bottom: 14px; }
+
+  .downloads { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 24px 0 10px; }
+  .dl { border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; background: var(--paper); color: var(--fg); }
+  .dl:hover { border-color: var(--blue-lit); text-decoration: none; }
+  .dl strong { display: block; font-size: 1rem; margin-bottom: 2px; }
+  .dl span { color: var(--muted); font-size: 0.88rem; }
+
+  .note { border-left: 3px solid var(--blue-lit); padding: 6px 0 6px 16px; color: var(--muted); margin: 22px 0; }
+
+  .steps { list-style: none; counter-reset: s; padding: 0; margin: 24px 0 0; }
+  .steps li { counter-increment: s; position: relative; padding: 0 0 26px 52px; max-width: 72ch; }
+  .steps li::before {
+    counter-increment: none; content: counter(s); position: absolute; left: 0; top: 0;
+    width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: #fff;
+    display: grid; place-items: center; font-size: 0.85rem; font-weight: 600;
+  }
+  .steps li strong { display: block; margin-bottom: 2px; }
+
+  footer { background: var(--ink-2); color: #93A6C4; padding: 54px 0; font-size: 0.9rem; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+  footer img { width: 30px; height: 30px; }
+  footer a { color: #DCE5F5; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .hero .layer, .band .row { transform: none !important; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<header>
-  <h1>NexusLink</h1>
-  <p class="tagline">
-    One desktop workbench for the protocols an enterprise actually runs on — REST, SQL, MongoDB,
-    Redis, Kafka, MQTT, RabbitMQ, JMS, IBM MQ, Solace, SQS, Pub/Sub, Service Bus, S3, Azure Blob,
-    GCS, SFTP, FTP, LDAP, SNMP, SSH, gRPC, GraphQL, MCP — with one credential vault, one set of
-    environment variables and one request history across all of them.
-  </p>
-  <p class="tagline">
-    Offline-first: no account, no telemetry, no cloud dependency. It runs on an air-gapped network.
-  </p>
+<nav id="nav"><div class="wrap">
+  <a class="brand" href="#top"><img src="assets/nexuslink-mark.svg" alt="">NexusLink</a>
+  <a class="link" href="#install">Install</a>
+  <a class="link" href="#inside">What's inside</a>
+  <a class="link" href="#docs">Documentation</a>
+  <a class="link" href="#contribute">Contribute</a>
+</div></nav>
+
+<header class="hero" id="top">
+  <div class="layer grid" data-speed="0.14"></div>
+  <div class="layer glow-a" data-speed="0.30"></div>
+  <div class="layer glow-b" data-speed="0.20"></div>
+  <div class="wrap">
+    <img class="hero-mark" src="assets/nexuslink-mark.svg" alt="NexusLink">
+    <h1>Nexus<span class="lk">Link</span></h1>
+    <p class="tag">One Console &middot; Every Protocol &middot; Zero Context Switching</p>
+    <p class="blurb">
+      One desktop workbench for the protocols an enterprise actually runs on — with a single
+      credential vault, one set of environment variables and one searchable history across every
+      one of them. Offline-first: no account, no telemetry, no cloud dependency.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Install it</a>
+      <a class="btn btn-ghost" href="#docs">Documentation</a>
+      <a class="btn btn-ghost" href="javadoc/index.html">API reference</a>
+    </div>
+  </div>
 </header>
 
-<h2 id="install">Install</h2>
-<p>
-  Download the launcher for your platform, put it anywhere, and run it. On the first run it fetches
-  the application from your organisation's repository and caches it; every run after that starts from
-  the local copy, offline. You need <strong>Java 21 or newer</strong> — nothing else.
-</p>
+<div class="band"><div class="row" data-speed="-0.08" id="band">
+  <span>REST</span><span>GraphQL</span><span>gRPC</span><span>WebSocket</span><span>SSE</span>
+  <span>JDBC / SQL</span><span>MongoDB</span><span>Redis</span><span>Kafka</span><span>MQTT</span>
+  <span>RabbitMQ</span><span>JMS</span><span>IBM MQ</span><span>Solace</span><span>SQS / SNS</span>
+  <span>Pub/Sub</span><span>Service Bus</span><span>S3</span><span>Azure Blob</span><span>GCS</span>
+  <span>SFTP</span><span>FTP</span><span>LDAP</span><span>SNMP</span><span>SSH</span><span>MCP</span>
+</div></div>
 
-<div class="downloads">
-  <a class="dl" href="downloads/nexuslink.sh" download>
-    <strong>nexuslink.sh</strong><span>Linux and macOS</span>
-  </a>
-  <a class="dl" href="downloads/nexuslink.bat" download>
-    <strong>nexuslink.bat</strong><span>Windows — command prompt or double-click</span>
-  </a>
-  <a class="dl" href="downloads/nexuslink.ps1" download>
-    <strong>nexuslink.ps1</strong><span>Windows — PowerShell (the .bat calls this)</span>
-  </a>
-</div>
-<p class="note">
-  On Windows keep <code>nexuslink.bat</code> and <code>nexuslink.ps1</code> next to each other — the
-  batch file hands over to the PowerShell script. On Linux and macOS, make it executable first:
-  <code>chmod +x nexuslink.sh</code>.
-</p>
+<section id="inside">
+  <div class="wrap reveal">
+    <p class="eyebrow">What is inside</p>
+    <h2>Twenty-six protocols, one set of habits</h2>
+    <p class="lede">Learn the workbench once. Every client below shares the same vault, the same
+      <code>${VAR}</code> environments, the same history and the same safety rails.</p>
+    <div class="cards">
+      <div class="card"><span class="k"></span><h3>HTTP &amp; APIs</h3><p>REST with collections and a runner, WebSocket, SSE, GraphQL, gRPC. Enterprise auth built in: OAuth 2.0 with PKCE, AWS SigV4, Digest, HMAC, NTLM, mTLS.</p></div>
+      <div class="card"><span class="k"></span><h3>Databases</h3><p>A JDBC workbench that generates the SQL your engine actually accepts, plus MongoDB with a Compass-class tree view, a mongosh-style shell, change streams and GridFS. Redis with a console that sends anything the server supports.</p></div>
+      <div class="card"><span class="k"></span><h3>Messaging</h3><p>Kafka with headers, tombstones, Avro decoding, consumer-group administration and replay. MQTT, RabbitMQ, JMS, IBM MQ, Solace, SQS/SNS, Pub/Sub and Service Bus.</p></div>
+      <div class="card"><span class="k"></span><h3>Files &amp; directories</h3><p>A two-pane commander over SFTP, FTP, S3, Azure Blob, GCS and GridFS — with a transfer queue, directory compare and checksums. LDAP, SNMP and an SSH terminal.</p></div>
+      <div class="card"><span class="k"></span><h3>One workbench</h3><p>One encrypted vault, one set of environments, one searchable history and code generation — shared by every protocol rather than reinvented per tool.</p></div>
+      <div class="card"><span class="k"></span><h3>Safe by default</h3><p>Credentials are never displayed in the clear, destructive statements are previewed and confirmed, and bulk writes count what they would touch before they run.</p></div>
+    </div>
+  </div>
+</section>
 
-<h3>First run</h3>
-<pre><code># Linux / macOS
-export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
+<section class="alt" id="install">
+  <div class="wrap reveal">
+    <p class="eyebrow">Install</p>
+    <h2>Run it straight from Artifactory</h2>
+    <p class="lede">Download one launcher, put it anywhere, run it. On the first run it fetches the
+      application from your organisation's repository and caches it; every run after that starts from
+      the local copy, offline. You need <strong>Java 21 or newer</strong> — nothing else.</p>
+
+    <div class="downloads">
+      <a class="dl" href="downloads/nexuslink.sh" download><strong>nexuslink.sh</strong><span>Linux and macOS</span></a>
+      <a class="dl" href="downloads/nexuslink.bat" download><strong>nexuslink.bat</strong><span>Windows — prompt or double-click</span></a>
+      <a class="dl" href="downloads/nexuslink.ps1" download><strong>nexuslink.ps1</strong><span>Windows — PowerShell (the .bat calls this)</span></a>
+    </div>
+    <p class="note">On Windows keep <code>nexuslink.bat</code> and <code>nexuslink.ps1</code> next to each
+      other — the batch file hands over to the PowerShell script. On Linux and macOS make it executable
+      first: <code>chmod +x nexuslink.sh</code>.</p>
+
+    <h3>First run</h3>
+<pre><code><span class="c"># Linux / macOS</span>
+export NEXUSLINK_REPO_URL=https://artifactory.your-company.com/artifactory/libs-release-local
 ./nexuslink.sh
 
-# Windows
-set NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
+<span class="c"># Windows</span>
+set NEXUSLINK_REPO_URL=https://artifactory.your-company.com/artifactory/libs-release-local
 nexuslink.bat</code></pre>
-<p>
-  Ask whoever publishes NexusLink in your organisation for the repository URL. If they ship a
-  <code>~/.nexuslink/bootstrap.conf</code> (or <code>%USERPROFILE%\.nexuslink\bootstrap.conf</code>)
-  with the URL and credentials already in it, you just run the script.
-</p>
+    <p>Ask whoever publishes NexusLink in your organisation for the repository URL. If they ship a
+      <code>~/.nexuslink/bootstrap.conf</code> (or <code>%USERPROFILE%\.nexuslink\bootstrap.conf</code>)
+      with the URL and credentials already in it, you just run the script.</p>
 
-<h2 id="options">Every option</h2>
-<p>Run <code>nexuslink --help</code> to see this list from the script itself.</p>
+    <h3>Everyday commands</h3>
+<pre><code>nexuslink                      <span class="c"># run; downloads only if this version is not cached</span>
+nexuslink --version 1.2.0      <span class="c"># run a specific version (or RELEASE / LATEST)</span>
+nexuslink --offline            <span class="c"># never touch the network; run the newest cached build</span>
+nexuslink --update             <span class="c"># re-download this version over the cached copy</span>
+nexuslink --fresh              <span class="c"># clear the cache, then download and run</span>
+nexuslink --list               <span class="c"># show what is cached, with sizes</span>
+nexuslink --where              <span class="c"># print the jar that would run, and exit</span>
+nexuslink --local              <span class="c"># run the build publish.sh installed into ~/.m2</span>
+nexuslink --help               <span class="c"># the full usage text</span></code></pre>
 
-<table>
-  <tr><th>Option</th><th>What it does</th></tr>
-  <tr><td><em>(none)</em></td><td>Run. Downloads only if this version is not already cached.</td></tr>
-  <tr><td><code>--local</code></td><td>Run the build installed in <code>~/.m2</code> by <code>publish.sh</code> — no repository needed.</td></tr>
-  <tr><td><code>--offline</code></td><td>Never touch the network. Runs the newest cached build, or says there is none.</td></tr>
-  <tr><td><code>--version &lt;v&gt;</code></td><td>Run a specific version (<code>RELEASE</code>, <code>LATEST</code>, or e.g. <code>1.2.0</code>).</td></tr>
-  <tr><td><code>--repo &lt;url&gt;</code></td><td>Use this repository for one run.</td></tr>
-  <tr><td><code>--update</code></td><td>Download this version again, replacing the cached copy.</td></tr>
-  <tr><td><code>--fresh</code></td><td>Clear the cache first, then download and run. Use when a build looks wrong.</td></tr>
-  <tr><td><code>--list</code></td><td>Show what is cached, with sizes.</td></tr>
-  <tr><td><code>--clean</code></td><td>Delete every cached build. Add <code>--version</code> to delete just one.</td></tr>
-  <tr><td><code>--where</code></td><td>Print the jar that would run, and exit.</td></tr>
-  <tr><td><code>--help</code></td><td>The full usage text.</td></tr>
-</table>
+    <h3>Settings</h3>
+    <table>
+      <tr><th>Variable</th><th>Meaning</th></tr>
+      <tr><td><code>NEXUSLINK_REPO_URL</code></td><td>The Maven repository to fetch from</td></tr>
+      <tr><td><code>NEXUSLINK_VERSION</code></td><td><code>RELEASE</code> (default), <code>LATEST</code>, or an exact version</td></tr>
+      <tr><td><code>NEXUSLINK_USER</code> / <code>NEXUSLINK_TOKEN</code></td><td>Repository credentials, if it needs them</td></tr>
+      <tr><td><code>NEXUSLINK_HOME</code></td><td>Where the cache lives (default <code>~/.nexuslink</code>). Set it to <code>./nexuslink-cache</code> to keep everything in the current folder.</td></tr>
+      <tr><td><code>NEXUSLINK_JAVA_OPTS</code></td><td>Extra JVM options, e.g. <code>-Xmx2g</code></td></tr>
+      <tr><td><code>JAVA_HOME</code></td><td>The JDK to run with, if not the one on <code>PATH</code></td></tr>
+    </table>
 
-<h3>Settings</h3>
-<table>
-  <tr><th>Variable</th><th>Meaning</th></tr>
-  <tr><td><code>NEXUSLINK_REPO_URL</code></td><td>The Maven repository to fetch from</td></tr>
-  <tr><td><code>NEXUSLINK_VERSION</code></td><td><code>RELEASE</code> (default), <code>LATEST</code>, or an exact version</td></tr>
-  <tr><td><code>NEXUSLINK_USER</code> / <code>NEXUSLINK_TOKEN</code></td><td>Repository credentials, if it needs them</td></tr>
-  <tr><td><code>NEXUSLINK_HOME</code></td><td>Where the cache lives (default <code>~/.nexuslink</code>). Set it to <code>./nexuslink-cache</code> to keep everything in the current folder.</td></tr>
-  <tr><td><code>NEXUSLINK_JAVA_OPTS</code></td><td>Extra JVM options, e.g. <code>-Xmx2g</code></td></tr>
-  <tr><td><code>JAVA_HOME</code></td><td>The JDK to run with, if not the one on <code>PATH</code></td></tr>
-</table>
+    <h3>Publishing it — for whoever maintains the build</h3>
+<pre><code>./dist/publish.sh                 <span class="c"># build, install to ~/.m2, deploy if a repository is configured</span>
+./dist/publish.sh --local         <span class="c"># local only</span>
+./dist/publish.sh --deploy        <span class="c"># require a deploy; fail if none is configured</span>
+./dist/publish.sh --version 1.2.0 <span class="c"># set the release version first</span></code></pre>
+    <p>Credentials live in <code>~/.m2/settings.xml</code> under a <code>&lt;server&gt;</code> id, never on
+      the command line — which is also how a CI agent supplies them. Full detail in
+      <a href="doc.html?d=DISTRIBUTION.md">DISTRIBUTION.md</a>.</p>
+  </div>
+</section>
 
-<h2 id="publish">Publishing it (for whoever maintains the build)</h2>
-<p>One script does the right thing wherever it runs — a developer machine or a CI agent:</p>
-<pre><code>./dist/publish.sh                 # build, install to ~/.m2, and deploy if a repository is configured
-./dist/publish.sh --local         # local only
-./dist/publish.sh --deploy        # require a deploy; fail if no repository is configured
-./dist/publish.sh --version 1.2.0 # set the release version first</code></pre>
-<p>
-  It always installs to <code>~/.m2</code> first — that is what makes <code>nexuslink.sh --local</code>
-  work, and in CI it proves the artifact builds before anything is published. Credentials live in
-  <code>~/.m2/settings.xml</code> under a <code>&lt;server&gt;</code> id, never on the command line,
-  which is also how a CI agent supplies them.
-</p>
+<section id="docs">
+  <div class="wrap reveal">
+    <p class="eyebrow">Documentation</p>
+    <h2>Everything is written down</h2>
+    <p class="lede">Press <strong>F1</strong> inside the application for the searchable help browser —
+      it covers every menu, submenu and client. In writing:</p>
+    <div class="cards">
+      <a class="card" href="doc.html?d=README.md"><span class="k"></span><h3>Documentation index &rarr;</h3><p>Which document answers which question.</p></a>
+      <a class="card" href="doc.html?d=ARCHITECTURE.md"><span class="k"></span><h3>Architecture &rarr;</h3><p>Module layout, layering, and how to add a protocol.</p></a>
+      <a class="card" href="doc.html?d=CHANGELOG.md"><span class="k"></span><h3>Changelog &rarr;</h3><p>What has shipped, newest first.</p></a>
+      <a class="card" href="javadoc/index.html"><span class="k"></span><h3>Javadoc API reference &rarr;</h3><p>Every public type across all 29 modules, generated from the source.</p></a>
+      <a class="card" href="doc.html?d=DISTRIBUTION.md"><span class="k"></span><h3>Distribution &rarr;</h3><p>Publishing to Artifactory, and the bootstrap launcher in detail.</p></a>
+      <a class="card" href="doc.html?d=RUN.md"><span class="k"></span><h3>Running from source &rarr;</h3><p>Build it, run it, and the packaging options.</p></a>
+    </div>
+    <p class="note">The API reference is generated with <code>mvn -Pjavadoc javadoc:aggregate</code>,
+      which writes it into <code>docs/javadoc/</code> so it publishes with the rest of this site.</p>
+  </div>
+</section>
 
-<h2 id="what">What is inside</h2>
-<div class="cards">
-  <div class="card"><h3>HTTP &amp; APIs</h3><p>REST with collections and a runner, WebSocket, SSE, GraphQL, gRPC. Enterprise auth built in: OAuth 2.0 with PKCE, AWS SigV4, Digest, HMAC, NTLM, mTLS.</p></div>
-  <div class="card"><h3>Databases</h3><p>A JDBC workbench that generates the SQL your engine actually accepts, plus MongoDB with a Compass-class tree view, a mongosh-style shell, change streams and GridFS. Redis with a console that sends anything the server supports.</p></div>
-  <div class="card"><h3>Messaging</h3><p>Kafka with headers, tombstones, Avro decoding, consumer-group administration and replay. MQTT, RabbitMQ, JMS, IBM MQ, Solace, SQS/SNS, Pub/Sub, Service Bus.</p></div>
-  <div class="card"><h3>Files &amp; directories</h3><p>A two-pane commander over SFTP, FTP, S3, Azure Blob, GCS and MongoDB GridFS — with a transfer queue, directory compare and checksums. LDAP, SNMP and an SSH terminal.</p></div>
-  <div class="card"><h3>One workbench</h3><p>One encrypted vault, one set of <code>${VAR}</code> environments, one searchable history, and code generation — shared by every protocol rather than per-tool.</p></div>
-  <div class="card"><h3>Safe by default</h3><p>Credentials are never displayed in the clear, destructive statements are previewed and confirmed, and bulk writes count what they would touch before they run.</p></div>
-</div>
+<section class="alt" id="contribute">
+  <div class="wrap reveal">
+    <p class="eyebrow">Contributing</p>
+    <h2>Fork it, change it, open a pull request</h2>
+    <p class="lede">The full guide is in <a href="doc.html?d=CONTRIBUTING.md">CONTRIBUTING.md</a>.
+      The short version:</p>
+    <ol class="steps">
+      <li><strong>Fork the repository</strong>Use the <em>Fork</em> button on the repository page. That gives you your own copy to push to — you do not need write access to the original.</li>
+      <li><strong>Clone your fork and add the original as <code>upstream</code></strong>
+<pre><code>git clone &lt;your-fork-url&gt; nexuslink
+cd nexuslink
+git remote add upstream &lt;original-repository-url&gt;</code></pre></li>
+      <li><strong>Branch from an up-to-date <code>main</code></strong>
+<pre><code>git fetch upstream
+git checkout -b feature/short-description upstream/main</code></pre></li>
+      <li><strong>Build and test before you push</strong>
+<pre><code>mvn -q verify          <span class="c"># the whole build, all modules</span>
+mvn -q -pl nexuslink-protocol-kafka test   <span class="c"># just the module you touched</span></code></pre>
+        The default build needs no Docker and no network beyond dependencies — live integration tests
+        are gated behind properties such as <code>-DrunMongoIT=true</code>.</li>
+      <li><strong>Commit in the project's voice</strong>One concern per commit; a subject line that says
+        what changed and why, in plain words, no ticket-speak.</li>
+      <li><strong>Push and open the pull request</strong>
+<pre><code>git push -u origin feature/short-description</code></pre>
+        Open the PR against <code>main</code> of the original repository. Say what changed, why, and how
+        you verified it; link any issue it closes.</li>
+      <li><strong>Keep it current</strong>If review takes a while, rebase rather than merge:
+        <code>git fetch upstream &amp;&amp; git rebase upstream/main</code>.</li>
+    </ol>
+  </div>
+</section>
 
-<h2 id="docs">Documentation</h2>
-<p>Press <strong>F1</strong> in the application for the full help browser — it is searchable and
-covers every menu, submenu and client. In the repository:</p>
-<table>
-  <tr><th>Document</th><th>For</th></tr>
-  <tr><td><a href="README.md">docs/README.md</a></td><td>Index — which document answers which question</td></tr>
-  <tr><td><a href="ARCHITECTURE.md">docs/ARCHITECTURE.md</a></td><td>Module layout, layering, how to add a protocol</td></tr>
-  <tr><td><a href="CHANGELOG.md">docs/CHANGELOG.md</a></td><td>What has shipped, newest first</td></tr>
-  <tr><td><a href="../DISTRIBUTION.md">DISTRIBUTION.md</a></td><td>Publishing to Artifactory, and the bootstrap in detail</td></tr>
-  <tr><td><a href="../PACKAGING.md">PACKAGING.md</a></td><td>Fat JAR and native app-image packaging</td></tr>
-  <tr><td><a href="../RUN.md">RUN.md</a></td><td>Running from source</td></tr>
-</table>
-
-<h2 id="troubleshooting">If something goes wrong</h2>
-<table>
-  <tr><th>Message</th><th>What it means</th></tr>
-  <tr><td><code>set NEXUSLINK_REPO_URL…</code></td><td>The launcher does not know where to fetch from. Export the variable, or ask for the <code>bootstrap.conf</code>.</td></tr>
-  <tr><td><code>checksum mismatch</code></td><td>What arrived does not match the repository — usually a proxy interfering. Retry; if it persists, tell whoever maintains the repository. Nothing is cached.</td></tr>
-  <tr><td><code>nothing cached … --offline</code></td><td>This machine has never run online. Run once with network access first.</td></tr>
-  <tr><td><code>Java N found, but … needs 21</code></td><td>Install a newer JDK, or point <code>JAVA_HOME</code> at one you have.</td></tr>
-  <tr><td><code>Error in glXCreateNewContext</code></td><td>Not an error. JavaFX could not get a hardware graphics context and fell back to software rendering; the app runs normally.</td></tr>
-</table>
+<section id="trouble">
+  <div class="wrap reveal">
+    <p class="eyebrow">Troubleshooting</p>
+    <h2>If something goes wrong</h2>
+    <table>
+      <tr><th>Message</th><th>What it means</th></tr>
+      <tr><td><code>set NEXUSLINK_REPO_URL…</code></td><td>The launcher does not know where to fetch from. Export the variable, or ask for the <code>bootstrap.conf</code>.</td></tr>
+      <tr><td><code>checksum mismatch</code></td><td>What arrived does not match the repository — usually a proxy interfering. Retry; if it persists, tell whoever maintains the repository. Nothing is cached.</td></tr>
+      <tr><td><code>nothing cached … --offline</code></td><td>This machine has never run online. Run once with network access first.</td></tr>
+      <tr><td><code>Java N found, but … needs 21</code></td><td>Install a newer JDK, or point <code>JAVA_HOME</code> at one you have.</td></tr>
+      <tr><td><code>Error in glXCreateNewContext</code></td><td>Not an error. JavaFX could not get a hardware graphics context and fell back to software rendering; the app runs normally.</td></tr>
+    </table>
+  </div>
+</section>
 
 <footer>
-  NexusLink — offline-first connectivity workbench. Built by Pratyush Ranjan Mishra.
+  <div class="wrap">
+    <span style="display:flex;align-items:center;gap:12px">
+      <img src="assets/nexuslink-mark.svg" alt="">
+      NexusLink — offline-first connectivity workbench. Built by Pratyush Ranjan Mishra.
+    </span>
+    <span><a href="doc.html?d=README.md">Docs</a> &middot; <a href="javadoc/index.html">Javadoc</a> &middot; <a href="doc.html?d=CONTRIBUTING.md">Contributing</a></span>
+  </div>
 </footer>
 
-</div>
+<script>
+(function () {
+  document.documentElement.classList.add('js');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var nav = document.getElementById('nav');
+  var layers = [].slice.call(document.querySelectorAll('[data-speed]'));
+  var ticking = false;
+
+  function frame() {
+    ticking = false;
+    var y = window.pageYOffset;
+    nav.classList.toggle('stuck', y > 8);
+    if (reduce) return;
+    layers.forEach(function (el) {
+      el.style.transform = 'translate3d(0,' + (y * parseFloat(el.dataset.speed)).toFixed(1) + 'px,0)';
+    });
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(frame); }
+  }, { passive: true });
+  frame();
+
+  if (!reduce && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+  }
+  // Belt and braces: nothing stays hidden, whatever the observer does.
+  setTimeout(function () {
+    document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
+  }, 2500);
+})();
+</script>
 </body>
 </html>

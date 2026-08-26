@@ -76,7 +76,7 @@ nexuslink-parent (pom)            ← aggregator + dependencyManagement (all ver
 > **Why you start the app from `nexuslink-app`:** the parent POM is a pure aggregator and the
 > other modules are libraries — only `nexuslink-app` defines a `mainClass`
 > (`com.nexuslink.app.NexusLinkLauncher`). Run it with `mvn -pl nexuslink-app -am javafx:run`
-> from the root, or `cd nexuslink-app && mvn javafx:run`. See [`RUN.md`](./RUN.md).
+> from the root, or `cd nexuslink-app && mvn javafx:run`. See [`docs/RUN.md`](./docs/RUN.md).
 
 ---
 
@@ -189,7 +189,7 @@ mvn test                         # run the suite (Mongo integration tests are Do
 mvn -pl nexuslink-app -am javafx:run   # launch the desktop app (needs a graphical display)
 ```
 
-> NexusLink is a **GUI app** — it will not run headless. See [`RUN.md`](./RUN.md) for direct-`java`
+> NexusLink is a **GUI app** — it will not run headless. See [`docs/RUN.md`](./docs/RUN.md) for direct-`java`
 > launch, demo flags, and a known dev-environment TTY quirk.
 
 ---

@@ -143,6 +143,7 @@
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.javafx.plugin.version>0.0.8</maven.javafx.plugin.version>
+        <maven.javadoc.plugin.version>3.6.3</maven.javadoc.plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -737,6 +738,41 @@
         </pluginManagement>
     </build>
     <profiles>
+        <!--
+          javadoc: the API reference published with the GitHub Pages site.
+
+            mvn -Pjavadoc javadoc:aggregate
+
+          writes every module's public API into docs/javadoc/, which docs/index.html links to.
+          Nothing else in the build depends on it, so a normal build never pays for it.
+        -->
+        <profile>
+            <id>javadoc</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven.javadoc.plugin.version}</version>
+                        <configuration>
+                            <reportOutputDirectory>${project.basedir}/docs</reportOutputDirectory>
+                            <destDir>javadoc</destDir>
+                            <windowtitle>NexusLink API</windowtitle>
+                            <doctitle>NexusLink — Universal Connectivity Workbench</doctitle>
+                            <bottom>NexusLink — one console, every protocol, zero context switching.</bottom>
+                            <source>21</source>
+                            <notimestamp>true</notimestamp>
+                            <!-- The reference is for readers, not a gate: missing tags must not fail it. -->
+                            <doclint>none</doclint>
+                            <failOnError>false</failOnError>
+                            <quiet>true</quiet>
+                            <detectJavaApiLink>false</detectJavaApiLink>
+                            <excludePackageNames>com.nexuslink.*.internal</excludePackageNames>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!--
           publish: where `mvn deploy` sends the build. Defined on the parent so a reactor build
           (-am, which drags in the library modules) can deploy in one command. Point it at your own
