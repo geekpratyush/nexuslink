@@ -23,4 +23,20 @@ public final class Env {
         EnvironmentService s = service();
         return s == null ? template : s.interpolate(template);
     }
+
+    /**
+     * Publishes a value captured at runtime — a token extracted from a response, say — so that
+     * {@code ${name}} resolves to it from now on. Session-scoped: never written to the environment
+     * file, because a captured credential belongs to this session only.
+     */
+    public static void set(String name, String value) {
+        EnvironmentService s = service();
+        if (s != null) s.setRuntime(name, value);
+    }
+
+    /** The values captured this session, newest wins. Empty when no environment service is registered. */
+    public static java.util.Map<String, String> captured() {
+        EnvironmentService s = service();
+        return s == null ? java.util.Map.of() : s.runtimeVariables();
+    }
 }

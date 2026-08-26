@@ -12,7 +12,13 @@ import java.util.function.UnaryOperator;
  */
 public final class RestRequest {
 
-    public enum BodyType { NONE, JSON, XML, TEXT, FORM_URLENCODED }
+    public enum BodyType {
+        NONE, JSON, XML, TEXT, FORM_URLENCODED,
+        /** Multipart/form-data: named text fields and file parts (RFC 7578). */
+        FORM_DATA,
+        /** The raw bytes of a file, sent as-is. */
+        BINARY
+    }
 
     private String method = "GET";
     private String url = "";
@@ -20,6 +26,11 @@ public final class RestRequest {
     private final List<KeyValue> headers = new ArrayList<>();
     private BodyType bodyType = BodyType.NONE;
     private String body = "";
+    /** Parts for a {@link BodyType#FORM_DATA} body. */
+    private final List<FormPart> formParts = new ArrayList<>();
+    /** The file sent as a {@link BodyType#BINARY} body, and the type to declare for it. */
+    private String binaryFilePath = "";
+    private String binaryContentType = "";
 
     // Auth
     public enum AuthType { NONE, BASIC, BEARER, API_KEY, OAUTH2, AWS_SIGV4, DIGEST, HMAC, NTLM }
@@ -89,6 +100,15 @@ public final class RestRequest {
 
     public String getBody() { return body; }
     public void setBody(String body) { this.body = body; }
+
+    /** The multipart parts, edited in place by the Body tab. */
+    public List<FormPart> getFormParts() { return formParts; }
+
+    public String getBinaryFilePath() { return binaryFilePath; }
+    public void setBinaryFilePath(String path) { this.binaryFilePath = path == null ? "" : path; }
+
+    public String getBinaryContentType() { return binaryContentType; }
+    public void setBinaryContentType(String type) { this.binaryContentType = type == null ? "" : type; }
 
     public AuthType getAuthType() { return authType; }
     public void setAuthType(AuthType authType) { this.authType = authType; }
@@ -282,6 +302,11 @@ public final class RestRequest {
             case XML -> "application/xml";
             case TEXT -> "text/plain";
             case FORM_URLENCODED -> "application/x-www-form-urlencoded";
+            // multipart's Content-Type carries the boundary, so it is set when the body is encoded;
+            // a binary body's type is whatever the user chose for the file.
+            case FORM_DATA -> null;
+            case BINARY -> binaryContentType == null || binaryContentType.isBlank()
+                    ? "application/octet-stream" : binaryContentType;
             case NONE -> null;
         };
     }
@@ -317,6 +342,52 @@ public final class RestRequest {
     }
 
     /** A single editable key/value row (header or query param). */
+    /**
+     * One multipart part: a named text field, or a file read from {@code filePath}. The file is read
+     * at send time rather than being held in the request, so a large upload is not buffered twice and
+     * a request saved to a collection keeps the path, not the bytes.
+     */
+    public static final class FormPart {
+        private boolean enabled = true;
+        private String name = "";
+        private String value = "";
+        private boolean file;
+        private String filePath = "";
+        private String contentType = "";
+
+        public FormPart() { }
+
+        public FormPart(String name, String value) { this.name = name; this.value = value; }
+
+        /** A file part reading from {@code path}. */
+        public static FormPart ofFile(String name, String path) {
+            FormPart part = new FormPart(name, "");
+            part.file = true;
+            part.filePath = path;
+            return part;
+        }
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name == null ? "" : name; }
+        public String getValue() { return value; }
+        public void setValue(String value) { this.value = value == null ? "" : value; }
+        public boolean isFile() { return file; }
+        public void setFile(boolean file) { this.file = file; }
+        public String getFilePath() { return filePath; }
+        public void setFilePath(String filePath) { this.filePath = filePath == null ? "" : filePath; }
+        public String getContentType() { return contentType; }
+        public void setContentType(String contentType) {
+            this.contentType = contentType == null ? "" : contentType;
+        }
+
+        /** {@code true} when this part has enough to be sent. */
+        public boolean isComplete() {
+            return enabled && !name.isBlank() && (!file || !filePath.isBlank());
+        }
+    }
+
     public static final class KeyValue {
         private boolean enabled = true;
         private String key;

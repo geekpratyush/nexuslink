@@ -29,15 +29,27 @@ Audit of the REST client against Postman, based on the code as of 2026-08-25.
 1. **Collections and folders.** There is no request tree: requests are saved as connection profiles,
    flat. Needs a collection tree with folders, drag to reorder, and collection-level variables and
    auth that a request inherits. This is the single biggest structural gap.
-2. **Collection runner.** Run a folder in order, N iterations, optionally driven by a CSV/JSON data
-   file, with a pass/fail report per request. The assertion engine already exists; the driver
-   around it does not.
-3. **Form-data body UI.** The RFC 7578 encoder is written and tested; the Body tab still cannot add
-   a file part per row. Finish the wiring.
-4. **Post-response scripts** / value extraction — capture a JSON path from a response into an
-   environment variable so the next request can use it. Without this, chaining a login to a call
-   is manual.
-5. **Binary / file request body** and **save response to file**.
+2. ~~**Collection runner.**~~ **DONE 2026-08-26.** Pure `RunPlan` (iterations, data rows — *the row
+   count wins over the iteration count*, stop-on-failure, delay, CSV/JSON parsing), `RunReport` and
+   `CollectionRunner` (assertions decide pass/fail, extracted values thread into the next request,
+   cancel mid-run). `RestRequestJson` rebuilds a stored request with `${var}` substitution — the
+   reading half the editor never had. UI: **Run this folder…** in the collections tree opens a runner
+   with iterations, delay, data file, live result table and report. 22 unit tests + 7 against a real
+   loopback HTTP server.
+3. ~~**Form-data body UI.**~~ **DONE 2026-08-26.** `RestRequest.BodyType` gained `FORM_DATA` with a
+   `FormPart` model (text or file, per-part content type, enable toggle); the Body tab shows a parts
+   table with a file picker; `RestExecutionService` encodes it through the existing RFC 7578 encoder
+   and takes the boundary-carrying Content-Type from it. Verified against a real server.
+4. ~~**Post-response extraction.**~~ **DONE 2026-08-26.** Pure `ResponseExtraction` — JSON path
+   (pointer or dotted), header, regex capture, status or whole body → a named variable, with a missing
+   value reported rather than thrown. New **Extract** tab with a "test on the last response" preview;
+   values publish into a **session-scoped runtime layer** in `EnvironmentService` that `${var}`
+   consults first and that is never written to disk (a captured token belongs to this session).
+   12 tests.
+5. ~~**Binary / file request body** and **save response to file**.~~ **DONE 2026-08-26.**
+   `BodyType.BINARY` sends a file's bytes as-is with a declarable content type (verified byte-for-byte
+   against a real server); the response Body tab gained **Save to file…**, writing the bytes as
+   received with a file name guessed from the URL and content type.
 
 ### P2
 

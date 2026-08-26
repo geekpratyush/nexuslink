@@ -188,6 +188,60 @@ public final class RestExecutionService {
      * header, or the NTLM Type 3 token — and is null on the first attempt. {@code traceparent} is the
      * W3C header to inject when distributed tracing is on (null to send none).
      */
+    /**
+     * The Content-Type of the multipart body most recently encoded, including its boundary. Set by
+     * {@link #encodeBody} and read a few lines later when the header is written; both happen on the
+     * same call, so the value cannot be seen by another request.
+     */
+    private String multipartContentType;
+
+    /**
+     * The bytes to send. Text bodies are their own text; a {@code FORM_DATA} body is encoded with the
+     * RFC 7578 encoder (file parts read from disk at send time); a {@code BINARY} body is the file's
+     * bytes as they are.
+     */
+    private byte[] encodeBody(RestRequest req) {
+        return switch (req.getBodyType()) {
+            case NONE -> new byte[0];
+            case FORM_DATA -> {
+                MultipartFormData form = new MultipartFormData();
+                for (RestRequest.FormPart part : req.getFormParts()) {
+                    if (!part.isComplete()) continue;
+                    if (!part.isFile()) {
+                        form.addField(part.getName(), part.getValue());
+                        continue;
+                    }
+                    java.nio.file.Path path = java.nio.file.Path.of(part.getFilePath());
+                    try {
+                        byte[] content = java.nio.file.Files.readAllBytes(path);
+                        String filename = path.getFileName() == null
+                                ? part.getName() : path.getFileName().toString();
+                        if (part.getContentType().isBlank()) {
+                            form.addFile(part.getName(), filename, content);
+                        } else {
+                            form.addFile(part.getName(), filename, part.getContentType(), content);
+                        }
+                    } catch (java.io.IOException e) {
+                        throw new IllegalStateException(
+                                "Could not read the file for part \"" + part.getName() + "\": " + e.getMessage(), e);
+                    }
+                }
+                multipartContentType = form.getContentType();
+                yield form.build();
+            }
+            case BINARY -> {
+                if (req.getBinaryFilePath().isBlank()) yield new byte[0];
+                try {
+                    yield java.nio.file.Files.readAllBytes(java.nio.file.Path.of(req.getBinaryFilePath()));
+                } catch (java.io.IOException e) {
+                    throw new IllegalStateException(
+                            "Could not read the request body file: " + e.getMessage(), e);
+                }
+            }
+            default -> req.getBody().getBytes(StandardCharsets.UTF_8);
+        };
+    }
+
     private HttpRequest buildRequest(RestRequest req, String authorizationOverride, String traceparent) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(req.requestUri()))
@@ -195,15 +249,16 @@ public final class RestExecutionService {
 
         if (traceparent != null) builder.header(TraceContext.TRACEPARENT, traceparent);
 
-        byte[] bodyBytes = req.getBodyType() == RestRequest.BodyType.NONE
-                ? new byte[0] : req.getBody().getBytes(StandardCharsets.UTF_8);
+        byte[] bodyBytes = encodeBody(req);
         HttpRequest.BodyPublisher publisher = req.getBodyType() == RestRequest.BodyType.NONE
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofByteArray(bodyBytes);
         builder.method(req.getMethod().toUpperCase(), publisher);
 
-        // Content-Type from body type (unless user set one explicitly)
-        String ct = req.contentType();
+        // Content-Type from body type (unless user set one explicitly). Multipart is the exception:
+        // its type carries the boundary chosen while encoding, so it comes from the encoder.
+        String ct = req.getBodyType() == RestRequest.BodyType.FORM_DATA
+                ? multipartContentType : req.contentType();
         boolean userSetCt = req.getHeaders().stream()
                 .anyMatch(kv -> kv.isEnabled() && kv.getKey().equalsIgnoreCase("Content-Type"));
         if (ct != null && !userSetCt) builder.header("Content-Type", ct);

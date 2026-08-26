@@ -85,6 +85,16 @@ public final class RestClientView extends BorderPane {
 
     private TextArea bodyArea;
     private ComboBox<RestRequest.BodyType> bodyTypeCombo;
+    // Multipart and binary body editors, shown in place of the text area for those body types.
+    private TableView<RestRequest.FormPart> formPartsTable;
+    private final ObservableList<RestRequest.FormPart> formParts = FXCollections.observableArrayList();
+    private VBox formPartsBox;
+    private VBox binaryBox;
+    private TextField binaryPathField;
+    private TextField binaryTypeField;
+    private final Label binaryStatus = new Label();
+    // Post-response extraction rules, in the compact "name = source: expression" form.
+    private TextArea extractionsArea;
     private TextArea preRequestArea;
 
     private ComboBox<RestRequest.AuthType> authTypeCombo;
@@ -322,6 +332,10 @@ public final class RestClientView extends BorderPane {
         headerRows.setAll(r.getHeaders());
         bodyTypeCombo.setValue(r.getBodyType());
         bodyArea.setText(r.getBody());
+        formParts.setAll(r.getFormParts());
+        addTrailingPartRow();
+        if (binaryPathField != null) binaryPathField.setText(r.getBinaryFilePath());
+        if (binaryTypeField != null) binaryTypeField.setText(r.getBinaryContentType());
         // Setting the auth type fires the combo listener, which re-runs the auth-field visibility.
         authTypeCombo.setValue(r.getAuthType());
         authUser.setText(r.getAuthUsername());
@@ -421,6 +435,7 @@ public final class RestClientView extends BorderPane {
             collectionsPanel = new CollectionsPanel(
                     new com.nexuslink.protocol.http.rest.RestCollectionStore(),
                     this::serializeRequest, this::loadRequest, s -> logger.accept(s));
+            collectionsPanel.setRunner(this::openRunner);
             SplitPane.setResizableWithParent(collectionsPanel, false);
         }
         if (show) {
@@ -453,6 +468,7 @@ public final class RestClientView extends BorderPane {
                 new Tab("Auth", buildAuthTab()),
                 new Tab("Pre-request Script", buildPreRequestTab()),
                 new Tab("Tests", buildAssertionsTable()),
+                new Tab("Extract", buildExtractionsTab()),
                 new Tab("Settings", buildSettingsTab()));
         return tabs;
     }
@@ -589,10 +605,165 @@ public final class RestClientView extends BorderPane {
         bodyArea.setPromptText("Request body…");
         VBox.setVgrow(bodyArea, Priority.ALWAYS);
 
-        VBox box = new VBox(controls, bodyArea);
+        // Form-data and binary bodies are not text, so the Body tab shows the editor that fits the
+        // chosen type rather than a text area that cannot express either.
+        StackPane bodyStack = new StackPane(bodyArea, buildFormDataEditor(), buildBinaryEditor());
+        VBox.setVgrow(bodyStack, Priority.ALWAYS);
+        bodyTypeCombo.valueProperty().addListener((o, ov, type) -> showBodyEditor(type));
+        showBodyEditor(RestRequest.BodyType.NONE);
+        format.disableProperty().bind(bodyTypeCombo.valueProperty()
+                .isEqualTo(RestRequest.BodyType.FORM_DATA)
+                .or(bodyTypeCombo.valueProperty().isEqualTo(RestRequest.BodyType.BINARY)));
+
+        VBox box = new VBox(controls, bodyStack);
         box.setPadding(new Insets(4));
         return box;
     }
+
+    /** Shows the editor that matches the chosen body type. */
+    private void showBodyEditor(RestRequest.BodyType type) {
+        boolean form = type == RestRequest.BodyType.FORM_DATA;
+        boolean binary = type == RestRequest.BodyType.BINARY;
+        bodyArea.setVisible(!form && !binary);
+        if (formPartsBox != null) formPartsBox.setVisible(form);
+        if (binaryBox != null) binaryBox.setVisible(binary);
+    }
+
+    /**
+     * The multipart editor: one row per part with a name, a value or a file, and an optional content
+     * type. The RFC 7578 encoder was already written and tested; this is the missing half — a file
+     * cannot be typed into a text area.
+     */
+    private VBox buildFormDataEditor() {
+        formPartsTable = new TableView<>(formParts);
+        formPartsTable.setEditable(true);
+        formPartsTable.setPlaceholder(new Label("Add a field or a file part"));
+        formPartsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<RestRequest.FormPart, Boolean> on = new TableColumn<>("");
+        on.setCellValueFactory(cd -> {
+            javafx.beans.property.SimpleBooleanProperty p =
+                    new javafx.beans.property.SimpleBooleanProperty(cd.getValue().isEnabled());
+            p.addListener((o, ov, nv) -> cd.getValue().setEnabled(nv));
+            return p;
+        });
+        on.setCellFactory(javafx.scene.control.cell.CheckBoxTableCell.forTableColumn(on));
+        on.setMaxWidth(40);
+        on.setEditable(true);
+
+        TableColumn<RestRequest.FormPart, String> name = new TableColumn<>("Name");
+        name.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(cd.getValue().getName()));
+        name.setCellFactory(javafx.scene.control.cell.TextFieldTableCell.forTableColumn());
+        name.setOnEditCommit(e -> { e.getRowValue().setName(e.getNewValue()); addTrailingPartRow(); });
+
+        TableColumn<RestRequest.FormPart, String> kind = new TableColumn<>("Type");
+        kind.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().isFile() ? "File" : "Text"));
+        kind.setCellFactory(javafx.scene.control.cell.ComboBoxTableCell.forTableColumn("Text", "File"));
+        kind.setOnEditCommit(e -> {
+            e.getRowValue().setFile("File".equals(e.getNewValue()));
+            formPartsTable.refresh();
+        });
+        kind.setMaxWidth(90);
+
+        TableColumn<RestRequest.FormPart, String> value = new TableColumn<>("Value / file");
+        value.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().isFile() ? cd.getValue().getFilePath() : cd.getValue().getValue()));
+        value.setCellFactory(javafx.scene.control.cell.TextFieldTableCell.forTableColumn());
+        value.setOnEditCommit(e -> {
+            if (e.getRowValue().isFile()) e.getRowValue().setFilePath(e.getNewValue());
+            else e.getRowValue().setValue(e.getNewValue());
+            addTrailingPartRow();
+        });
+
+        TableColumn<RestRequest.FormPart, String> type = new TableColumn<>("Content type");
+        type.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().getContentType()));
+        type.setCellFactory(javafx.scene.control.cell.TextFieldTableCell.forTableColumn());
+        type.setOnEditCommit(e -> e.getRowValue().setContentType(e.getNewValue()));
+        type.setMaxWidth(160);
+
+        formPartsTable.getColumns().setAll(java.util.List.of(on, name, kind, value, type));
+        VBox.setVgrow(formPartsTable, Priority.ALWAYS);
+
+        Button choose = new Button("Choose file for selected row…");
+        choose.getStyleClass().add("btn-secondary");
+        choose.setOnAction(e -> chooseFileForPart());
+        Button remove = new Button("Remove row");
+        remove.getStyleClass().add("btn-secondary");
+        remove.setOnAction(e -> {
+            RestRequest.FormPart selected = formPartsTable.getSelectionModel().getSelectedItem();
+            if (selected != null) formParts.remove(selected);
+            addTrailingPartRow();
+        });
+        HBox tools = new HBox(8, choose, remove);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        tools.setPadding(new Insets(4, 0, 0, 0));
+
+        addTrailingPartRow();
+        formPartsBox = new VBox(4, formPartsTable, tools);
+        formPartsBox.setVisible(false);
+        return formPartsBox;
+    }
+
+    /** Keeps one blank row at the end so a new part can always be typed. */
+    private void addTrailingPartRow() {
+        if (formParts.isEmpty() || !formParts.get(formParts.size() - 1).getName().isBlank()) {
+            formParts.add(new RestRequest.FormPart());
+        }
+    }
+
+    /** File picker for the selected multipart row, which also switches it to a file part. */
+    private void chooseFileForPart() {
+        RestRequest.FormPart selected = formPartsTable.getSelectionModel().getSelectedItem();
+        if (selected == null) { statusLabel.setText("Select a part row first"); return; }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Choose a file for this part");
+        java.io.File file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        selected.setFile(true);
+        selected.setFilePath(file.getAbsolutePath());
+        if (selected.getName().isBlank()) selected.setName(file.getName());
+        formPartsTable.refresh();
+        addTrailingPartRow();
+    }
+
+    /** The binary-body editor: a file to send as-is, and the content type to declare for it. */
+    private VBox buildBinaryEditor() {
+        binaryPathField = new TextField();
+        binaryPathField.setPromptText("path of the file to send as the body");
+        binaryPathField.setEditable(false);
+        HBox.setHgrow(binaryPathField, Priority.ALWAYS);
+        binaryTypeField = new TextField();
+        binaryTypeField.setPromptText("application/octet-stream");
+
+        Button choose = new Button("Choose file…");
+        choose.getStyleClass().add("btn-secondary");
+        choose.setOnAction(e -> {
+            javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+            chooser.setTitle("Choose the request body file");
+            java.io.File file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (file == null) return;
+            binaryPathField.setText(file.getAbsolutePath());
+            binaryStatus.setText(file.length() + " bytes");
+        });
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> { binaryPathField.clear(); binaryStatus.setText(""); });
+
+        binaryStatus.getStyleClass().add("meta-label");
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(8));
+        grid.addRow(0, new Label("File:"), binaryPathField, choose, clear);
+        grid.addRow(1, new Label("Content type:"), binaryTypeField);
+        grid.add(binaryStatus, 1, 2);
+        binaryBox = new VBox(grid);
+        binaryBox.setVisible(false);
+        return binaryBox;
+    }
+
 
     private VBox buildPreRequestTab() {
         Label hint = new Label(
@@ -620,6 +791,285 @@ public final class RestClientView extends BorderPane {
             bodyArea.setText(json.writerWithDefaultPrettyPrinter().writeValueAsString(tree));
         } catch (Exception ex) {
             logger.accept("Format failed: not valid JSON — " + ex.getMessage());
+        }
+    }
+
+    /**
+     * The post-response extraction tab: rules that lift a value out of the response and name it, so
+     * the next request can use {@code ${name}}.
+     *
+     * <p>This is what turns a list of requests into a chain — without it, using a login's token in the
+     * next call means copying it by hand. The rules are also what the collection runner threads
+     * through a run, so a chain that works here works unattended.
+     */
+    private VBox buildExtractionsTab() {
+        Label hint = new Label("""
+                One rule per line — name = source: expression
+                  token = json_path: /data/token        (a dotted path like data.token works too)
+                  rid   = header: X-Request-Id
+                  id    = regex: "id":\\s*(\\d+)
+                  code  = status
+                Extracted values become environment variables for the next request and for the runner.""");
+        hint.getStyleClass().add("meta-label");
+        hint.setWrapText(true);
+
+        extractionsArea = new TextArea();
+        extractionsArea.getStyleClass().add("code-area");
+        extractionsArea.setPromptText("token = json_path: /data/token");
+        VBox.setVgrow(extractionsArea, Priority.ALWAYS);
+
+        Label preview = new Label();
+        preview.getStyleClass().add("meta-label");
+        preview.setWrapText(true);
+        Button test = new Button("Test on the last response");
+        test.getStyleClass().add("btn-secondary");
+        test.setOnAction(e -> preview.setText(describeExtractions()));
+
+        VBox box = new VBox(6, hint, extractionsArea, test, preview);
+        box.setPadding(new Insets(8));
+        return box;
+    }
+
+    /**
+     * The collection runner: runs a folder's requests in order, N times or once per row of a data
+     * file, with each request's assertions deciding pass or fail and its extractions feeding the next.
+     *
+     * <p>The engine is {@link com.nexuslink.protocol.http.rest.CollectionRunner}; this is the dialog
+     * around it — the settings, the live result table, and the report. It runs off the FX thread and
+     * can be stopped mid-run.
+     */
+    private void openRunner(java.util.List<com.nexuslink.protocol.http.rest.CollectionNode> requests) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Run collection");
+        dialog.setHeaderText(requests.size() + " request(s), in order");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.setResizable(true);
+
+        TextField iterations = new TextField("1");
+        iterations.setPrefWidth(70);
+        TextField delay = new TextField("0");
+        delay.setPrefWidth(70);
+        CheckBox stopOnFailure = new CheckBox("Stop on first failure");
+        Label dataLabel = new Label("no data file");
+        dataLabel.getStyleClass().add("meta-label");
+        final java.util.List<java.util.Map<String, String>>[] data = new java.util.List[]{java.util.List.of()};
+
+        Button chooseData = new Button("Data file…");
+        chooseData.getStyleClass().add("btn-secondary");
+        chooseData.setTooltip(new Tooltip("A CSV with a header row, or a JSON array of objects — "
+                + "each row runs the requests once with its values as ${variables}"));
+        chooseData.setOnAction(e -> {
+            javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+            chooser.setTitle("Choose a data file");
+            chooser.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter("CSV or JSON", "*.csv", "*.json"),
+                    new javafx.stage.FileChooser.ExtensionFilter("All files", "*.*"));
+            java.io.File file = chooser.showOpenDialog(getScene() == null ? null : getScene().getWindow());
+            if (file == null) return;
+            try {
+                data[0] = com.nexuslink.protocol.http.rest.RunPlan.parseData(
+                        java.nio.file.Files.readString(file.toPath(), StandardCharsets.UTF_8));
+                dataLabel.setText(file.getName() + " — " + data[0].size() + " row(s), "
+                        + "so the requests run " + data[0].size() + " time(s)");
+            } catch (Exception ex) {
+                dataLabel.setText("Could not read it: " + ex.getMessage());
+                data[0] = java.util.List.of();
+            }
+        });
+
+        TableView<com.nexuslink.protocol.http.rest.RunReport.Step> results = new TableView<>();
+        TableColumn<com.nexuslink.protocol.http.rest.RunReport.Step, String> okCol = new TableColumn<>("");
+        okCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().passed() ? "✓" : "✖"));
+        okCol.setMaxWidth(40);
+        TableColumn<com.nexuslink.protocol.http.rest.RunReport.Step, String> nameCol =
+                new TableColumn<>("Request");
+        nameCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                "#" + cd.getValue().iteration() + "  " + cd.getValue().requestName()));
+        nameCol.setPrefWidth(220);
+        TableColumn<com.nexuslink.protocol.http.rest.RunReport.Step, String> statusCol =
+                new TableColumn<>("Status");
+        statusCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().statusCode() > 0 ? String.valueOf(cd.getValue().statusCode()) : "—"));
+        statusCol.setMaxWidth(80);
+        TableColumn<com.nexuslink.protocol.http.rest.RunReport.Step, String> msCol = new TableColumn<>("ms");
+        msCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                String.valueOf(cd.getValue().durationMs())));
+        msCol.setMaxWidth(70);
+        TableColumn<com.nexuslink.protocol.http.rest.RunReport.Step, String> detailCol =
+                new TableColumn<>("Detail");
+        detailCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                cd.getValue().detail()));
+        detailCol.setPrefWidth(380);
+        results.getColumns().setAll(java.util.List.of(okCol, nameCol, statusCol, msCol, detailCol));
+        results.setPlaceholder(new Label("Press Run"));
+        VBox.setVgrow(results, Priority.ALWAYS);
+
+        Label summary = new Label();
+        summary.getStyleClass().add("meta-label");
+        Button run = new Button("Run");
+        run.getStyleClass().add("btn-primary");
+        Button stop = new Button("Stop");
+        stop.getStyleClass().add("btn-secondary");
+        stop.setDisable(true);
+
+        run.setOnAction(e -> {
+            int rounds;
+            try { rounds = Integer.parseInt(iterations.getText().trim()); }
+            catch (NumberFormatException ex) { rounds = 1; }
+            long pause;
+            try { pause = Long.parseLong(delay.getText().trim()); }
+            catch (NumberFormatException ex) { pause = 0; }
+
+            java.util.Map<String, String> byId = new java.util.LinkedHashMap<>();
+            java.util.Map<String, String> names = new java.util.LinkedHashMap<>();
+            for (var node : requests) {
+                byId.put(node.id, node.request == null ? "" : node.request.toString());
+                names.put(node.id, node.name);
+            }
+            var plan = new com.nexuslink.protocol.http.rest.RunPlan(
+                    java.util.List.copyOf(byId.keySet()), rounds, data[0],
+                    stopOnFailure.isSelected(), pause);
+
+            results.getItems().clear();
+            summary.setText("Running " + plan.totalSteps() + " request(s)…");
+            run.setDisable(true);
+            stop.setDisable(false);
+
+            var engine = new com.nexuslink.protocol.http.rest.CollectionRunner(
+                    executor::execute,
+                    (id, vars) -> com.nexuslink.protocol.http.rest.RestRequestJson.parse(
+                            byId.get(id), com.nexuslink.protocol.http.rest.CollectionRunner.substitution(vars)),
+                    names::get);
+            stop.setOnAction(ev -> engine.cancel());
+
+            Task<com.nexuslink.protocol.http.rest.RunReport> task = new Task<>() {
+                @Override protected com.nexuslink.protocol.http.rest.RunReport call() {
+                    return engine.run(plan, com.nexuslink.ui.env.Env.captured(),
+                            id -> com.nexuslink.protocol.http.rest.RestRequestJson.extractionsOf(byId.get(id)),
+                            step -> Platform.runLater(() -> results.getItems().add(step)));
+                }
+            };
+            task.setOnSucceeded(ev -> {
+                var report = task.getValue();
+                summary.setText(report.summary());
+                // A value extracted during the run stays available to the editor afterwards, which is
+                // what makes "run the login folder, then poke at the API by hand" work.
+                report.variables().forEach(com.nexuslink.ui.env.Env::set);
+                logger.accept("Collection run: " + report.summary());
+                run.setDisable(false);
+                stop.setDisable(true);
+            });
+            task.setOnFailed(ev -> {
+                summary.setText("Run failed: " + task.getException().getMessage());
+                run.setDisable(false);
+                stop.setDisable(true);
+            });
+            Thread thread = new Thread(task, "rest-collection-runner");
+            thread.setDaemon(true);
+            thread.start();
+        });
+
+        HBox settings = new HBox(8, new Label("Iterations:"), iterations,
+                new Label("Delay ms:"), delay, stopOnFailure, chooseData, run, stop);
+        settings.setAlignment(Pos.CENTER_LEFT);
+        VBox content = new VBox(8, settings, dataLabel, results, summary);
+        content.setPadding(new Insets(10));
+        content.setPrefSize(900, 520);
+        dialog.getDialogPane().setContent(content);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        dialog.showAndWait();
+    }
+
+    /**
+     * Writes the response body to a file. The bytes are written as received rather than as rendered,
+     * so a binary download (an image, a PDF, a zip) comes out intact rather than as its pretty-printed
+     * text.
+     */
+    private void saveResponseBody() {
+        if (lastResponse == null || lastResponse.failed()) {
+            statusLabel.setText("Send a request first");
+            return;
+        }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Save response body");
+        chooser.setInitialFileName(suggestedFileName());
+        java.io.File file = chooser.showSaveDialog(getScene() == null ? null : getScene().getWindow());
+        if (file == null) return;
+        try {
+            byte[] bytes = lastResponse.body() == null
+                    ? new byte[0] : lastResponse.body().getBytes(StandardCharsets.UTF_8);
+            java.nio.file.Files.write(file.toPath(), bytes);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Saved " + bytes.length + " byte(s) → " + file.getName());
+            logger.accept("Response body saved to " + file.getName());
+        } catch (java.io.IOException ex) {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Save failed: " + ex.getMessage());
+        }
+    }
+
+    /** A file name from the URL's last path segment, with an extension guessed from the content type. */
+    private String suggestedFileName() {
+        String url = urlField.getText() == null ? "" : urlField.getText().trim();
+        int query = url.indexOf('?');
+        if (query > 0) url = url.substring(0, query);
+        int slash = url.lastIndexOf('/');
+        String name = slash >= 0 && slash < url.length() - 1 ? url.substring(slash + 1) : "response";
+        if (name.contains(".")) return name;
+        String contentType = lastResponse == null ? "" : firstHeader("Content-Type");
+        String extension = contentType.contains("json") ? ".json"
+                : contentType.contains("xml") ? ".xml"
+                : contentType.contains("html") ? ".html"
+                : contentType.contains("csv") ? ".csv"
+                : ".txt";
+        return name + extension;
+    }
+
+    /** The first value of a response header, or an empty string. */
+    private String firstHeader(String name) {
+        if (lastResponse == null || lastResponse.headers() == null) return "";
+        for (var entry : lastResponse.headers().entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(name)) {
+                return entry.getValue() == null || entry.getValue().isEmpty() ? "" : entry.getValue().get(0);
+            }
+        }
+        return "";
+    }
+
+    /** The extraction rules as configured. */
+    private java.util.List<com.nexuslink.protocol.http.rest.ResponseExtraction> extractions() {
+        return com.nexuslink.protocol.http.rest.ResponseExtraction.parse(
+                extractionsArea == null ? "" : extractionsArea.getText());
+    }
+
+    /** Runs the rules against the last response and reports what each produced. */
+    private String describeExtractions() {
+        if (lastResponse == null) return "Send a request first — the rules run against its response.";
+        StringBuilder sb = new StringBuilder();
+        for (var rule : extractions()) {
+            sb.append(rule.describe()).append("  →  ")
+              .append(rule.extract(lastResponse).orElse("(nothing found)")).append('\n');
+        }
+        return sb.length() == 0 ? "No rules yet." : sb.toString();
+    }
+
+    /**
+     * Applies the extraction rules to a response, publishing each value as an environment variable so
+     * {@code ${name}} resolves in the next request.
+     */
+    private void applyExtractions(com.nexuslink.protocol.http.rest.RestResponse response) {
+        if (response == null || response.failed()) return;
+        java.util.List<String> set = new java.util.ArrayList<>();
+        for (var rule : extractions()) {
+            rule.extract(response).ifPresent(value -> {
+                com.nexuslink.ui.env.Env.set(rule.variable(), value);
+                set.add(rule.variable());
+            });
+        }
+        if (!set.isEmpty()) {
+            logger.accept("Extracted into environment: " + String.join(", ", set));
         }
     }
 
@@ -908,7 +1358,13 @@ public final class RestClientView extends BorderPane {
         bodyViewMode.valueProperty().addListener((o, ov, nv) -> renderBody());
         Label viewLabel = new Label("View:");
         viewLabel.getStyleClass().add("meta-label");
-        HBox bodyBar = new HBox(8, viewLabel, bodyViewMode);
+        Button saveBody = new Button("Save to file…");
+        saveBody.getStyleClass().add("btn-secondary");
+        saveBody.setTooltip(new Tooltip("Write the response body to a file — bytes as received, "
+                + "so a download or an image comes out intact"));
+        saveBody.setOnAction(e -> saveResponseBody());
+
+        HBox bodyBar = new HBox(8, viewLabel, bodyViewMode, saveBody);
         bodyBar.setAlignment(Pos.CENTER_LEFT);
         bodyBar.setPadding(new Insets(6, 6, 0, 6));
         org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> responseScroll =
@@ -1038,6 +1494,12 @@ public final class RestClientView extends BorderPane {
         request.getHeaders().addAll(headerRows);
         request.setBodyType(bodyTypeCombo.getValue());
         request.setBody(bodyArea.getText());
+        request.getFormParts().clear();
+        for (RestRequest.FormPart part : formParts) {
+            if (!part.getName().isBlank()) request.getFormParts().add(part);
+        }
+        request.setBinaryFilePath(binaryPathField == null ? "" : binaryPathField.getText());
+        request.setBinaryContentType(binaryTypeField == null ? "" : binaryTypeField.getText());
         request.setAuthType(authTypeCombo.getValue());
         request.setAuthUsername(authUser.getText());
         request.setAuthPassword(authPass.getText());
@@ -1080,6 +1542,7 @@ public final class RestClientView extends BorderPane {
 
     private void renderResponse(RestResponse resp) {
         lastResponse = resp;
+        applyExtractions(resp);   // chain: publish the extracted values before anything else reads them
         responseCookies.setText(formatCookies());
         renderTestResults(resp);
         responseTimeline.setTiming(resp.timing());
@@ -1165,6 +1628,7 @@ public final class RestClientView extends BorderPane {
         root.put("tlsKeyStorePath", request.getTlsKeyStorePath());
         root.put("tlsTrustAll", request.isTlsTrustAll());
         root.put("preRequestScript", preRequestArea.getText());
+        root.put("extractions", extractionsArea == null ? "" : extractionsArea.getText());
         putKeyValues(root.putArray("params"), paramRows);
         putKeyValues(root.putArray("headers"), headerRows);
         ArrayNode tests = root.putArray("assertions");
@@ -1199,6 +1663,7 @@ public final class RestClientView extends BorderPane {
             bodyTypeCombo.setValue(RestRequest.BodyType.valueOf(
                     root.path("bodyType").asText("NONE")));
             bodyArea.setText(root.path("body").asText(""));
+            if (extractionsArea != null) extractionsArea.setText(root.path("extractions").asText(""));
             authTypeCombo.setValue(RestRequest.AuthType.valueOf(
                     root.path("authType").asText("NONE")));
             authUser.setText(root.path("authUsername").asText(""));

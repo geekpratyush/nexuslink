@@ -104,8 +104,37 @@ public final class EnvironmentService {
 
     // ---- resolution ---------------------------------------------------------
 
+    /**
+     * Values captured while the app is running — a token extracted from a response, a value set by a
+     * pre-request script — kept in memory only.
+     *
+     * <p>They take precedence over the saved environment on purpose: a chained login's fresh token
+     * has to win over whatever placeholder is stored in the profile. They are deliberately <em>not</em>
+     * written to disk, because a captured credential belongs in this session and nowhere else.
+     */
+    private final Map<String, String> runtime = new LinkedHashMap<>();
+
+    /** Sets a runtime variable, visible to every {@code ${name}} until the app closes. */
+    public synchronized void setRuntime(String name, String value) {
+        if (name == null || name.isBlank()) return;
+        if (value == null) runtime.remove(name.trim());
+        else runtime.put(name.trim(), value);
+    }
+
+    /** The runtime variables captured so far. */
+    public synchronized Map<String, String> runtimeVariables() {
+        return new LinkedHashMap<>(runtime);
+    }
+
+    /** Forgets every runtime variable — the "clear session values" action. */
+    public synchronized void clearRuntime() {
+        runtime.clear();
+    }
+
     /** Resolves a single variable name with the documented precedence, or {@code null} if unknown. */
     public synchronized String resolve(String name) {
+        String captured = runtime.get(name);
+        if (captured != null) return captured;
         Optional<Environment> env = active();
         if (env.isPresent()) {
             String v = env.get().asMap().get(name);

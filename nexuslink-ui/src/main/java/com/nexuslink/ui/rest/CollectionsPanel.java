@@ -54,6 +54,8 @@ public final class CollectionsPanel extends VBox {
     private final Supplier<String> captureRequest;
     private final Consumer<String> openRequest;
     private final Consumer<String> logger;
+    /** Opens the runner for a folder's requests; set by the view that owns the executor. */
+    private Consumer<java.util.List<CollectionNode>> runRequests = nodes -> { };
 
     private final TreeView<CollectionNode> tree = new TreeView<>();
     private final Label status = new Label();
@@ -97,6 +99,11 @@ public final class CollectionsPanel extends VBox {
         getChildren().addAll(title, bar, tree, status);
         reload();
         if (store.lastError() != null) status.setText(store.lastError());
+    }
+
+    /** Supplies the action that runs a folder — the view owns the executor, not this panel. */
+    public void setRunner(Consumer<java.util.List<CollectionNode>> runner) {
+        this.runRequests = runner == null ? nodes -> { } : runner;
     }
 
     private Button small(String text, String tip, javafx.event.EventHandler<javafx.event.ActionEvent> action) {
@@ -176,6 +183,8 @@ public final class CollectionsPanel extends VBox {
         saveInto.setOnAction(e -> saveCurrentRequest());
         MenuItem updateItem = new MenuItem("Update from editor");
         updateItem.setOnAction(e -> updateSelectedFromEditor());
+        MenuItem run = new MenuItem("Run this folder…");
+        run.setOnAction(e -> runSelected());
         MenuItem newFolder = new MenuItem("New folder…");
         newFolder.setOnAction(e -> newFolder());
         MenuItem newColl = new MenuItem("New collection…");
@@ -186,7 +195,7 @@ public final class CollectionsPanel extends VBox {
         duplicate.setOnAction(e -> duplicateSelected());
         MenuItem delete = new MenuItem("Delete");
         delete.setOnAction(e -> deleteSelected());
-        return new ContextMenu(open, saveInto, updateItem, new SeparatorMenuItem(),
+        return new ContextMenu(open, run, saveInto, updateItem, new SeparatorMenuItem(),
                 newColl, newFolder, new SeparatorMenuItem(), rename, duplicate, delete);
     }
 
@@ -195,6 +204,23 @@ public final class CollectionsPanel extends VBox {
             if (n.folder || n.request == null) return;
             openRequest.accept(n.request.toString());
             status.setText("Opened " + RestCollectionTree.path(store.collections(), n.id));
+        });
+    }
+
+    /**
+     * Runs every request under the selection, in tree order. A request node runs on its own; a folder
+     * or collection runs everything beneath it, which is what "run the folder" means.
+     */
+    private void runSelected() {
+        selectedNode().ifPresent(node -> {
+            java.util.List<CollectionNode> requests = node.folder
+                    ? RestCollectionTree.requestsUnder(node)
+                    : java.util.List.of(node);
+            if (requests.isEmpty()) {
+                status.setText("Nothing to run — this folder has no requests");
+                return;
+            }
+            runRequests.accept(requests);
         });
     }
 

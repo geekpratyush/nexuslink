@@ -9,7 +9,7 @@ forward work only (`TASKS.md` §10).
 
 | Spec | Prefix | P1 | P2 | P3 | Done | Status |
 |------|--------|----|----|----|------|--------|
-| [REST ↔ Postman](2026-08-25-rest-postman-parity/) | — | 5 | 2 | 1 | collections & folders ✅ | in progress |
+| [REST ↔ Postman](2026-08-25-rest-postman-parity/) | — | 5 | 6 | 3 | **all 5 P1** | P1 complete |
 | [SQL ↔ SQL Developer](2026-08-25-sql-developer-parity/) | — | 5 | 6 | 4 | all 5 P1 | P1 complete |
 | [SQL beyond parity](2026-08-25-sql-beyond-parity/) | `SQLX-` | 8 editor + 6 flagship | — | — | 0 | not started |
 | [MongoDB ↔ Compass / Studio 3T](2026-08-25-mongo-compass-studio3t-parity/) | `MG-` | 7 | 8 | 3 | **all 7 P1 + all 8 P2** | P1+P2 complete |

@@ -414,12 +414,12 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       client — collections, nested folders, save/open/update/rename/duplicate/delete, drag-to-reorder,
       JSON import/export. Saved requests reuse the view's own serializer, so every request field is kept.
       **Remaining:** collection-level variables + auth that a request inherits
-- [ ] **P1** **Collection runner** — run a folder in order, N iterations, optional CSV/JSON data file,
+- [x] **P1** **Collection runner** *(2026-08-26)* — run a folder in order, N iterations, optional CSV/JSON data file,
       pass/fail report. The assertion engine (`ResponseAssertions`) already exists; the driver doesn't
-- [ ] **P1** Form-data body UI with a file picker per row _(the RFC 7578 `MultipartFormData` encoder is
+- [x] **P1** Form-data body UI with a file picker per row *(2026-08-26)* _(the RFC 7578 `MultipartFormData` encoder is
       done and tested — only the Body-tab wiring is missing)_
-- [ ] **P1** Post-response scripts / extract a JSON path into an environment variable (request chaining)
-- [ ] **P1** Binary/file request body · save response body to file
+- [x] **P1** Post-response extraction — JSON path / header / regex / status → a session-scoped `${var}` *(2026-08-26)*
+- [x] **P1** Binary/file request body · save response body to file *(2026-08-26)*
 - [ ] **P2** OpenAPI/Swagger import → generate a collection · Postman collection v2.1 import/export
 - [ ] **P2** Editable cookie manager · bulk-edit headers/params as text · response diff · visualizer
 - [ ] **P3** Proxy capture/interceptor · mock server · CLI runner (Newman equivalent)
