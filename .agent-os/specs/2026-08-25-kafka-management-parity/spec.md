@@ -22,21 +22,44 @@ Audited against the source on 2026-08-25 (`KafkaService`, `KafkaExplorer`, `Sche
 
 ## Gaps — P1
 
-- [ ] **KF-1 Topic configuration editing.** `ConfigDiff` computes the change set; nothing calls
+- [x] **KF-1 Topic configuration editing.** *(2026-08-26)* `topicConfig`/`brokerConfig` report the
+      effective settings with **defaults marked** and read-only flagged; `alterTopicConfig` uses
+      `incrementalAlterConfigs` (changes only what is named — `alterConfigs` would reset everything
+      else), and a name with no value DELETEs the override back to the broker default. UI: a **Topic
+      Config** tab that loads, previews the diff of just the edited keys, and applies on confirmation.
+      Live-verified including revert-to-default. `ConfigDiff` computes the change set; nothing calls
       `incrementalAlterConfigs`. Wire it: view effective config (with defaults marked), edit, preview the
       diff, apply. Also broker-level config, read-only at first.
-- [ ] **KF-2 Cluster / broker panel** — `describeCluster`: brokers, controller, rack, per-broker log dirs
+- [x] **KF-2 Cluster / broker panel** *(2026-08-26)* `describeCluster` + `clusterId`: brokers, host,
+      port, rack, and which one is the controller. UI: a **Cluster** tab. _(Per-broker log dirs and API
+      versions still to come.)_ Live-verified. — `describeCluster`: brokers, controller, rack, per-broker log dirs
       and sizes, API versions. There is no way to see the cluster itself today.
-- [ ] **KF-3 Produce with headers, partition, timestamp and null (tombstone) values.** Today: key + value
+- [x] **KF-3 Produce with headers, partition, timestamp and null (tombstone) values.** *(2026-08-26)*
+      Pure `ProduceSpec` (headers list — Kafka allows repeats — target partition, explicit timestamp,
+      and a real tombstone that refuses to send without a key, since a keyless tombstone deletes
+      nothing). UI: partition/timestamp fields, a collapsible headers editor, and a **Tombstone**
+      toggle that disables the value box so the two cannot be confused. **11 tests + live.** Today: key + value
       only. Tombstones matter for compacted topics and cannot be sent at all.
-- [ ] **KF-4 Message headers on browse/consume** — rendered as a table per message, and filterable.
+- [x] **KF-4 Message headers on browse/consume** *(2026-08-26)* `KafkaMessage` now carries headers,
+      knows `isTombstone()`, and feeds them to the existing header-aware `MessageFilter`. UI: a Headers
+      column, a **Show headers…** dialog, and a tombstone rendered as *(tombstone — null value)* in
+      amber rather than as an ordinary empty record. Live-verified round trip. — rendered as a table per message, and filterable.
       `KafkaMessage` does not carry them yet.
 - [ ] **KF-5 Serde support: Avro / Protobuf / JSON Schema** via the existing Schema Registry client, on
       both produce and consume, with the schema id resolved from the payload's magic byte. Without this the
       Schema Registry tab is informational only and Avro topics browse as mojibake.
-- [ ] **KF-6 Consumer group administration** — describe members (client id, host, assignment), delete a
+- [x] **KF-6 Consumer group administration** *(2026-08-26)* `consumerGroupState`, `consumerGroupMembers`
+      (client id, host, assignment), `deleteConsumerGroup`, `deleteGroupOffsets`, `awaitGroupEmpty`.
+      Kafka's refusal to touch a live group is turned into a sentence that names the state and the fix;
+      deleting an already-gone group is a no-op. UI: a **Groups** tab. **Bug found and fixed by the live
+      test:** `stopConsuming()` nulled the consumer field before the poll loop's `finally` closed it, so
+      the consumer never left its group — it held partitions until the broker's session timeout. — describe members (client id, host, assignment), delete a
       group, delete offsets for a topic, and see whether a group is stable/rebalancing.
-- [ ] **KF-7 Seek and replay** — consume from a timestamp or a specific partition/offset into the browser,
+- [x] **KF-7 Seek and replay** *(2026-08-26)* `browseFrom(topic, partition, offset, timestamp, max)`
+      seeks to an offset or a timestamp (a timestamp past the end seeks to the end and returns nothing,
+      rather than replaying everything), still joining no group and committing nothing; `replay` re-produces
+      selected records to another topic carrying keys, headers and tombstones but not partitions.
+      UI: **Replay selected to another topic…** on the message table. Live-verified. — consume from a timestamp or a specific partition/offset into the browser,
       and **re-produce selected messages to another topic** (the "replay this to the dev cluster" flow).
 
 ## Gaps — P2

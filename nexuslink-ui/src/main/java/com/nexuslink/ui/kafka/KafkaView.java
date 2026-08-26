@@ -6,6 +6,7 @@ import com.nexuslink.protocol.kafka.KafkaExplorer;
 import com.nexuslink.protocol.kafka.KafkaMessageExporter;
 import com.nexuslink.protocol.kafka.KafkaMetricsSummary;
 import com.nexuslink.protocol.kafka.KafkaService;
+import com.nexuslink.protocol.kafka.ProduceSpec;
 import com.nexuslink.protocol.kafka.MessageFilter;
 import com.nexuslink.protocol.kafka.PayloadFormatter;
 import com.nexuslink.protocol.kafka.SchemaRegistryClient;
@@ -78,6 +79,11 @@ public final class KafkaView extends BorderPane {
     private final ObservableList<KafkaService.KafkaMessage> consumedMessages = FXCollections.observableArrayList();
     private final FilteredList<KafkaService.KafkaMessage> filteredMessages = new FilteredList<>(consumedMessages);
     private final TableView<KafkaService.KafkaMessage> messageTable = new TableView<>(filteredMessages);
+    // Produce options beyond key+value: headers, a target partition, an explicit timestamp, tombstones.
+    private final TextField producePartition = new TextField();
+    private final TextField produceTimestamp = new TextField();
+    private final TextArea produceHeaders = new TextArea();
+    private final CheckBox tombstoneBox = new CheckBox("Tombstone (null value)");
     private final ComboBox<PayloadFormatter.Format> formatCombo = new ComboBox<>();
 
     // Live message-browser filter (AND-combined key/value/partition predicates over the consumed list).
@@ -228,7 +234,9 @@ public final class KafkaView extends BorderPane {
         tabs.getStyleClass().add("editor-tabs");
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabs.getTabs().addAll(new Tab("Produce", buildProduce()), new Tab("Consume", buildConsume()),
-                new Tab("Consumer Lag", buildLag()), new Tab("Schema Registry", buildSchemaRegistry()));
+                new Tab("Consumer Lag", buildLag()), new Tab("Groups", buildGroups()),
+                new Tab("Cluster", buildCluster()), new Tab("Topic Config", buildTopicConfig()),
+                new Tab("Schema Registry", buildSchemaRegistry()));
 
         SplitPane sp = new SplitPane(explorer, tabs);
         sp.setDividerPositions(0.28);
@@ -248,12 +256,334 @@ public final class KafkaView extends BorderPane {
         sendBtn.getStyleClass().add("btn-primary");
         sendBtn.setOnAction(e -> produce());
 
+        producePartition.getStyleClass().add("nl-field");
+        producePartition.setPromptText("auto");
+        producePartition.setPrefWidth(70);
+        produceTimestamp.getStyleClass().add("nl-field");
+        produceTimestamp.setPromptText("now");
+        produceTimestamp.setPrefWidth(150);
+        produceHeaders.getStyleClass().add("code-area");
+        produceHeaders.setPromptText("headers, one per line —  trace-id: abc-123");
+        produceHeaders.setPrefRowCount(3);
+
+        // A tombstone is a null value, not an empty one: on a compacted topic it is what deletes the
+        // key. The value editor is disabled when it is ticked so the two cannot be confused.
+        tombstoneBox.setTooltip(new Tooltip("Send a null value — deletes this key on a compacted topic"));
+        tombstoneBox.selectedProperty().addListener((o, ov, on) -> {
+            produceValue.setDisable(on);
+            produceValue.setPromptText(on ? "(tombstone — no value is sent)" : "record value");
+        });
+
         HBox top = new HBox(8, label("Topic:"), produceTopic, label("Key:"), produceKey, sendBtn, produceStatus);
         top.setAlignment(Pos.CENTER_LEFT);
-        VBox box = new VBox(8, top, produceValue);
+        HBox options = new HBox(8, label("Partition:"), producePartition,
+                label("Timestamp (epoch ms):"), produceTimestamp, tombstoneBox);
+        options.setAlignment(Pos.CENTER_LEFT);
+
+        TitledPane extras = new TitledPane("Headers", produceHeaders);
+        extras.setExpanded(false);
+
+        VBox box = new VBox(8, top, options, produceValue, extras);
         box.setPadding(new Insets(8));
         VBox.setVgrow(produceValue, Priority.ALWAYS);
         return box;
+    }
+
+    /**
+     * The cluster panel: the brokers, which one is the controller, and their racks. There was no way
+     * to see the cluster itself before — only its topics.
+     */
+    private VBox buildCluster() {
+        TableView<KafkaService.BrokerView> brokers = new TableView<>();
+        brokers.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        brokers.setPlaceholder(new Label("Connect to see the brokers"));
+        brokers.getColumns().addAll(List.of(
+                column("Broker", b -> String.valueOf(b.id())),
+                column("Host", KafkaService.BrokerView::host),
+                column("Port", b -> String.valueOf(b.port())),
+                column("Rack", b -> b.rack() == null ? "" : b.rack()),
+                column("Role", b -> b.controller() ? "controller" : "broker")));
+        VBox.setVgrow(brokers, Priority.ALWAYS);
+
+        Label clusterLabel = new Label();
+        clusterLabel.getStyleClass().add("meta-label");
+        Button refresh = new Button("Refresh");
+        refresh.getStyleClass().add("btn-secondary");
+        Runnable load = () -> {
+            Task<List<KafkaService.BrokerView>> task = new Task<>() {
+                @Override protected List<KafkaService.BrokerView> call() throws Exception {
+                    return service.describeCluster();
+                }
+            };
+            task.setOnSucceeded(e -> {
+                brokers.getItems().setAll(task.getValue());
+                try { clusterLabel.setText("Cluster " + service.clusterId()); }
+                catch (Exception ignored) { clusterLabel.setText(""); }
+            });
+            task.setOnFailed(e -> clusterLabel.setText("Failed: " + task.getException().getMessage()));
+            runBg(task, "kafka-cluster");
+        };
+        refresh.setOnAction(e -> load.run());
+
+        HBox tools = new HBox(8, refresh, clusterLabel);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(8, tools, brokers);
+        box.setPadding(new Insets(8));
+        return box;
+    }
+
+    /**
+     * Topic configuration: the effective settings with defaults marked, edited as {@code name=value}
+     * lines, previewed as a diff, and applied with {@code incrementalAlterConfigs} — which changes
+     * only what is named rather than replacing the whole set.
+     */
+    private VBox buildTopicConfig() {
+        TextField topic = new TextField();
+        topic.getStyleClass().add("nl-field");
+        topic.setPromptText("topic");
+
+        TableView<KafkaService.ConfigEntryView> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        table.setPlaceholder(new Label("Enter a topic and press Load"));
+        table.getColumns().addAll(List.of(
+                column("Setting", KafkaService.ConfigEntryView::name),
+                column("Value", KafkaService.ConfigEntryView::value),
+                column("Source", e -> e.isDefault() ? "default" : e.source()),
+                column("", e -> e.readOnly() ? "read-only" : "")));
+        VBox.setVgrow(table, Priority.ALWAYS);
+
+        TextArea edits = new TextArea();
+        edits.getStyleClass().add("code-area");
+        edits.setPromptText("changes, one per line —  retention.ms=604800000\n"
+                + "a name with no value deletes the override and reverts to the broker default");
+        edits.setPrefRowCount(4);
+        Label status = new Label();
+        status.getStyleClass().add("meta-label");
+
+        Button load = new Button("Load");
+        load.getStyleClass().add("btn-secondary");
+        Runnable reload = () -> {
+            String name = Env.resolve(topic.getText().trim());
+            if (name.isEmpty()) { status.setText("Enter a topic"); return; }
+            Task<List<KafkaService.ConfigEntryView>> task = new Task<>() {
+                @Override protected List<KafkaService.ConfigEntryView> call() throws Exception {
+                    return service.topicConfig(name);
+                }
+            };
+            task.setOnSucceeded(e -> {
+                table.getItems().setAll(task.getValue());
+                long overridden = task.getValue().stream().filter(c -> !c.isDefault()).count();
+                status.setText(task.getValue().size() + " setting(s), " + overridden + " overridden");
+            });
+            task.setOnFailed(e -> status.setText("Failed: " + task.getException().getMessage()));
+            runBg(task, "kafka-config");
+        };
+        load.setOnAction(e -> reload.run());
+
+        Button preview = new Button("Preview changes");
+        preview.getStyleClass().add("btn-secondary");
+        preview.setOnAction(e -> previewTopicConfig(Env.resolve(topic.getText().trim()),
+                edits.getText(), status, reload));
+
+        HBox tools = new HBox(8, label("Topic:"), topic, load, preview, status);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(8, tools, table, new Label("Changes"), edits);
+        ((Label) box.getChildren().get(2)).getStyleClass().add("meta-label");
+        box.setPadding(new Insets(8));
+        return box;
+    }
+
+    /** Shows the diff of the requested config changes and applies them only on confirmation. */
+    private void previewTopicConfig(String topic, String editsText, Label status, Runnable reload) {
+        if (topic.isEmpty()) { status.setText("Enter a topic"); return; }
+        Map<String, String> desired = new java.util.LinkedHashMap<>();
+        for (String line : editsText.split("\r?\n")) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            int equals = trimmed.indexOf('=');
+            if (equals <= 0) continue;
+            String name = trimmed.substring(0, equals).trim();
+            String value = trimmed.substring(equals + 1).trim();
+            desired.put(name, value.isEmpty() ? null : value);   // no value → delete the override
+        }
+        if (desired.isEmpty()) { status.setText("Nothing to change"); return; }
+
+        Task<com.nexuslink.protocol.kafka.ConfigDiff> task = new Task<>() {
+            @Override protected com.nexuslink.protocol.kafka.ConfigDiff call() throws Exception {
+                Map<String, String> current = service.topicConfigMap(topic);
+                // Only the settings being edited are compared: diffing one desired key against the
+                // whole effective config would report every other setting as removed.
+                Map<String, String> subset = new java.util.LinkedHashMap<>();
+                desired.keySet().forEach(k -> subset.put(k, current.get(k)));
+                Map<String, String> wanted = new java.util.LinkedHashMap<>();
+                desired.forEach((k, v) -> wanted.put(k, v == null ? current.get(k) : v));
+                return com.nexuslink.protocol.kafka.ConfigDiff.compare(wanted, subset);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            var diff = task.getValue();
+            StringBuilder sb = new StringBuilder();
+            desired.forEach((k, v) -> sb.append(k).append(": ")
+                    .append(v == null ? "delete the override (revert to the broker default)"
+                            : "→ " + v).append('\n'));
+            for (var entry : diff.readOnlyChanges()) {
+                sb.append(entry.key()).append(" is read-only and will be skipped\n");
+            }
+            Dialog<ButtonType> dialog = new Dialog<>();
+            if (getScene() != null) dialog.initOwner(getScene().getWindow());
+            dialog.setTitle("Apply topic configuration");
+            dialog.setHeaderText(desired.size() + " change(s) to " + topic);
+            ButtonType apply = new ButtonType("Apply", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(apply, ButtonType.CANCEL);
+            TextArea preview = new TextArea(sb.toString());
+            preview.setEditable(false);
+            preview.getStyleClass().add("code-area");
+            preview.setPrefRowCount(10);
+            dialog.getDialogPane().setContent(preview);
+            com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+            if (dialog.showAndWait().orElse(ButtonType.CANCEL) != apply) { status.setText("Cancelled"); return; }
+
+            Task<Void> applyTask = new Task<>() {
+                @Override protected Void call() throws Exception {
+                    service.alterTopicConfig(topic, desired);
+                    return null;
+                }
+            };
+            applyTask.setOnSucceeded(ev -> {
+                status.setText("Applied " + desired.size() + " change(s)");
+                logger.accept("Kafka topic config: applied " + desired.keySet() + " to " + topic);
+                reload.run();
+            });
+            applyTask.setOnFailed(ev -> status.setText("Apply failed: " + applyTask.getException().getMessage()));
+            runBg(applyTask, "kafka-config-apply");
+        });
+        task.setOnFailed(e -> status.setText("Failed: " + task.getException().getMessage()));
+        runBg(task, "kafka-config-diff");
+    }
+
+    /**
+     * Consumer-group administration: the members of a group with their assignments and state, and the
+     * two destructive actions — delete a group, or delete its offsets for a topic — both of which
+     * Kafka refuses while the group is live, so the panel says so rather than passing the raw error on.
+     */
+    private VBox buildGroups() {
+        ComboBox<String> group = new ComboBox<>();
+        group.setEditable(true);
+        group.setPrefWidth(280);
+
+        TableView<KafkaService.GroupMember> members = new TableView<>();
+        members.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        members.setPlaceholder(new Label("Choose a group"));
+        members.getColumns().addAll(List.of(
+                column("Client id", KafkaService.GroupMember::clientId),
+                column("Host", KafkaService.GroupMember::host),
+                column("Member id", KafkaService.GroupMember::memberId),
+                column("Assignment", KafkaService.GroupMember::assignment)));
+        VBox.setVgrow(members, Priority.ALWAYS);
+
+        Label state = new Label();
+        state.getStyleClass().add("meta-label");
+        Runnable load = () -> {
+            String name = group.getEditor().getText().trim();
+            if (name.isEmpty()) { state.setText("Choose a group"); return; }
+            Task<List<KafkaService.GroupMember>> task = new Task<>() {
+                @Override protected List<KafkaService.GroupMember> call() throws Exception {
+                    return service.consumerGroupMembers(name);
+                }
+            };
+            task.setOnSucceeded(e -> {
+                members.getItems().setAll(task.getValue());
+                try {
+                    state.setText(task.getValue().size() + " member(s) · " + service.consumerGroupState(name));
+                } catch (Exception ignored) { state.setText(task.getValue().size() + " member(s)"); }
+            });
+            task.setOnFailed(e -> state.setText("Failed: " + task.getException().getMessage()));
+            runBg(task, "kafka-group");
+        };
+
+        Button refresh = new Button("Refresh");
+        refresh.getStyleClass().add("btn-secondary");
+        refresh.setOnAction(e -> {
+            Task<List<String>> list = new Task<>() {
+                @Override protected List<String> call() throws Exception { return service.listConsumerGroups(); }
+            };
+            list.setOnSucceeded(ev -> group.getItems().setAll(list.getValue()));
+            runBg(list, "kafka-groups");
+            load.run();
+        });
+
+        Button deleteOffsets = new Button("Delete offsets for topic…");
+        deleteOffsets.getStyleClass().add("btn-secondary");
+        deleteOffsets.setOnAction(e -> deleteGroupOffsets(group.getEditor().getText().trim(), state, load));
+        Button deleteGroup = new Button("Delete group…");
+        deleteGroup.getStyleClass().add("btn-secondary");
+        deleteGroup.setOnAction(e -> deleteGroup(group.getEditor().getText().trim(), state, load));
+
+        HBox tools = new HBox(8, label("Group:"), group, refresh, deleteOffsets, deleteGroup, state);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(8, tools, members);
+        box.setPadding(new Insets(8));
+        return box;
+    }
+
+    /** Deletes a group's offsets for one topic, after a confirm. */
+    private void deleteGroupOffsets(String group, Label status, Runnable reload) {
+        if (group.isEmpty()) { status.setText("Choose a group"); return; }
+        TextInputDialog ask = new TextInputDialog();
+        ask.setTitle("Delete offsets");
+        ask.setHeaderText("Delete " + group + "'s committed offsets for which topic?");
+        ask.setContentText("Topic:");
+        if (getScene() != null) ask.initOwner(getScene().getWindow());
+        String topic = ask.showAndWait().map(String::trim).orElse("");
+        if (topic.isEmpty()) return;
+
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() throws Exception {
+                service.deleteGroupOffsets(group, topic);
+                return null;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            status.setText("Deleted " + group + "'s offsets for " + topic);
+            logger.accept("Kafka: deleted offsets of " + group + " for " + topic);
+            reload.run();
+        });
+        task.setOnFailed(e -> status.setText(task.getException().getMessage()));
+        runBg(task, "kafka-delete-offsets");
+    }
+
+    /** Deletes a consumer group, after a confirm. */
+    private void deleteGroup(String group, Label status, Runnable reload) {
+        if (group.isEmpty()) { status.setText("Choose a group"); return; }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete consumer group \"" + group + "\"?\nIts committed offsets go with it, so its "
+                        + "consumers restart from their auto.offset.reset. This cannot be undone.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Delete group");
+        if (getScene() != null) confirm.initOwner(getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        Task<Void> task = new Task<>() {
+            @Override protected Void call() throws Exception {
+                service.deleteConsumerGroup(group);
+                return null;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            status.setText("Deleted " + group);
+            logger.accept("Kafka: deleted consumer group " + group);
+            reload.run();
+        });
+        task.setOnFailed(e -> status.setText(task.getException().getMessage()));
+        runBg(task, "kafka-delete-group");
+    }
+
+    /** A read-only string column built from a value getter. */
+    private static <T> TableColumn<T, String> column(String title,
+                                                     java.util.function.Function<T, String> value) {
+        TableColumn<T, String> col = new TableColumn<>(title);
+        col.setCellValueFactory(c -> new SimpleStringProperty(value.apply(c.getValue())));
+        return col;
     }
 
     private VBox buildConsume() {
@@ -897,7 +1227,8 @@ public final class KafkaView extends BorderPane {
 
         MessageFilter filter = b.build();
         filteredMessages.setPredicate(m -> filter.matches(
-                new MessageFilter.Record(m.partition(), m.offset(), m.timestamp(), m.key(), m.value(), Map.of())));
+                new MessageFilter.Record(m.partition(), m.offset(), m.timestamp(), m.key(), m.value(),
+                        m.headersAsMap())));
         boolean active = !key.isEmpty() || !value.isEmpty() || !partText.isEmpty();
         filterStatus.setText(active
                 ? "showing " + filteredMessages.size() + " of " + consumedMessages.size()
@@ -925,10 +1256,95 @@ public final class KafkaView extends BorderPane {
                 PayloadFormatter.format(c.getValue().key(), formatCombo.getValue())));
         key.setMaxWidth(160);
         TableColumn<KafkaService.KafkaMessage, String> value = new TableColumn<>("Value");
-        value.setCellValueFactory(c -> new SimpleStringProperty(
-                PayloadFormatter.format(c.getValue().value(), formatCombo.getValue())));
+        value.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().isTombstone()
+                ? "(tombstone — null value)"
+                : PayloadFormatter.format(c.getValue().value(), formatCombo.getValue())));
+        // A tombstone reads as an ordinary empty record otherwise, which on a compacted topic hides
+        // the one record that matters most.
+        value.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : item);
+                getStyleClass().remove("status-4xx");
+                if (!empty && item != null && item.startsWith("(tombstone")) getStyleClass().add("status-4xx");
+            }
+        });
 
-        messageTable.getColumns().addAll(List.of(time, part, off, key, value));
+        TableColumn<KafkaService.KafkaMessage, String> headers = new TableColumn<>("Headers");
+        headers.setCellValueFactory(c -> new SimpleStringProperty(
+                c.getValue().headers().isEmpty() ? "" : c.getValue().headerText().replace("\n", "  ").trim()));
+        headers.setMaxWidth(240);
+
+        messageTable.getColumns().addAll(List.of(time, part, off, key, value, headers));
+
+        // The row menu: inspect the headers in full, and replay selected records to another topic.
+        MenuItem showHeaders = new MenuItem("Show headers…");
+        showHeaders.setOnAction(e -> showMessageHeaders());
+        MenuItem replay = new MenuItem("Replay selected to another topic…");
+        replay.setOnAction(e -> replaySelected());
+        ContextMenu menu = messageTable.getContextMenu();
+        if (menu == null) messageTable.setContextMenu(new ContextMenu(showHeaders, replay));
+        else menu.getItems().addAll(new SeparatorMenuItem(), showHeaders, replay);
+    }
+
+    /** Shows the selected record's headers and value in full. */
+    private void showMessageHeaders() {
+        KafkaService.KafkaMessage message = messageTable.getSelectionModel().getSelectedItem();
+        if (message == null) { logger.accept("Kafka: select a record first."); return; }
+        TextArea text = new TextArea("partition " + message.partition() + " · offset " + message.offset()
+                + " · " + Instant.ofEpochMilli(message.timestamp()) + "\n\n"
+                + "Key: " + (message.key() == null ? "(null)" : message.key()) + "\n"
+                + "Value: " + (message.isTombstone() ? "(tombstone — null)" : message.value()) + "\n\n"
+                + "Headers:\n" + (message.headers().isEmpty() ? "(none)" : message.headerText()));
+        text.setEditable(false);
+        text.getStyleClass().add("code-area");
+        text.setPrefRowCount(16);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Record");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setContent(text);
+        dialog.setResizable(true);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        dialog.showAndWait();
+    }
+
+    /**
+     * Re-produces the selected records to another topic — the "replay this to the dev cluster" flow.
+     * Keys, headers and tombstones are carried across; partitions are not, because the target topic
+     * may be partitioned differently.
+     */
+    private void replaySelected() {
+        List<KafkaService.KafkaMessage> selected = List.copyOf(
+                messageTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) { logger.accept("Kafka replay: select some records first."); return; }
+
+        TextField target = new TextField();
+        target.setPromptText("target topic");
+        CheckBox keepTimestamps = new CheckBox("Keep the original timestamps");
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Replay records");
+        dialog.setHeaderText("Re-produce " + selected.size() + " record(s) to another topic");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        VBox content = new VBox(8, new Label("Target topic:"), target, keepTimestamps,
+                new Label("Keys, headers and tombstones are kept; partitions are not."));
+        content.setPadding(new Insets(12));
+        dialog.getDialogPane().setContent(content);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        String topic = Env.resolve(target.getText().trim());
+        if (topic.isEmpty()) { logger.accept("Kafka replay: no target topic."); return; }
+        boolean keep = keepTimestamps.isSelected();
+        Task<Integer> task = new Task<>() {
+            @Override protected Integer call() throws Exception { return service.replay(selected, topic, keep); }
+        };
+        task.setOnSucceeded(e -> logger.accept("Kafka replayed " + task.getValue()
+                + " record(s) → " + topic));
+        task.setOnFailed(e -> logger.accept("Kafka replay failed: " + task.getException().getMessage()));
+        runBg(task, "kafka-replay");
     }
 
     /** Exports selected rows (or all when none selected) to a JSON or CSV file. */
@@ -1062,16 +1478,45 @@ public final class KafkaView extends BorderPane {
         if (topic.isEmpty()) { produceStatus.setText("Enter a topic"); return; }
         produceStatus.getStyleClass().setAll("meta-label");
         produceStatus.setText("Sending…");
+        Integer partition = null;
+        try {
+            String text = producePartition.getText().trim();
+            if (!text.isEmpty()) partition = Integer.valueOf(text);
+        } catch (NumberFormatException ex) {
+            produceStatus.getStyleClass().setAll("status-err");
+            produceStatus.setText("The partition must be a number, or blank to let Kafka choose");
+            return;
+        }
+        Long timestamp = null;
+        try {
+            String text = produceTimestamp.getText().trim();
+            if (!text.isEmpty()) timestamp = Long.valueOf(text);
+        } catch (NumberFormatException ex) {
+            produceStatus.getStyleClass().setAll("status-err");
+            produceStatus.setText("The timestamp must be epoch milliseconds, or blank for now");
+            return;
+        }
+
+        ProduceSpec spec = new ProduceSpec(topic, Env.resolve(produceKey.getText()),
+                Env.resolve(produceValue.getText()), tombstoneBox.isSelected(),
+                ProduceSpec.parseHeaders(Env.resolve(produceHeaders.getText())), partition, timestamp);
+        String problem = spec.validate();
+        if (!problem.isEmpty()) {
+            produceStatus.getStyleClass().setAll("status-4xx");
+            produceStatus.setText(problem);
+            return;
+        }
+
         Task<KafkaService.SendResult> task = new Task<>() {
             @Override protected KafkaService.SendResult call() throws Exception {
-                return service.send(topic, Env.resolve(produceKey.getText()), Env.resolve(produceValue.getText()));
+                return service.send(spec);
             }
         };
         task.setOnSucceeded(e -> {
             KafkaService.SendResult r = task.getValue();
             produceStatus.getStyleClass().setAll("status-2xx");
             produceStatus.setText("✓ partition " + r.partition() + " · offset " + r.offset());
-            logger.accept("Kafka produced → " + topic + " p" + r.partition() + " @" + r.offset());
+            logger.accept("Kafka produced → " + spec.describe() + "  p" + r.partition() + " @" + r.offset());
         });
         task.setOnFailed(e -> {
             produceStatus.getStyleClass().setAll("status-err");
