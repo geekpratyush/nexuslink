@@ -13,7 +13,7 @@ scene. This page is the inventory and the assembly notes.
 | Folder | What it is | Size |
 |---|---|---|
 | `slides/` | Nine designed 1920×1080 title cards — the spine of the video | full-frame |
-| `screenshots/` | Thirteen real screens of the running application, dark theme, 1920×1012 | full-frame |
+| `screenshots/` | Twenty-one real screens of the running application, dark theme, 1920×1012 | full-frame |
 | `overlays/` | Transparent PNGs to lay **over** footage or screenshots | full-frame, alpha |
 | `src/` | The sources: slide HTML, the renderer, the screenshot harness | — |
 
