@@ -131,6 +131,56 @@ public final class JdbcExplorer implements ResourceExplorer {
         return out;
     }
 
+    /**
+     * Live details. A routine gets its signature and parameter list read from
+     * {@link java.sql.DatabaseMetaData}, so selecting it in the tree shows something useful rather
+     * than just its own name.
+     */
+    @Override
+    public Map<String, String> details(ResourceNode node) throws Exception {
+        String id = node.id();
+        if (!id.startsWith("proc:") && !id.startsWith("func:")) return node.details();
+
+        String name = id.substring(id.indexOf(':') + 1);
+        Map<String, String> d = new LinkedHashMap<>(node.details());
+        d.put("Signature", service.routineSignature(name));
+        try {
+            CallableSpec spec = service.describeProcedure(name);
+            d.put("Kind", spec.isFunction() ? "Function" : "Procedure");
+            int i = 1;
+            for (CallableSpec.Param p : spec.params()) {
+                d.put("Parameter " + i++, p.direction() + " " + p.name()
+                        + (p.typeLabel() == null || p.typeLabel().isBlank() ? "" : " " + p.typeLabel()));
+            }
+            if (spec.params().isEmpty()) d.put("Parameters", "none");
+        } catch (Exception e) {
+            d.put("Parameters", "not reported by this driver");
+        }
+        return d;
+    }
+
+    /**
+     * The object's definition: a routine's stored source (via {@link RoutineSource}), or a table's
+     * or view's generated DDL. Falls back to a plain note when the engine keeps no source, so the
+     * pane always explains itself rather than sitting silently empty.
+     */
+    @Override
+    public String script(ResourceNode node) throws Exception {
+        String id = node.id();
+        if (id.startsWith("proc:") || id.startsWith("func:")) {
+            String name = id.substring(id.indexOf(':') + 1);
+            String source = service.routineSource(name);
+            if (!source.isBlank()) return source;
+            return "-- " + service.routineSignature(name) + "\n"
+                    + "-- This database does not expose the source of this routine through JDBC.";
+        }
+        if (id.startsWith("table:") || id.startsWith("view:")) {
+            String name = id.substring(id.indexOf(':') + 1);
+            return service.exportSchema(List.of(name));
+        }
+        return "";
+    }
+
     private ResourceNode folder(String id, String label, int count) {
         Map<String, String> d = new LinkedHashMap<>();
         d.put("Objects", String.valueOf(count));

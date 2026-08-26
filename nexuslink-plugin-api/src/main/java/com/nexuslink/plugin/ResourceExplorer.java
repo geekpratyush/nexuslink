@@ -23,4 +23,15 @@ public interface ResourceExplorer {
     default Map<String, String> details(ResourceNode node) throws Exception {
         return node.details();
     }
+
+    /**
+     * The object's definition as text — a table's DDL, a view's or routine's source, a topic's
+     * config — shown in the explorer's collapsible <b>Source</b> pane beneath the details table.
+     * Called off the UI thread, like the rest of this interface.
+     *
+     * @return the definition, or an empty string when the object has none to show (the default)
+     */
+    default String script(ResourceNode node) throws Exception {
+        return "";
+    }
 }

@@ -825,58 +825,226 @@ public final class SqlClientView extends BorderPane {
 
     // ---- schema-tree right-click actions ----------------------------------------------------
 
-    /** Builds the context menu for a schema-tree node (table/view/column/…). Null for none. */
+    /**
+     * The right-click menu for a schema-tree node. Every object kind offers the same three families
+     * of action so the tree behaves predictably — <b>Create new</b> (a sibling of this object),
+     * <b>Alter / Modify</b> (edit this one) and <b>Drop</b> (remove it) — alongside the shortcuts
+     * that suit the kind, such as Generate SELECT on a table or Run… on a procedure. Every statement
+     * that writes goes through {@link #previewAndApply}, which shows the exact SQL first and, for
+     * anything irreversible, keeps Apply disabled until the user ticks the confirmation box.
+     */
     private ContextMenu explorerMenu(ResourceNode node) {
         if (node == null) return null;
         String id = node.id();
-        if (id.startsWith("table:") || id.startsWith("view:")) {
-            boolean view = id.startsWith("view:");
-            String name = id.substring(id.indexOf(':') + 1);
-            MenuItem select = new MenuItem("Generate SELECT");
-            select.setOnAction(e -> { setEditorText("SELECT * FROM " + name + " LIMIT 100;"); runQuery(); });
-            MenuItem ddl = new MenuItem("View / export DDL…");
-            ddl.setOnAction(e -> generateStructure(List.of(name)));
-            MenuItem copy = new MenuItem("Copy name");
-            copy.setOnAction(e -> copyToClipboard(name));
-            ContextMenu menu = new ContextMenu(select, ddl, copy);
-            if (!view) {
-                MenuItem addCol = new MenuItem("Add column…");
-                addCol.setOnAction(e -> addColumnDialog(name));
-                menu.getItems().add(addCol);
-            }
-            menu.getItems().add(new SeparatorMenuItem());
-            MenuItem drop = new MenuItem(view ? "Drop view…" : "Drop table…");
-            drop.setOnAction(e -> previewAndApply("DROP " + (view ? "VIEW" : "TABLE") + " " + quoteIdent(name) + ";",
-                    "Drop " + (view ? "view" : "table") + " “" + name + "”?"));
-            menu.getItems().add(drop);
-            return menu;
-        }
-        if (id.startsWith("proc:") || id.startsWith("func:")) {
-            String name = id.substring(id.indexOf(':') + 1);
-            MenuItem run = new MenuItem("Run…");
-            run.setOnAction(e -> runProcedureDialog(name));
-            MenuItem copy = new MenuItem("Copy name");
-            copy.setOnAction(e -> copyToClipboard(name));
-            return new ContextMenu(run, copy);
-        }
-        if (id.startsWith("col:")) {
-            String rest = id.substring("col:".length());
-            int dot = rest.lastIndexOf('.');   // "table.column" — column names carry no dot
-            String table = dot > 0 ? rest.substring(0, dot) : rest;
-            String col = node.details().getOrDefault("Column", dot > 0 ? rest.substring(dot + 1) : node.label());
-            MenuItem copy = new MenuItem("Copy column name");
-            copy.setOnAction(e -> copyToClipboard(col));
-            MenuItem insert = new MenuItem("Insert into editor");
-            insert.setOnAction(e -> sqlEditor.insertText(sqlEditor.getCaretPosition(), col));
-            MenuItem rename = new MenuItem("Rename column…");
-            rename.setOnAction(e -> renameColumnDialog(table, col));
-            MenuItem drop = new MenuItem("Drop column…");
-            drop.setOnAction(e -> previewAndApply(
-                    "ALTER TABLE " + quoteIdent(table) + " DROP COLUMN " + quoteIdent(col) + ";",
-                    "Drop column “" + col + "” from “" + table + "”?"));
-            return new ContextMenu(copy, insert, new SeparatorMenuItem(), rename, drop);
+        if (id.startsWith("folder:")) return folderMenu(id);
+        if (id.startsWith("table:") || id.startsWith("view:")) return tableOrViewMenu(id);
+        if (id.startsWith("proc:") || id.startsWith("func:")) return routineMenu(id);
+        if (id.startsWith("col:")) return columnNodeMenu(node, id);
+        if (id.startsWith("idx:")) {
+            return new ContextMenu(
+                    menuItem("Create new index…", this::createIndexDialog),
+                    menuItem("Copy definition", () -> copyToClipboard(node.label())));
         }
         return null;
+    }
+
+    /** A category folder's menu: create a new object of that kind, or refresh the branch. */
+    private ContextMenu folderMenu(String id) {
+        MenuItem create = switch (id) {
+            case "folder:views" -> menuItem("Create new view…", this::createViewDialog);
+            case "folder:procedures" -> menuItem("Create new procedure…", () -> newRoutineTemplate(false));
+            case "folder:functions" -> menuItem("Create new function…", () -> newRoutineTemplate(true));
+            default -> menuItem("Create new table…", this::createTableDialog);
+        };
+        return new ContextMenu(create, new SeparatorMenuItem(), menuItem("Refresh", this::refreshExplorer));
+    }
+
+    private ContextMenu tableOrViewMenu(String id) {
+        boolean view = id.startsWith("view:");
+        String name = id.substring(id.indexOf(':') + 1);
+        String kind = view ? "view" : "table";
+
+        MenuItem select = menuItem("Generate SELECT", () -> {
+            setEditorText("SELECT * FROM " + name + " LIMIT 100;");
+            runQuery();
+        });
+        MenuItem ddl = menuItem("View / export DDL…", () -> generateStructure(List.of(name)));
+        MenuItem copy = menuItem("Copy name", () -> copyToClipboard(name));
+
+        Menu create = new Menu("Create new");
+        create.getItems().addAll(
+                menuItem("Table…", this::createTableDialog),
+                menuItem("View…", this::createViewDialog),
+                menuItem("Index on this table…", this::createIndexDialog));
+
+        Menu alter = new Menu("Alter / Modify");
+        if (view) {
+            alter.getItems().add(menuItem("Edit this view's definition…", () -> editDefinition(name, true)));
+        } else {
+            alter.getItems().addAll(
+                    menuItem("Add column…", () -> addColumnDialog(name)),
+                    menuItem("Rename table…", () -> renameTableDialog(name)));
+        }
+
+        Menu delete = new Menu("Delete");
+        if (!view) {
+            delete.getItems().add(menuItem("Truncate — delete every row…", () -> previewAndApply(
+                    "TRUNCATE TABLE " + quoteIdent(name) + ";",
+                    "Delete every row of table \u201C" + name + "\u201D?", this::refreshExplorer, true)));
+        }
+        delete.getItems().add(menuItem("Drop " + kind + "…", () -> previewAndApply(
+                "DROP " + (view ? "VIEW" : "TABLE") + " " + quoteIdent(name) + ";",
+                "Drop " + kind + " \u201C" + name + "\u201D?", this::refreshExplorer, true)));
+
+        return new ContextMenu(select, ddl, copy, new SeparatorMenuItem(), create, alter, delete);
+    }
+
+    private ContextMenu routineMenu(String id) {
+        boolean function = id.startsWith("func:");
+        String name = id.substring(id.indexOf(':') + 1);
+        String kind = function ? "function" : "procedure";
+
+        MenuItem run = menuItem("Run…", () -> runProcedureDialog(name));
+        MenuItem source = menuItem("Open source in the editor", () -> editDefinition(name, false));
+        MenuItem copy = menuItem("Copy name", () -> copyToClipboard(name));
+
+        Menu create = new Menu("Create new");
+        create.getItems().addAll(
+                menuItem("Procedure…", () -> newRoutineTemplate(false)),
+                menuItem("Function…", () -> newRoutineTemplate(true)));
+
+        Menu alter = new Menu("Alter / Modify");
+        alter.getItems().add(menuItem("Edit this " + kind + "'s source…", () -> editDefinition(name, false)));
+
+        MenuItem drop = menuItem("Drop " + kind + "…", () -> previewAndApply(
+                "DROP " + (function ? "FUNCTION" : "PROCEDURE") + " " + quoteIdent(name) + ";",
+                "Drop " + kind + " \u201C" + name + "\u201D?", this::refreshExplorer, true));
+
+        return new ContextMenu(run, source, copy, new SeparatorMenuItem(), create, alter,
+                new SeparatorMenuItem(), drop);
+    }
+
+    /** The menu for a column node in the schema tree (not the result grid's header menu). */
+    private ContextMenu columnNodeMenu(ResourceNode node, String id) {
+        String rest = id.substring("col:".length());
+        int dot = rest.lastIndexOf('.');   // "table.column" — column names carry no dot
+        String table = dot > 0 ? rest.substring(0, dot) : rest;
+        String col = node.details().getOrDefault("Column", dot > 0 ? rest.substring(dot + 1) : node.label());
+
+        Menu create = new Menu("Create new");
+        create.getItems().add(menuItem("Column on this table…", () -> addColumnDialog(table)));
+
+        Menu alter = new Menu("Alter / Modify");
+        alter.getItems().add(menuItem("Rename column…", () -> renameColumnDialog(table, col)));
+
+        MenuItem drop = menuItem("Drop column…", () -> previewAndApply(
+                "ALTER TABLE " + quoteIdent(table) + " DROP COLUMN " + quoteIdent(col) + ";",
+                "Drop column \u201C" + col + "\u201D from \u201C" + table + "\u201D?",
+                this::refreshExplorer, true));
+
+        return new ContextMenu(
+                menuItem("Copy column name", () -> copyToClipboard(col)),
+                menuItem("Insert into editor", () -> sqlEditor.insertText(sqlEditor.getCaretPosition(), col)),
+                new SeparatorMenuItem(), create, alter, new SeparatorMenuItem(), drop);
+    }
+
+    private static MenuItem menuItem(String label, Runnable action) {
+        MenuItem mi = new MenuItem(label);
+        mi.setOnAction(e -> action.run());
+        return mi;
+    }
+
+    /**
+     * Loads an object's stored definition into the editor so it can be edited and re-run. A view
+     * comes back as its DDL (or a {@code CREATE OR REPLACE VIEW} skeleton when the engine keeps
+     * none); a routine comes back as whatever source the database stored. Nothing is applied — the
+     * user edits the script and runs it themselves.
+     */
+    private void editDefinition(String name, boolean view) {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Loading the definition of " + name + "…");
+        Task<String> task = new Task<>() {
+            @Override protected String call() {
+                if (view) {
+                    String ddl = "";
+                    try { ddl = service.exportSchema(List.of(name)); } catch (Exception ignored) { }
+                    return ddl.isBlank()
+                            ? "CREATE OR REPLACE VIEW " + quoteIdent(name) + " AS\nSELECT * FROM \u2026;\n"
+                            : ddl;
+                }
+                return service.routineSource(name);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            String text = task.getValue();
+            if (text == null || text.isBlank()) {
+                statusLabel.getStyleClass().setAll("status-4xx");
+                statusLabel.setText("This database does not expose the source of " + name
+                        + " — its signature is in the object panel");
+                return;
+            }
+            setEditorText("-- Source of " + name + ". Edit it, then run it to replace the object.\n"
+                    + "-- Nothing changes in the database until you run this script.\n" + text);
+            statusLabel.getStyleClass().setAll("status-2xx");
+            statusLabel.setText("Loaded the definition of " + name + " into the editor");
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Could not read " + name + ": " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Puts a ready-to-edit CREATE PROCEDURE/FUNCTION skeleton in the editor. */
+    private void newRoutineTemplate(boolean function) {
+        String kind = function ? "FUNCTION" : "PROCEDURE";
+        String lower = kind.toLowerCase(Locale.ROOT);
+        setEditorText("-- Fill this in and run it to create the " + lower + ".\n"
+                + "-- Routine syntax varies by database; this is the SQL/PSM shape.\n"
+                + "CREATE " + kind + " my_" + lower + "(IN p1 VARCHAR(50))\n"
+                + (function ? "RETURNS INTEGER\n" : "")
+                + "BEGIN\n    -- statements\nEND;\n");
+        statusLabel.getStyleClass().setAll("meta-label");
+        statusLabel.setText("Edit the template, then run it to create the " + lower);
+    }
+
+    /** Creates a view from a SELECT the user supplies. */
+    private void createViewDialog() {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        Dialog<ButtonType> d = themedDialog("Create view", "Define a new view");
+        TextField name = new TextField();
+        name.setPromptText("view_name");
+        TextArea body = new TextArea("SELECT * FROM ");
+        body.setPrefRowCount(6);
+        body.getStyleClass().add("code-area");
+        GridPane g = formGrid();
+        g.addRow(0, new Label("Name:"), name);
+        g.addRow(1, new Label("SELECT:"), body);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            String n = name.getText().trim();
+            String sql = body.getText().trim();
+            if (n.isBlank() || sql.isBlank()) { statusLabel.setText("A view needs a name and a SELECT"); return; }
+            if (sql.endsWith(";")) sql = sql.substring(0, sql.length() - 1);
+            previewAndApply("CREATE VIEW " + quoteIdent(n) + " AS\n" + sql + ";",
+                    "Create view \u201C" + n + "\u201D?", this::refreshExplorer);
+        });
+    }
+
+    /** Renames a table. */
+    private void renameTableDialog(String table) {
+        Dialog<ButtonType> d = themedDialog("Rename table", "Rename \u201C" + table + "\u201D");
+        TextField newName = new TextField(table);
+        GridPane g = formGrid();
+        g.addRow(0, new Label("New name:"), newName);
+        d.getDialogPane().setContent(g);
+        d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
+            String nn = newName.getText().trim();
+            if (nn.isBlank() || nn.equals(table)) return;
+            previewAndApply("ALTER TABLE " + quoteIdent(table) + " RENAME TO " + quoteIdent(nn) + ";",
+                    "Rename table \u201C" + table + "\u201D to \u201C" + nn + "\u201D?", this::refreshExplorer);
+        });
     }
 
     /**
@@ -1152,6 +1320,20 @@ public final class SqlClientView extends BorderPane {
     private void previewAndApply(String sql, String header) { previewAndApply(sql, header, null); }
 
     private void previewAndApply(String sql, String header, Runnable onApplied) {
+        previewAndApply(sql, header, onApplied, isIrreversible(sql));
+    }
+
+    /**
+     * {@code true} for a statement that destroys structure or data — a DROP, TRUNCATE or DELETE.
+     * Those get the stronger confirmation: the dialog says so in as many words, and Apply stays
+     * disabled until the user ticks the box.
+     */
+    static boolean isIrreversible(String sql) {
+        String first = sql == null ? "" : sql.stripLeading().toUpperCase(Locale.ROOT);
+        return first.startsWith("DROP") || first.startsWith("TRUNCATE") || first.startsWith("DELETE");
+    }
+
+    private void previewAndApply(String sql, String header, Runnable onApplied, boolean irreversible) {
         Dialog<ButtonType> d = new Dialog<>();
         if (getScene() != null) d.initOwner(getScene().getWindow());
         d.setTitle("Confirm change");
@@ -1164,7 +1346,25 @@ public final class SqlClientView extends BorderPane {
         preview.setEditable(false);
         VirtualizedScrollPane<CodeArea> scroll = new VirtualizedScrollPane<>(preview);
         scroll.setPrefSize(520, 140);
-        d.getDialogPane().setContent(scroll);
+
+        VBox content = new VBox(8, scroll);
+        CheckBox understood = new CheckBox("I understand this permanently changes the database");
+        if (irreversible) {
+            Label warn = new Label("This is permanent. It cannot be undone"
+                    + (autoCommitBox.isSelected()
+                        ? " — auto-commit is on, so there is nothing to roll back."
+                        : ", though auto-commit is off so you can still Rollback."));
+            warn.getStyleClass().add("status-err");
+            warn.setWrapText(true);
+            content.getChildren().addAll(warn, understood);
+        }
+        d.getDialogPane().setContent(content);
+        if (irreversible) {
+            javafx.application.Platform.runLater(() -> {
+                var btn = d.getDialogPane().lookupButton(apply);
+                if (btn != null) btn.disableProperty().bind(understood.selectedProperty().not());
+            });
+        }
         d.setOnShown(ev -> {
             if (d.getDialogPane().getScene() != null)
                 com.nexuslink.ui.theme.ThemeManager.get().register(d.getDialogPane().getScene());

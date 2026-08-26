@@ -8,6 +8,7 @@ import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
@@ -21,15 +22,25 @@ import java.util.function.Function;
  * its bespoke icon) above a property/details table. Protocols supply a {@link ResourceExplorer};
  * the view loads roots on {@link #load()} and fetches each level's children on demand as the user
  * expands nodes — all off the UI thread.
+ *
+ * <p>Beneath the details table sits a collapsible <b>Source</b> pane showing the selected object's
+ * definition — a routine's stored body, a table's DDL — whatever the protocol's
+ * {@link ResourceExplorer#script} returns. It stays collapsed for objects that have none, so the
+ * panel is quiet until there is something to read, and remembers whether the user opened it.
  */
 public final class ResourceExplorerView extends BorderPane {
 
     private final TreeView<ResourceNode> tree = new TreeView<>();
     private final TableView<Map.Entry<String, String>> details = new TableView<>();
     private final Label status = new Label("Not connected");
+    private final TextArea source = new TextArea();
+    private final TitledPane sourcePane = new TitledPane("Source", null);
     private final Label title;
 
     private ResourceExplorer explorer;
+    // The Source pane opens itself the first time there is something to read, then leaves the
+    // expanded/collapsed choice to the user.
+    private boolean sourceEverShown = false;
     private Consumer<String> logger = s -> {};
     private Consumer<ResourceNode> onSelect = n -> {};
     private Consumer<ResourceNode> onActivate = n -> {};
@@ -73,13 +84,44 @@ public final class ResourceExplorerView extends BorderPane {
 
         Label detailsTitle = new Label("DETAILS");
         detailsTitle.getStyleClass().add("sidebar-title");
-        VBox bottom = new VBox(detailsTitle, details, status);
+        VBox bottom = new VBox(detailsTitle, details, buildSourcePane(), status);
         VBox.setVgrow(details, Priority.ALWAYS);
+        // An expanded Source pane shares the panel with the details table; collapsed, it shrinks
+        // back to its header so the table keeps the whole height.
+        sourcePane.expandedProperty().addListener((o, was, open) ->
+                VBox.setVgrow(sourcePane, open ? Priority.ALWAYS : Priority.NEVER));
 
         SplitPane split = new SplitPane(top, bottom);
         split.setOrientation(javafx.geometry.Orientation.VERTICAL);
         split.setDividerPositions(0.62);
         setCenter(split);
+    }
+
+    /** The collapsible definition pane: a read-only, copyable code view with a Copy button. */
+    private TitledPane buildSourcePane() {
+        source.setEditable(false);
+        source.getStyleClass().add("code-area");
+        source.setPrefRowCount(10);
+        source.setMinHeight(120);
+        source.setWrapText(false);
+
+        Button copy = new Button("Copy");
+        copy.getStyleClass().add("btn-secondary");
+        copy.setOnAction(e -> {
+            javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
+            cc.putString(source.getText());
+            javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
+            status.setText("Definition copied");
+        });
+        HBox tools = new HBox(6, copy);
+        tools.setPadding(new Insets(4, 0, 0, 0));
+
+        VBox box = new VBox(4, source, tools);
+        VBox.setVgrow(source, Priority.ALWAYS);
+        sourcePane.setContent(box);
+        sourcePane.setExpanded(false);
+        sourcePane.getStyleClass().add("source-pane");
+        return sourcePane;
     }
 
     public void setLogger(Consumer<String> l) { this.logger = l == null ? s -> {} : l; }
@@ -114,11 +156,13 @@ public final class ResourceExplorerView extends BorderPane {
     public void clear() {
         tree.setRoot(null);
         details.getItems().clear();
+        showSource("");
         status.setText("Not connected");
     }
 
     private void showDetails(ResourceNode node) {
         details.getItems().clear();
+        showSource(node == null ? "" : null);
         if (node == null) return;
         // Show any static details immediately, then fetch live details (default returns the same).
         details.getItems().addAll(node.details().entrySet());
@@ -128,7 +172,22 @@ public final class ResourceExplorerView extends BorderPane {
                     details.getItems().setAll(live.entrySet());
                 }
             });
+            runBg(() -> explorer.script(node), this::showSource);
         }
+    }
+
+    /**
+     * Fills the Source pane. An object with no definition leaves the pane collapsed and disabled,
+     * so it never invites a click that would show nothing; one that has a definition enables the
+     * pane and opens it the first time, after which the user's own choice is respected.
+     */
+    private void showSource(String text) {
+        if (text == null) { source.clear(); return; }   // still loading — leave the pane as it is
+        boolean has = !text.isBlank();
+        source.setText(has ? text : "");
+        sourcePane.setDisable(!has);
+        if (!has) sourcePane.setExpanded(false);
+        else if (!sourceEverShown) { sourcePane.setExpanded(true); sourceEverShown = true; }
     }
 
     @SuppressWarnings("unchecked")

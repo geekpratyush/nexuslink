@@ -1118,6 +1118,21 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       picked up on driver selection and on opening the manager
 - [x] In-app help rewritten (`databases.md`) with the three install routes and the mirror settings
 
+- [x] **Object panel: definitions + full object actions** — selecting a procedure/function used to show
+      nothing at all. `ResourceExplorer` gained `script(node)` (default empty) and the shared
+      `ResourceExplorerView` a **collapsible Source pane** (read-only, Copy, opens itself the first time
+      there is something to read, disabled when there isn't). `JdbcExplorer.details` now reports a
+      routine's **signature, kind and every parameter** from `DatabaseMetaData`, and `script` returns
+      its stored source via pure `RoutineSource` (Postgres `pg_get_functiondef` · Oracle `ALL_SOURCE`
+      line-by-line · SQL Server `OBJECT_DEFINITION` · everyone else `INFORMATION_SCHEMA.ROUTINES`,
+      falling back to `EXTERNAL_NAME`), or a table/view's DDL. Schema-tree menus are now uniform —
+      **Create new ▸ / Alter / Modify ▸ / Drop…** on tables, views, routines, columns, indexes and the
+      category folders, plus Run…, Generate SELECT, and *Open source in the editor* (loads the stored
+      body for editing, applying nothing). Every write still goes through preview-then-apply, and
+      **irreversible statements (DROP/TRUNCATE/DELETE) now say so and keep Apply disabled until the
+      user ticks a confirmation box**. Also fixed: browsing during a reconnect NPE'd on a null
+      connection — metadata lookups now raise a plain "Not connected". **18 new tests**
+
 #### 8.1.3 SQL Developer parity — **audit + backlog: `.agent-os/specs/2026-08-25-sql-developer-parity/`**
 > Full capability table and prioritised gaps live in the spec. Summary of what remains:
 

@@ -93,8 +93,18 @@ public final class JdbcService implements AutoCloseable {
     }
 
     /** Returns "ProductName vX.Y" for the connected database. */
+    /**
+     * The connection's metadata, or a clear "Not connected" error. Browsing the object tree can race
+     * a reconnect — {@link #close()} nulls the connection out from under an in-flight lookup — and a
+     * named error explains that far better than a {@link NullPointerException}.
+     */
+    private DatabaseMetaData metaData() throws SQLException {
+        if (connection == null) throw new SQLException("Not connected");
+        return connection.getMetaData();
+    }
+
     public String databaseInfo() throws SQLException {
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         return md.getDatabaseProductName() + " " + md.getDatabaseProductVersion();
     }
 
@@ -291,7 +301,7 @@ public final class JdbcService implements AutoCloseable {
      */
     public CallableSpec describeProcedure(String routine) throws SQLException {
         String name = routine == null ? "" : routine.replace("  (function)", "").trim();
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         List<CallableSpec.Param> params = new ArrayList<>();
         boolean function = false;
         try (ResultSet rs = md.getProcedureColumns(null, null, name, "%")) {
@@ -319,6 +329,61 @@ public final class JdbcService implements AutoCloseable {
             }
         }
         return function ? CallableSpec.function(name, params) : CallableSpec.procedure(name, params);
+    }
+
+    /**
+     * Reads a routine's source text — the body the {@code CREATE PROCEDURE} / {@code CREATE FUNCTION}
+     * was written with, as far as the engine keeps it. The query is chosen from the connection URL by
+     * {@link RoutineSource}; Oracle's line-per-row form is joined back together.
+     *
+     * @return the source, or an empty string when the database does not expose it
+     */
+    public String routineSource(String routine) {
+        if (!isConnected() || routine == null || routine.isBlank()) return "";
+        String name = routine.replace("  (function)", "").replace("  (procedure)", "").trim();
+        RoutineSource mode = RoutineSource.forUrl(url);
+        StringBuilder sb = new StringBuilder();
+        try (PreparedStatement ps = connection.prepareStatement(mode.query())) {
+            ps.setString(1, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String text = rs.getString(1);
+                    if (text == null) continue;
+                    sb.append(text);
+                    if (mode.isLineByLine() && !text.endsWith("\n")) sb.append('\n');
+                }
+            }
+        } catch (SQLException e) {
+            // A database that keeps no source (or denies access to the catalog) simply has none to
+            // show; the caller falls back to the signature it read from DatabaseMetaData.
+            return "";
+        }
+        return sb.toString().strip();
+    }
+
+    /**
+     * A readable one-line signature for a routine — {@code name(IN a varchar, OUT b int) returns int}
+     * — built from {@link #describeProcedure}, for the header above the source.
+     */
+    public String routineSignature(String routine) {
+        try {
+            CallableSpec spec = describeProcedure(routine);
+            StringBuilder sb = new StringBuilder(spec.routine()).append('(');
+            boolean first = true;
+            String returns = null;
+            for (CallableSpec.Param p : spec.params()) {
+                if (spec.isFunction() && returns == null) { returns = p.typeLabel(); continue; }
+                if (!first) sb.append(", ");
+                sb.append(p.direction()).append(' ').append(p.name());
+                if (p.typeLabel() != null && !p.typeLabel().isBlank()) sb.append(' ').append(p.typeLabel());
+                first = false;
+            }
+            sb.append(')');
+            if (returns != null) sb.append(" returns ").append(returns);
+            return sb.toString();
+        } catch (Exception e) {
+            return routine;
+        }
     }
 
     /**
@@ -377,7 +442,7 @@ public final class JdbcService implements AutoCloseable {
     /** Lists table names (and views) in the current schema. */
     public List<String> listTables() throws SQLException {
         List<String> tables = new ArrayList<>();
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         try (ResultSet rs = md.getTables(null, null, "%", new String[]{"TABLE", "VIEW"})) {
             while (rs.next()) {
                 String type = rs.getString("TABLE_TYPE");
@@ -401,7 +466,7 @@ public final class JdbcService implements AutoCloseable {
      * so the diagram never references an entity that isn't drawn.
      */
     public String erDiagramMermaid(java.util.Collection<String> onlyTables) throws SQLException {
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         StringBuilder sb = new StringBuilder("erDiagram\n");
 
         List<String> tables = new ArrayList<>();
@@ -475,7 +540,7 @@ public final class JdbcService implements AutoCloseable {
     /** Returns "column TYPE" descriptors for a table. */
     public List<String> describeTable(String table) throws SQLException {
         List<String> cols = new ArrayList<>();
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         try (ResultSet rs = md.getColumns(null, null, table, "%")) {
             while (rs.next()) {
                 cols.add(rs.getString("COLUMN_NAME") + "  " + rs.getString("TYPE_NAME"));
@@ -487,7 +552,7 @@ public final class JdbcService implements AutoCloseable {
     /** Primary-key column names for a table, in key order (empty if none). */
     public List<String> primaryKeyColumns(String table) throws SQLException {
         java.util.TreeMap<Short, String> pk = new java.util.TreeMap<>();
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         try (ResultSet rs = md.getPrimaryKeys(null, null, table)) {
             while (rs.next()) pk.put(rs.getShort("KEY_SEQ"), rs.getString("COLUMN_NAME"));
         }
@@ -496,7 +561,7 @@ public final class JdbcService implements AutoCloseable {
 
     /** Index descriptors for a table: {@code "name (col1, col2)[  UNIQUE]"}. */
     public List<String> listIndexes(String table) throws SQLException {
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         // index name → (unique flag, ordered columns)
         java.util.Map<String, Boolean> unique = new LinkedHashMap<>();
         java.util.Map<String, java.util.TreeMap<Short, String>> cols = new LinkedHashMap<>();
@@ -519,7 +584,7 @@ public final class JdbcService implements AutoCloseable {
 
     /** Foreign-key descriptors for a table: {@code "fkCol → parentTable(pkCol)"}. */
     public List<String> listForeignKeys(String table) throws SQLException {
-        DatabaseMetaData md = connection.getMetaData();
+        DatabaseMetaData md = metaData();
         List<String> out = new ArrayList<>();
         try (ResultSet rs = md.getImportedKeys(null, null, table)) {
             while (rs.next()) {
@@ -545,7 +610,7 @@ public final class JdbcService implements AutoCloseable {
     private List<String> metadataNames(MetaQuery query, String column) {
         List<String> out = new ArrayList<>();
         try {
-            DatabaseMetaData md = connection.getMetaData();
+            DatabaseMetaData md = metaData();
             try (ResultSet rs = query.run(md)) {
                 java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
                 while (rs.next()) {
