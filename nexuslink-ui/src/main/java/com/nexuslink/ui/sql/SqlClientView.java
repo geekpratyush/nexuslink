@@ -27,12 +27,14 @@ import javafx.collections.transformation.SortedList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 import org.fxmisc.richtext.CodeArea;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 
+import java.io.IOException;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -115,6 +117,11 @@ public final class SqlClientView extends BorderPane {
     private final FilteredList<List<String>> filteredRows = new FilteredList<>(masterRows, r -> true);
     private final SortedList<List<String>> sortedRows = new SortedList<>(filteredRows);
     private final TextField filterField = new TextField();
+
+    // In-tab statement history: newest first, capped, each entry recallable into the editor.
+    private static final int HISTORY_LIMIT = 200;
+    private final ObservableList<HistoryRow> tabHistory = FXCollections.observableArrayList();
+    private final TableView<HistoryRow> historyGrid = new TableView<>(tabHistory);
 
     private Consumer<String> logger = s -> {};
     private Consumer<ConnectionProfile> onSave = p -> {};
@@ -571,14 +578,13 @@ public final class SqlClientView extends BorderPane {
         importCsvBtn.setTooltip(new Tooltip("Load a CSV file into the table behind this result"));
         importCsvBtn.setOnAction(e -> importCsv());
 
-        Button exportJson = new Button("Export JSON…");
-        exportJson.getStyleClass().add("btn-secondary");
-        exportJson.setOnAction(e -> exportResults(true));
-        Button exportCsv = new Button("Export CSV…");
-        exportCsv.getStyleClass().add("btn-secondary");
-        exportCsv.setOnAction(e -> exportResults(false));
+        Button exportBtn = new Button("Export…");
+        exportBtn.getStyleClass().add("btn-secondary");
+        exportBtn.setTooltip(new Tooltip("Export the results as CSV, JSON, INSERT statements, XML, HTML "
+                + "or a delimited file with your own options"));
+        exportBtn.setOnAction(e -> showExportDialog());
 
-        HBox gridTools = new HBox(8, filterField, insertBtn, importCsvBtn, exportJson, exportCsv);
+        HBox gridTools = new HBox(8, filterField, insertBtn, importCsvBtn, exportBtn);
         gridTools.setAlignment(Pos.CENTER_LEFT);
         gridTools.setPadding(new Insets(0, 0, 6, 0));
 
@@ -594,7 +600,9 @@ public final class SqlClientView extends BorderPane {
         resultTab.setClosable(false);
         Tab msgTab = new Tab("Messages", messagesArea);
         msgTab.setClosable(false);
-        resultTabs.getTabs().setAll(resultTab, msgTab);
+        Tab historyTab = new Tab("History", buildHistoryPane());
+        historyTab.setClosable(false);
+        resultTabs.getTabs().setAll(resultTab, msgTab, historyTab);
         resultTabs.getStyleClass().add("editor-tabs");
         VBox.setVgrow(resultTabs, Priority.ALWAYS);
 
@@ -1899,6 +1907,7 @@ public final class SqlClientView extends BorderPane {
             setEditContext(o.displayStmt());
             if (o.display() != null && o.display().failed()) selectTab("Messages");
             recordQueryHistory(o.displayStmt(), o.display());
+            recordTabHistory(o.displayStmt(), o.display());
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
@@ -1909,6 +1918,70 @@ public final class SqlClientView extends BorderPane {
 
     private void selectTab(String text) {
         for (Tab t : resultTabs.getTabs()) if (text.equals(t.getText())) { resultTabs.getSelectionModel().select(t); return; }
+    }
+
+    /** One executed statement in this tab's history: when it ran, the SQL, and how it went. */
+    private record HistoryRow(String time, String sql, String outcome) {}
+
+    /**
+     * This tab's own statement history — every statement run here, newest first, with the outcome
+     * summary. Double-click a row (or press Recall) to put the SQL back in the editor; Recall &amp;
+     * Run puts it back and executes it. Independent of the shared cross-protocol history sidebar,
+     * so the last thing you tried is always one click away without leaving the tab.
+     */
+    private Node buildHistoryPane() {
+        TableColumn<HistoryRow, String> timeCol = new TableColumn<>("Time");
+        timeCol.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().time()));
+        timeCol.setPrefWidth(90);
+        TableColumn<HistoryRow, String> sqlCol = new TableColumn<>("Statement");
+        sqlCol.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().sql()));
+        sqlCol.setPrefWidth(520);
+        TableColumn<HistoryRow, String> outcomeCol = new TableColumn<>("Outcome");
+        outcomeCol.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().outcome()));
+        outcomeCol.setPrefWidth(200);
+        historyGrid.getColumns().setAll(List.of(timeCol, sqlCol, outcomeCol));
+        historyGrid.setPlaceholder(new Label("Statements you run in this tab appear here"));
+        historyGrid.setRowFactory(t -> {
+            TableRow<HistoryRow> row = new TableRow<>();
+            row.setOnMouseClicked(e -> { if (e.getClickCount() == 2 && !row.isEmpty()) recallHistory(false); });
+            return row;
+        });
+        VBox.setVgrow(historyGrid, Priority.ALWAYS);
+
+        Button recall = new Button("Recall");
+        recall.getStyleClass().add("btn-secondary");
+        recall.setOnAction(e -> recallHistory(false));
+        Button recallRun = new Button("Recall & Run");
+        recallRun.getStyleClass().add("btn-secondary");
+        recallRun.setOnAction(e -> recallHistory(true));
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> tabHistory.clear());
+
+        HBox tools = new HBox(8, recall, recallRun, clear);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox pane = new VBox(6, tools, historyGrid);
+        pane.setPadding(new Insets(6));
+        return pane;
+    }
+
+    /** Puts the selected history statement back in the editor, optionally running it straight away. */
+    private void recallHistory(boolean run) {
+        HistoryRow selected = historyGrid.getSelectionModel().getSelectedItem();
+        if (selected == null) { statusLabel.setText("Select a history row to recall"); return; }
+        sqlEditor.replaceText(selected.sql());
+        selectTab("Result");
+        sqlEditor.requestFocus();
+        if (run) runQuery();
+    }
+
+    /** Adds an executed statement to this tab's history, newest first and capped at the limit. */
+    private void recordTabHistory(String statement, QueryResult r) {
+        if (statement == null || statement.isBlank() || r == null) return;
+        String time = java.time.LocalTime.now().withNano(0).toString();
+        String outcome = r.failed() ? "✖ " + r.errorMessage() : r.summary();
+        tabHistory.add(0, new HistoryRow(time, statement.strip().replaceAll("\\s+", " "), outcome));
+        while (tabHistory.size() > HISTORY_LIMIT) tabHistory.remove(tabHistory.size() - 1);
     }
 
     /** Records an executed statement into the shared history store (summary + replayable detail JSON). */
@@ -2079,33 +2152,153 @@ public final class SqlClientView extends BorderPane {
         });
     }
 
-    /** Exports the currently displayed rows (after sort + filter) as JSON or CSV. */
-    private void exportResults(boolean asJson) {
+    /** The shapes the result grid can be written out as. */
+    private enum ExportFormat {
+        CSV("CSV", "csv"), JSON("JSON", "json"), INSERT("INSERT statements", "sql"),
+        XML("XML", "xml"), HTML("HTML", "html"), DELIMITED("Delimited (options below)", "txt");
+
+        private final String label;
+        private final String extension;
+        ExportFormat(String label, String extension) { this.label = label; this.extension = extension; }
+        @Override public String toString() { return label; }
+    }
+
+    /**
+     * Asks for a format — CSV / JSON / INSERT statements / XML / HTML, or a delimited file with
+     * explicit separator, quote, header and NULL-text options — and whether to export the rows on
+     * screen or re-read the whole table behind them, then writes the file.
+     */
+    private void showExportDialog() {
         if (resultGrid.getColumns().isEmpty()) { resultStatus.setText("No results to export"); return; }
-        List<String> columns = new ArrayList<>();
-        for (TableColumn<List<String>, ?> c : resultGrid.getColumns()) columns.add(c.getText());
-        List<List<String>> rows = new ArrayList<>(sortedRows);
+
+        ChoiceBox<ExportFormat> format = new ChoiceBox<>(FXCollections.observableArrayList(ExportFormat.values()));
+        format.setValue(ExportFormat.CSV);
+
+        TextField table = new TextField(editTable == null ? "" : editTable);
+        table.setPromptText("table name for the INSERT statements");
+
+        CheckBox wholeTable = new CheckBox("Export the whole table, not just the rows shown");
+        wholeTable.setDisable(editTable == null);
+        wholeTable.setTooltip(new Tooltip(editTable == null
+                ? "Browse a single table (SELECT * FROM one table) to enable this"
+                : "Re-reads every row of " + editTable + ", ignoring the sort, filter and row cap"));
+
+        TextField delimiter = new TextField(",");
+        TextField quote = new TextField("\"");
+        CheckBox quoteAll = new CheckBox("Quote every field");
+        CheckBox header = new CheckBox("Write a header row");
+        header.setSelected(true);
+        ChoiceBox<String> lineEnding = new ChoiceBox<>(FXCollections.observableArrayList("CRLF", "LF"));
+        lineEnding.setValue("CRLF");
+        TextField nullText = new TextField("");
+        nullText.setPromptText("text written for a NULL cell");
+
+        GridPane opts = new GridPane();
+        opts.setHgap(8);
+        opts.setVgap(6);
+        opts.addRow(0, new Label("Delimiter"), delimiter, new Label("Quote (blank = none)"), quote);
+        opts.addRow(1, new Label("Line ending"), lineEnding, new Label("NULL as"), nullText);
+        opts.addRow(2, header, quoteAll);
+        opts.disableProperty().bind(format.valueProperty().isNotEqualTo(ExportFormat.DELIMITED));
+
+        GridPane form = new GridPane();
+        form.setHgap(8);
+        form.setVgap(8);
+        form.setPadding(new Insets(12));
+        form.addRow(0, new Label("Format"), format);
+        form.addRow(1, new Label("Table"), table);
+        form.add(wholeTable, 0, 2, 2, 1);
+        form.add(new Separator(), 0, 3, 2, 1);
+        form.add(opts, 0, 4, 2, 1);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Export query results");
+        dialog.getDialogPane().setContent(form);
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        ExportFormat chosen = format.getValue();
+        ResultGridExporter.Delimited delimitedOpts = null;
+        if (chosen == ExportFormat.DELIMITED) {
+            String sep = delimiter.getText();
+            if (sep == null || sep.isEmpty()) {
+                resultStatus.getStyleClass().setAll("status-4xx");
+                resultStatus.setText("Export needs a delimiter");
+                return;
+            }
+            String q = quote.getText();
+            delimitedOpts = new ResultGridExporter.Delimited(
+                    sep.replace("\\t", "\t"),
+                    q == null || q.isEmpty() ? '\0' : q.charAt(0),
+                    quoteAll.isSelected(), header.isSelected(),
+                    "CRLF".equals(lineEnding.getValue()) ? "\r\n" : "\n",
+                    nullText.getText());
+        }
 
         FileChooser fc = new FileChooser();
         fc.setTitle("Export query results");
-        String ext = asJson ? "json" : "csv";
+        String ext = chosen.extension;
         fc.setInitialFileName("query-results." + ext);
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(ext.toUpperCase(Locale.ROOT) + " files", "*." + ext));
+        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                ext.toUpperCase(Locale.ROOT) + " files", "*." + ext));
         File file = fc.showSaveDialog(getScene() == null ? null : getScene().getWindow());
         if (file == null) return;
 
-        String content = asJson ? ResultGridExporter.toJson(columns, rows)
-                : ResultGridExporter.toCsv(columns, rows);
-        try {
-            Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+        writeExport(file, chosen, delimitedOpts, table.getText(), wholeTable.isSelected());
+    }
+
+    /**
+     * Renders and writes the export. A whole-table export re-runs {@code SELECT * FROM table} on a
+     * background thread first, so the file holds every row rather than the capped, sorted, filtered
+     * grid on screen.
+     */
+    private void writeExport(File file, ExportFormat format, ResultGridExporter.Delimited delimited,
+                             String tableName, boolean wholeTable) {
+        List<String> columns = new ArrayList<>();
+        for (TableColumn<List<String>, ?> c : resultGrid.getColumns()) columns.add(c.getText());
+        List<List<String>> shown = new ArrayList<>(sortedRows);
+
+        Task<String> task = new Task<>() {
+            @Override protected String call() {
+                List<String> cols = columns;
+                List<List<String>> rows = shown;
+                if (wholeTable && editTable != null) {
+                    QueryResult all = service.execute("SELECT * FROM " + editTable);
+                    if (all.failed()) throw new IllegalStateException(all.errorMessage());
+                    cols = all.columns();
+                    rows = all.rows();
+                }
+                String content = switch (format) {
+                    case CSV -> ResultGridExporter.toCsv(cols, rows);
+                    case JSON -> ResultGridExporter.toJson(cols, rows);
+                    case INSERT -> ResultGridExporter.toInsertStatements(tableName, cols, rows);
+                    case XML -> ResultGridExporter.toXml(cols, rows);
+                    case HTML -> ResultGridExporter.toHtml(
+                            tableName == null || tableName.isBlank() ? "Query results" : tableName, cols, rows);
+                    case DELIMITED -> ResultGridExporter.toDelimited(cols, rows, delimited);
+                };
+                try {
+                    Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+                } catch (IOException ex) {
+                    throw new IllegalStateException(ex.getMessage(), ex);
+                }
+                return rows.size() + " row(s)";
+            }
+        };
+        task.setOnSucceeded(e -> {
             resultStatus.getStyleClass().setAll("status-2xx");
-            resultStatus.setText("Exported " + rows.size() + " row(s) → " + file.getName());
-            logger.accept("SQL export: wrote " + rows.size() + " row(s) to " + file.getName());
-        } catch (Exception ex) {
+            resultStatus.setText("Exported " + task.getValue() + " → " + file.getName());
+            logger.accept("SQL export: wrote " + task.getValue() + " to " + file.getName()
+                    + " as " + format);
+        });
+        task.setOnFailed(e -> {
+            String msg = task.getException() == null ? "unknown error" : task.getException().getMessage();
             resultStatus.getStyleClass().setAll("status-err");
-            resultStatus.setText("Export failed: " + ex.getMessage());
-            logger.accept("SQL export FAILED: " + ex.getMessage());
-        }
+            resultStatus.setText("Export failed: " + msg);
+            logger.accept("SQL export FAILED: " + msg);
+        });
+        runBg(task);
     }
 
     private String truncate(String s) {

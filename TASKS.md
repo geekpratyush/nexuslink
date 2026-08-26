@@ -1116,8 +1116,18 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 
 - [ ] **P1** Execute a stored procedure/function with an IN/OUT parameter form (`CallableStatement`)
 - [ ] **P1** Server output panel (`DBMS_OUTPUT`) drained after each execution
-- [ ] **P1** Export as INSERT statements / XML / HTML / delimited-with-options; export a whole table
-- [ ] **P1** In-tab SQL history with recall into the editor
+- [x] **P1** Export as INSERT statements / XML / HTML / delimited-with-options; export a whole table —
+      `ResultGridExporter` gained `toInsertStatements` (dialect-agnostic, via `SqlInsertBuilder`, NULL for
+      null cells), `toXml` (sanitised element names, `xsi:nil` for NULL), `toHtml` (standalone page, null
+      cells marked apart from empty strings) and `toDelimited` with a `Delimited` options record
+      (separator, quote char or none, quote-all, header, line ending, NULL text; `csv()`/`tsv()` presets).
+      The grid's two export buttons are replaced by one **Export…** dialog — format picker, table name,
+      delimited options, and **Export the whole table** which re-runs `SELECT * FROM <table>` off the FX
+      thread so the file holds every row, not the capped/sorted/filtered grid. **19 exporter tests**
+- [x] **P1** In-tab SQL history with recall into the editor — a **History** tab beside Result/Messages
+      lists every statement run in this tab (time / statement / outcome, newest first, capped at 200)
+      with **Recall**, **Recall & Run**, double-click-to-recall and **Clear**. Separate from the shared
+      cross-protocol history sidebar, so the last thing tried never leaves the tab
 - [ ] **P1** Grid: aggregate footer, column freeze, find-in-results, copy-as-INSERT/Markdown
 - [ ] **P2** PL/SQL program editing + compile with error line mapping
 - [ ] **P2** Bind parameter typing + explicit NULL in the prompt (today every bind is a string)

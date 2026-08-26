@@ -76,4 +76,84 @@ class ResultGridExporterTest {
         // Three columns: id=1, name=null→empty, role=missing→empty.
         assertEquals("1,,", lines[1]);
     }
+
+    @Test
+    void insertStatementsQuoteIdentifiersAndLiterals() {
+        String sql = ResultGridExporter.toInsertStatements("people", COLS,
+                List.of(List.of("1", "O'Hara", "admin")));
+        assertEquals("INSERT INTO \"people\" (\"id\", \"name\", \"role\") "
+                + "VALUES (1, 'O''Hara', 'admin');\n", sql);
+    }
+
+    @Test
+    void insertStatementsWriteNullForNullAndMissingCells() {
+        String sql = ResultGridExporter.toInsertStatements("t", COLS, List.of(Arrays.asList("1", null)));
+        assertTrue(sql.contains("VALUES (1, NULL, NULL)"), sql);
+    }
+
+    @Test
+    void insertStatementsFallBackToAPlaceholderTableName() {
+        String sql = ResultGridExporter.toInsertStatements("  ", List.of("a"), List.of(List.of("1")));
+        assertTrue(sql.startsWith("INSERT INTO \"TABLE\""), sql);
+    }
+
+    @Test
+    void xmlEscapesTextAndSanitisesColumnNames() {
+        String xml = ResultGridExporter.toXml(List.of("First Name", "2nd"),
+                List.of(List.of("a<b&c", "x")));
+        assertTrue(xml.contains("<first_name>a&lt;b&amp;c</first_name>"), xml);
+        assertTrue(xml.contains("<_2nd>x</_2nd>"), xml);
+    }
+
+    @Test
+    void xmlMarksNullCellsNil() {
+        String xml = ResultGridExporter.toXml(List.of("a", "b"), List.of(Arrays.asList("1", null)));
+        assertTrue(xml.contains("<b xsi:nil=\"true\"/>"), xml);
+    }
+
+    @Test
+    void htmlRendersHeaderRowAndEscapesCells() {
+        String html = ResultGridExporter.toHtml("People", List.of("name"),
+                List.of(List.of("<script>")));
+        assertTrue(html.contains("<title>People</title>"), html);
+        assertTrue(html.contains("<th>name</th>"), html);
+        assertTrue(html.contains("<td>&lt;script&gt;</td>"), html);
+    }
+
+    @Test
+    void htmlNullCellIsMarkedApartFromAnEmptyString() {
+        String html = ResultGridExporter.toHtml(null, List.of("a", "b"),
+                List.of(Arrays.asList(null, "")));
+        assertTrue(html.contains("<td class=\"null\"></td>"), html);
+        assertTrue(html.contains("<td></td>"), html);
+    }
+
+    @Test
+    void delimitedCsvDefaultsMatchTheCsvExporter() {
+        List<List<String>> rows = List.of(List.of("1", "x,y", "admin"));
+        assertEquals(ResultGridExporter.toCsv(COLS, rows),
+                ResultGridExporter.toDelimited(COLS, rows, ResultGridExporter.Delimited.csv()));
+    }
+
+    @Test
+    void delimitedTsvEscapesTheSeparatorWhenQuotingIsOff() {
+        String out = ResultGridExporter.toDelimited(List.of("a", "b"),
+                List.of(Arrays.asList("x\ty", null)), ResultGridExporter.Delimited.tsv());
+        String[] lines = out.split("\n");
+        assertEquals("a\tb", lines[0]);
+        assertEquals("x\\\ty\tNULL", lines[1]);
+    }
+
+    @Test
+    void delimitedQuoteAllAndNoHeaderAreHonoured() {
+        String out = ResultGridExporter.toDelimited(List.of("a", "b"), List.of(List.of("1", "2")),
+                new ResultGridExporter.Delimited("|", '\'', true, false, "\n", ""));
+        assertEquals("'1'|'2'\n", out);
+    }
+
+    @Test
+    void delimitedRejectsAnEmptyDelimiter() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ResultGridExporter.Delimited("", '"', false, true, "\n", ""));
+    }
 }
