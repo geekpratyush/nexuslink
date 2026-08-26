@@ -76,6 +76,52 @@ public final class MongoService implements AutoCloseable {
         }
     }
 
+    /**
+     * A find with the full Compass query bar: filter, projection, sort, skip and limit. Every part is
+     * Extended JSON and may be blank. Documents come back decoded as well as rendered, so the tree
+     * view can show real BSON types rather than re-parsing the JSON it just printed.
+     */
+    public MongoFindResult findDetailed(String collection, MongoQuerySpec spec) {
+        long start = System.nanoTime();
+        try {
+            var cursor = collection(collection).find(parseFilter(spec.filter()));
+            if (!spec.projection().isBlank()) cursor = cursor.projection(Document.parse(spec.projection()));
+            if (!spec.sort().isBlank()) cursor = cursor.sort(Document.parse(spec.sort()));
+            if (spec.skip() > 0) cursor = cursor.skip(spec.skip());
+            cursor = cursor.limit(spec.limit());
+
+            List<Document> documents = new ArrayList<>();
+            List<String> json = new ArrayList<>();
+            for (Document d : cursor) {
+                documents.add(d);
+                json.add(d.toJson(SHELL));
+            }
+            return MongoFindResult.ok(documents, json, ms(start));
+        } catch (Exception e) {
+            return MongoFindResult.error(e.getMessage(), ms(start));
+        }
+    }
+
+    /**
+     * Sets one field of one document, by {@code _id} and dotted path, to an already-typed value —
+     * the save behind an in-place tree edit. Unlike replacing the document it touches nothing else,
+     * so a concurrent edit to another field is not silently reverted.
+     *
+     * @return the number of documents modified (0 when the value was already that)
+     */
+    public long setField(String collection, Object id, String path, Object value) {
+        return collection(collection)
+                .updateOne(new Document("_id", id), BsonValueParser.setUpdate(path, value))
+                .getModifiedCount();
+    }
+
+    /** Removes one field from one document, by {@code _id} and dotted path. */
+    public long unsetField(String collection, Object id, String path) {
+        return collection(collection)
+                .updateOne(new Document("_id", id), BsonValueParser.unsetUpdate(path))
+                .getModifiedCount();
+    }
+
     /** aggregate(pipeline) — pipeline is a JSON array of stage documents. */
     public MongoQueryResult aggregate(String collection, String pipelineJson) {
         long start = System.nanoTime();
@@ -92,6 +138,141 @@ public final class MongoService implements AutoCloseable {
         } catch (Exception e) {
             return MongoQueryResult.error(e.getMessage(), ms(start));
         }
+    }
+
+    /**
+     * Runs one {@code mongosh}-style line — the shell tab. Parsing is
+     * {@link MongoShellCommand}'s job; this method maps a parsed command onto the driver and renders
+     * whatever came back, so a read prints documents, a write prints its counts, and a line outside
+     * the grammar prints the reason rather than failing silently.
+     */
+    public MongoQueryResult runShell(String line) {
+        long start = System.nanoTime();
+        MongoShellCommand cmd = MongoShellCommand.parse(line);
+        if (!cmd.isRunnable()) return MongoQueryResult.error(cmd.unsupportedReason(), ms(start));
+        try {
+            if (cmd.isDatabaseLevel()) return databaseHelper(cmd, start);
+
+            String c = cmd.collection();
+            // A trailing .count() turns a read into its count, as it does in the shell.
+            if (cmd.count() && cmd.isRead()) {
+                return line(String.valueOf(countDocuments(c, cmd.firstArgument())), start);
+            }
+            return switch (cmd.operation()) {
+                case "find" -> findDetailed(c, cmd.toQuerySpec(50)).asQueryResult();
+                case "findone" -> {
+                    MongoFindResult r = findDetailed(c, cmd.toQuerySpec(1).withFilter(cmd.firstArgument()));
+                    yield r.asQueryResult();
+                }
+                case "aggregate" -> aggregate(c, cmd.firstArgument());
+                case "distinct" -> {
+                    // BsonValue, not Object: the driver's registry has no codec for Object, and the
+                    // field's values may be of mixed BSON types anyway.
+                    String field = stripQuotes(cmd.firstArgument());
+                    Bson filter = cmd.secondArgument() == null
+                            ? new Document() : parseFilter(cmd.secondArgument());
+                    List<String> values = new ArrayList<>();
+                    for (BsonValue v : collection(c).distinct(field, filter, BsonValue.class)) {
+                        values.add(renderBson(v));
+                    }
+                    yield MongoQueryResult.ok(values, ms(start));
+                }
+                case "count", "countdocuments" ->
+                        line(String.valueOf(countDocuments(c, cmd.firstArgument())), start);
+                case "insertone" -> line("inserted _id: " + insertOne(c, cmd.firstArgument()), start);
+                case "insertmany" -> {
+                    List<Document> docs = new ArrayList<>();
+                    for (BsonValue v : BsonArray.parse(cmd.firstArgument())) {
+                        docs.add(Document.parse(v.asDocument().toJson()));
+                    }
+                    collection(c).insertMany(docs);
+                    yield line("inserted " + docs.size() + " document(s)", start);
+                }
+                case "updateone" -> line(collection(c).updateOne(parseFilter(cmd.firstArgument()),
+                        Document.parse(requireSecond(cmd, "updateOne"))).getModifiedCount()
+                        + " document(s) modified", start);
+                case "updatemany" -> line(updateMany(c, cmd.firstArgument(),
+                        requireSecond(cmd, "updateMany")) + " document(s) modified", start);
+                case "replaceone" -> line(collection(c).replaceOne(parseFilter(cmd.firstArgument()),
+                        Document.parse(requireSecond(cmd, "replaceOne"))).getModifiedCount()
+                        + " document(s) replaced", start);
+                case "deleteone" -> line(collection(c).deleteOne(parseFilter(cmd.firstArgument()))
+                        .getDeletedCount() + " document(s) deleted", start);
+                case "deletemany" -> line(deleteMany(c, cmd.firstArgument()) + " document(s) deleted", start);
+                case "drop" -> {
+                    collection(c).drop();
+                    yield line("collection " + c + " dropped", start);
+                }
+                case "createindex" -> line("index created: "
+                        + collection(c).createIndex(Document.parse(cmd.firstArgument())), start);
+                case "dropindex" -> {
+                    collection(c).dropIndex(stripQuotes(cmd.firstArgument()));
+                    yield line("index dropped", start);
+                }
+                case "getindexes" -> {
+                    List<String> out = new ArrayList<>();
+                    for (Document d : collection(c).listIndexes()) out.add(d.toJson(SHELL));
+                    yield MongoQueryResult.ok(out, ms(start));
+                }
+                case "stats" -> {
+                    List<String> out = new ArrayList<>();
+                    collectionStats(c).forEach((k, v) -> out.add(k + ": " + v));
+                    yield MongoQueryResult.ok(out, ms(start));
+                }
+                case "explain" -> line(explain(c, cmd.firstArgument()), start);
+                default -> MongoQueryResult.error("Unsupported operation: " + cmd.operation(), ms(start));
+            };
+        } catch (Exception e) {
+            return MongoQueryResult.error(e.getMessage(), ms(start));
+        }
+    }
+
+    /** The database-level shell helpers: {@code db.getCollectionNames()}, {@code db.stats()}, … */
+    private MongoQueryResult databaseHelper(MongoShellCommand cmd, long start) {
+        return switch (cmd.operation()) {
+            case "getcollectionnames" -> MongoQueryResult.ok(listCollectionNames(), ms(start));
+            case "getcollectioninfos" -> {
+                List<String> out = new ArrayList<>();
+                for (Document d : db().listCollections()) out.add(d.toJson(SHELL));
+                yield MongoQueryResult.ok(out, ms(start));
+            }
+            case "stats" -> MongoQueryResult.ok(
+                    List.of(db().runCommand(new Document("dbStats", 1)).toJson(SHELL)), ms(start));
+            case "version" -> MongoQueryResult.ok(List.of(serverInfo().version()), ms(start));
+            default -> MongoQueryResult.error("Unsupported helper: " + cmd.operation(), ms(start));
+        };
+    }
+
+    /** A one-line result, for the write operations that report a count rather than documents. */
+    private MongoQueryResult line(String text, long start) {
+        return MongoQueryResult.ok(List.of(text), ms(start));
+    }
+
+    private static String requireSecond(MongoShellCommand cmd, String operation) {
+        String second = cmd.secondArgument();
+        if (second == null) {
+            throw new IllegalArgumentException(operation + " needs two arguments: a filter and an update");
+        }
+        return second;
+    }
+
+    /** A distinct value rendered plainly: a string without its quotes, anything else as JSON. */
+    private static String renderBson(BsonValue value) {
+        if (value == null || value.isNull()) return "null";
+        if (value.isString()) return value.asString().getValue();
+        if (value.isNumber()) return String.valueOf(value.asNumber().doubleValue() % 1 == 0
+                ? value.asNumber().longValue() : value.asNumber().doubleValue());
+        if (value.isBoolean()) return String.valueOf(value.asBoolean().getValue());
+        return value.toString();
+    }
+
+    /** {@code "name"} → {@code name}, for the shell arguments that are plain strings. */
+    private static String stripQuotes(String s) {
+        String t = s == null ? "" : s.trim();
+        if (t.length() >= 2 && (t.startsWith("\"") && t.endsWith("\"") || t.startsWith("'") && t.endsWith("'"))) {
+            return t.substring(1, t.length() - 1);
+        }
+        return t;
     }
 
     public long countDocuments(String collection, String filterJson) {

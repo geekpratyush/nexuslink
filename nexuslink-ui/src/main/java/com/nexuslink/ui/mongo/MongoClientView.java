@@ -4,6 +4,8 @@ import com.nexuslink.core.connection.AuthMethod;
 import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.plugin.ResourceNode;
 import com.nexuslink.protocol.mongo.MongoExplorer;
+import com.nexuslink.protocol.mongo.BsonNode;
+import com.nexuslink.protocol.mongo.BsonValueParser;
 import com.nexuslink.protocol.mongo.MongoQueryResult;
 import com.nexuslink.protocol.mongo.MongoService;
 import com.nexuslink.ui.env.Env;
@@ -36,6 +38,19 @@ public final class MongoClientView extends BorderPane {
     private final ComboBox<String> modeCombo = new ComboBox<>();
     private final TextField limitField = new TextField("100");
     private final TextArea queryEditor = new TextArea();
+    // Compass's query bar: projection / sort / skip beside the filter, plus per-collection favourites.
+    private final TextField projectionField = new TextField();
+    private final TextField sortField = new TextField();
+    private final TextField skipField = new TextField("0");
+    private final MenuButton savedQueriesBtn = new MenuButton("Saved");
+    private final java.util.Map<String, java.util.List<com.nexuslink.protocol.mongo.MongoQuerySpec>>
+            savedQueries = new java.util.LinkedHashMap<>();
+    private final TitledPane queryBarPane = new TitledPane();
+    // The mongosh-style shell tab.
+    private final TextField shellInput = new TextField();
+    private final TextArea shellOutput = new TextArea();
+    private final java.util.LinkedList<String> shellHistory = new java.util.LinkedList<>();
+    private int shellHistoryIndex = -1;
     private final org.fxmisc.richtext.CodeArea resultArea = com.nexuslink.ui.util.JsonView.area(false);
     private final org.fxmisc.flowless.VirtualizedScrollPane<org.fxmisc.richtext.CodeArea> resultScroll =
             new org.fxmisc.flowless.VirtualizedScrollPane<>(resultArea);
@@ -44,6 +59,8 @@ public final class MongoClientView extends BorderPane {
     // Compass-like result views
     private final ComboBox<String> viewCombo = new ComboBox<>();
     private final TableView<org.bson.Document> docTable = new TableView<>();
+    // Compass's tree: one row per field, expandable, with the real BSON type beside the value.
+    private final TreeTableView<BsonNode> docTree = new TreeTableView<>();
     private final TableView<String[]> schemaTable = new TableView<>();
     private final java.util.List<org.bson.Document> lastDocs = new java.util.ArrayList<>();
     private String lastCollection;   // source collection for the cached docs (editable when set)
@@ -636,8 +653,8 @@ public final class MongoClientView extends BorderPane {
         runBtn.getStyleClass().add("btn-primary");
         runBtn.setOnAction(e -> run());
 
-        viewCombo.getItems().addAll("JSON", "Table", "Schema");
-        viewCombo.setValue("JSON");
+        viewCombo.getItems().addAll("Tree", "JSON", "Table", "Schema");
+        viewCombo.setValue("Tree");
         viewCombo.valueProperty().addListener((o, ov, nv) -> renderView());
         Label viewLbl = new Label("View:");
         viewLbl.getStyleClass().add("meta-label");
@@ -678,20 +695,229 @@ public final class MongoClientView extends BorderPane {
         });
         buildSchemaTable();
 
-        StackPane resultStack = new StackPane(resultScroll, docTable, schemaTable);
+        buildDocTree();
+        StackPane resultStack = new StackPane(resultScroll, docTable, schemaTable, docTree);
         docTable.setVisible(false);
         schemaTable.setVisible(false);
+        resultScroll.setVisible(false);
 
-        VBox right = new VBox(6, controls, queryEditor, resultStack);
-        right.setPadding(new Insets(8));
+        VBox queryPane = new VBox(6, controls, queryEditor, buildQueryBar(), resultStack);
+        queryPane.setPadding(new Insets(8));
         VBox.setVgrow(resultStack, Priority.ALWAYS);
 
-        SplitPane sp = new SplitPane(explorer, right);
+        Tab queryTab = new Tab("Query", queryPane);
+        queryTab.setClosable(false);
+        Tab shellTab = new Tab("Shell", buildShellPane());
+        shellTab.setClosable(false);
+        TabPane rightTabs = new TabPane(queryTab, shellTab);
+        rightTabs.getStyleClass().add("editor-tabs");
+
+        SplitPane sp = new SplitPane(explorer, rightTabs);
         sp.setDividerPositions(0.28);
         return sp;
     }
 
+    /**
+     * The Compass query bar: projection, sort and skip as first-class inputs beside the filter, with
+     * per-collection favourites. Typing these as fields rather than remembering the chained shell
+     * syntax is the difference between exploring a collection and fighting the tool; the shell tab is
+     * still there for anyone who prefers the other way round.
+     */
+    private TitledPane buildQueryBar() {
+        projectionField.setPromptText("projection — {\"name\": 1, \"_id\": 0}");
+        sortField.setPromptText("sort — {\"name\": -1}");
+        skipField.setPrefWidth(80);
+        for (TextField f : java.util.List.of(projectionField, sortField, skipField)) {
+            f.getStyleClass().add("nl-field");
+            f.setOnAction(e -> run());
+        }
+        HBox.setHgrow(projectionField, Priority.ALWAYS);
+        HBox.setHgrow(sortField, Priority.ALWAYS);
+
+        Button save = new Button("Save query");
+        save.getStyleClass().add("btn-secondary");
+        save.setTooltip(new Tooltip("Keep this filter/projection/sort as a favourite for this collection"));
+        save.setOnAction(e -> saveCurrentQuery());
+        savedQueriesBtn.getStyleClass().add("btn-secondary");
+        savedQueriesBtn.setDisable(true);
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> {
+            projectionField.clear();
+            sortField.clear();
+            skipField.setText("0");
+        });
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(6);
+        grid.addRow(0, metaLabel("Projection:"), projectionField);
+        grid.addRow(1, metaLabel("Sort:"), sortField);
+        HBox paging = new HBox(8, metaLabel("Skip:"), skipField, save, savedQueriesBtn, clear);
+        paging.setAlignment(Pos.CENTER_LEFT);
+        grid.add(paging, 0, 2, 2, 1);
+        javafx.scene.layout.ColumnConstraints labels = new javafx.scene.layout.ColumnConstraints();
+        labels.setMinWidth(80);
+        javafx.scene.layout.ColumnConstraints fields = new javafx.scene.layout.ColumnConstraints();
+        fields.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(labels, fields);
+
+        queryBarPane.setText("Query options (projection · sort · skip · saved)");
+        queryBarPane.setContent(grid);
+        queryBarPane.setExpanded(false);
+        return queryBarPane;
+    }
+
+    /** The favourites menu follows the selected collection. */
+    private void refreshSavedQueriesLater() {
+        Platform.runLater(this::refreshSavedQueries);
+    }
+
+    private static Label metaLabel(String text) {
+        Label l = new Label(text);
+        l.getStyleClass().add("meta-label");
+        return l;
+    }
+
+    /** The query bar as a spec — what {@code findDetailed} takes. */
+    private com.nexuslink.protocol.mongo.MongoQuerySpec currentSpec() {
+        int skip;
+        try { skip = Integer.parseInt(skipField.getText().trim()); }
+        catch (NumberFormatException e) { skip = 0; }
+        return new com.nexuslink.protocol.mongo.MongoQuerySpec(
+                Env.resolve(queryEditor.getText().trim()),
+                Env.resolve(projectionField.getText().trim()),
+                Env.resolve(sortField.getText().trim()),
+                skip, parseLimit());
+    }
+
+    /** Keeps the current query as a favourite of the active collection. */
+    private void saveCurrentQuery() {
+        if (activeCollection == null) { resultStatus.setText("Select a collection first"); return; }
+        savedQueries.computeIfAbsent(activeCollection, k -> new java.util.ArrayList<>()).add(currentSpec());
+        refreshSavedQueries();
+        resultStatus.getStyleClass().setAll("status-2xx");
+        resultStatus.setText("Query saved for " + activeCollection);
+    }
+
+    /** Rebuilds the favourites menu for the active collection. */
+    private void refreshSavedQueries() {
+        savedQueriesBtn.getItems().clear();
+        java.util.List<com.nexuslink.protocol.mongo.MongoQuerySpec> saved =
+                savedQueries.getOrDefault(activeCollection, java.util.List.of());
+        for (com.nexuslink.protocol.mongo.MongoQuerySpec spec : saved) {
+            MenuItem load = new MenuItem(spec.label());
+            load.setOnAction(e -> applySpec(spec));
+            savedQueriesBtn.getItems().add(load);
+        }
+        if (!saved.isEmpty()) {
+            savedQueriesBtn.getItems().add(new SeparatorMenuItem());
+            MenuItem forget = new MenuItem("Forget all for this collection");
+            forget.setOnAction(e -> { savedQueries.remove(activeCollection); refreshSavedQueries(); });
+            savedQueriesBtn.getItems().add(forget);
+        }
+        savedQueriesBtn.setDisable(saved.isEmpty());
+    }
+
+    /** Loads a spec back into the bar and runs it. */
+    private void applySpec(com.nexuslink.protocol.mongo.MongoQuerySpec spec) {
+        modeCombo.setValue("find");
+        queryEditor.setText(spec.filter());
+        projectionField.setText(spec.projection());
+        sortField.setText(spec.sort());
+        skipField.setText(String.valueOf(spec.skip()));
+        limitField.setText(String.valueOf(spec.limit()));
+        if (!spec.isPlain()) queryBarPane.setExpanded(true);
+        run();
+    }
+
+    /**
+     * The shell tab: {@code db.<collection>.<operation>(…)} lines evaluated against the live
+     * connection, with ↑/↓ history.
+     *
+     * <p>It parses the call shape rather than embedding a JavaScript engine — which covers how the
+     * shell is actually used from a GUI, and says so plainly when a line goes beyond that instead of
+     * pretending to be Node. Every reply is printed as the driver returned it.
+     */
+    private javafx.scene.Node buildShellPane() {
+        shellOutput.setEditable(false);
+        shellOutput.getStyleClass().add("code-area");
+        shellOutput.setPromptText("db.people.find({\"role\": \"admin\"}).sort({\"name\": 1}).limit(10)");
+        VBox.setVgrow(shellOutput, Priority.ALWAYS);
+
+        shellInput.getStyleClass().add("nl-field");
+        shellInput.setPromptText("db.<collection>.<operation>(…)   —   Enter to run, ↑ for history");
+        HBox.setHgrow(shellInput, Priority.ALWAYS);
+        shellInput.setOnAction(e -> runShellLine());
+        shellInput.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case UP -> { recallShellHistory(1); e.consume(); }
+                case DOWN -> { recallShellHistory(-1); e.consume(); }
+                default -> { }
+            }
+        });
+
+        Button run = new Button("Run");
+        run.getStyleClass().add("btn-primary");
+        run.setOnAction(e -> runShellLine());
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> shellOutput.clear());
+
+        Label help = new Label("Parses db.<collection>.<operation>(…) with .sort/.limit/.skip/.count — "
+                + "not a JavaScript runtime.");
+        help.getStyleClass().add("meta-label");
+        help.setWrapText(true);
+
+        HBox input = new HBox(8, shellInput, run, clear);
+        input.setAlignment(Pos.CENTER_LEFT);
+        VBox pane = new VBox(6, help, shellOutput, input);
+        pane.setPadding(new Insets(8));
+        return pane;
+    }
+
+    /** Runs the shell line, printing the command and its reply into the transcript. */
+    private void runShellLine() {
+        String line = shellInput.getText();
+        if (line == null || line.isBlank()) return;
+        if (!service.isConnected()) { appendShell("Not connected."); return; }
+        if (activeDb != null) service.useDatabase(activeDb);
+
+        shellHistory.remove(line);
+        shellHistory.addFirst(line);
+        while (shellHistory.size() > 100) shellHistory.removeLast();
+        shellHistoryIndex = -1;
+        shellInput.clear();
+        appendShell("> " + line);
+
+        String resolved = Env.resolve(line);
+        Task<MongoQueryResult> task = new Task<>() {
+            @Override protected MongoQueryResult call() { return service.runShell(resolved); }
+        };
+        task.setOnSucceeded(e -> {
+            MongoQueryResult r = task.getValue();
+            if (!r.success()) { appendShell(r.error()); return; }
+            appendShell(r.documents().isEmpty() ? "(nothing returned)" : String.join("\n", r.documents()));
+            appendShell("— " + r.count() + " result(s) · " + r.durationMs() + " ms");
+        });
+        task.setOnFailed(e -> appendShell("Error: " + task.getException().getMessage()));
+        runBg(task);
+    }
+
+    private void appendShell(String text) {
+        shellOutput.appendText(text + "\n");
+    }
+
+    /** ↑/↓ through the shell history. */
+    private void recallShellHistory(int direction) {
+        if (shellHistory.isEmpty()) return;
+        shellHistoryIndex = Math.max(-1, Math.min(shellHistory.size() - 1, shellHistoryIndex + direction));
+        shellInput.setText(shellHistoryIndex < 0 ? "" : shellHistory.get(shellHistoryIndex));
+        shellInput.positionCaret(shellInput.getText().length());
+    }
+
     private void onExplorerSelect(ResourceNode node) {
+        refreshSavedQueriesLater();
         switch (node.kind()) {
             case DATABASE -> {
                 activeDb = node.label();
@@ -776,13 +1002,16 @@ public final class MongoClientView extends BorderPane {
         }
         String collection = activeCollection;
         int limit = parseLimit();
+        com.nexuslink.protocol.mongo.MongoQuerySpec spec = currentSpec();
         resultStatus.setText("Running " + mode + "…");
         logger.accept("Mongo " + mode + (collection == null ? "" : " → " + collection));
 
         Task<String> task = new Task<>() {
             @Override protected String call() {
                 return switch (mode) {
-                    case "find" -> renderDocs(service.find(collection, body, limit));
+                    // find goes through the query bar so projection/sort/skip apply, and keeps the
+                    // decoded documents so the tree can show real BSON types.
+                    case "find" -> renderFind(service.findDetailed(collection, spec));
                     case "sql" -> renderDocs(service.executeSql(body));
                     case "explain" -> service.explain(collection, body);
                     case "aggregate" -> renderDocs(service.aggregate(collection, body));
@@ -806,6 +1035,7 @@ public final class MongoClientView extends BorderPane {
             if (docMode) renderView();      // refresh Table/Schema/JSON for the new docs
             else { lastDocs.clear(); showNode(resultScroll); }
             if (docMode || mode.equals("explain")) rememberQuery(mode, body);
+            if ("find".equals(mode) && !spec.isPlain()) logger.accept("Mongo " + spec.toShell(collection));
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
@@ -814,6 +1044,20 @@ public final class MongoClientView extends BorderPane {
             showNode(resultScroll);
         });
         runBg(task);
+    }
+
+    /**
+     * Renders a detailed find, keeping the driver's decoded documents rather than re-parsing the JSON
+     * we just printed — that round trip is what loses Int64 / Decimal128 / Date types in the tree.
+     */
+    private String renderFind(com.nexuslink.protocol.mongo.MongoFindResult r) {
+        if (!r.success()) throw new RuntimeException(r.error());
+        Platform.runLater(() -> resultStatus.setText(r.count() + " doc(s) · " + r.durationMs() + " ms"));
+        synchronized (lastDocs) {
+            lastDocs.clear();
+            lastDocs.addAll(r.documents());
+        }
+        return r.json().isEmpty() ? "(no documents)" : String.join("\n", r.json());
     }
 
     private String renderDocs(MongoQueryResult r) {
@@ -847,7 +1091,8 @@ public final class MongoClientView extends BorderPane {
 
     private void renderView() {
         String v = viewCombo.getValue();
-        switch (v == null ? "JSON" : v) {
+        switch (v == null ? "Tree" : v) {
+            case "Tree" -> { buildDocTree(true); showNode(docTree); }
             case "Table" -> { buildDocTable(); showNode(docTable); }
             case "Schema" -> { buildSchema(); showNode(schemaTable); }
             default -> {
@@ -867,6 +1112,222 @@ public final class MongoClientView extends BorderPane {
         resultScroll.setVisible(visible == resultScroll);
         docTable.setVisible(visible == docTable);
         schemaTable.setVisible(visible == schemaTable);
+        docTree.setVisible(visible == docTree);
+    }
+
+    /**
+     * The tree view: one expandable row per field, with the value and its <b>BSON type</b> side by
+     * side. This is the shape a Mongo document actually has — the flat table can only show top-level
+     * fields, and anything nested reads as a blob of JSON in a cell.
+     *
+     * <p>Values are editable in place. Because the type is chosen explicitly rather than guessed from
+     * the text, saving cannot silently turn an Int64 into a Double — the classic Mongo footgun — and
+     * the update is a {@code $set} on that field's path, so nothing else in the document is touched.
+     */
+    private void buildDocTree() { buildDocTree(false); }
+
+    private void buildDocTree(boolean populate) {
+        if (docTree.getColumns().isEmpty()) {
+            TreeTableColumn<BsonNode, String> field = new TreeTableColumn<>("Field");
+            field.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    cd.getValue().getValue().name()));
+            field.setPrefWidth(220);
+
+            TreeTableColumn<BsonNode, String> value = new TreeTableColumn<>("Value");
+            value.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    cd.getValue().getValue().value()));
+            value.setPrefWidth(420);
+
+            TreeTableColumn<BsonNode, String> type = new TreeTableColumn<>("Type");
+            type.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    cd.getValue().getValue().kind().label()));
+            type.setPrefWidth(110);
+
+            docTree.getColumns().setAll(java.util.List.of(field, value, type));
+            docTree.setShowRoot(false);
+            docTree.getStyleClass().add("details-table");
+            docTree.setPlaceholder(new Label("Run a find, then read the documents here"));
+            docTree.setRowFactory(t -> {
+                TreeTableRow<BsonNode> row = new TreeTableRow<>();
+                MenuItem edit = new MenuItem("Edit value…");
+                edit.setOnAction(e -> editTreeValue(row.getTreeItem()));
+                MenuItem unset = new MenuItem("Remove field…");
+                unset.setOnAction(e -> removeTreeField(row.getTreeItem()));
+                MenuItem copyPath = new MenuItem("Copy field path");
+                copyPath.setOnAction(e -> copyToClipboard(row.getItem() == null ? "" : row.getItem().path()));
+                MenuItem copyValue = new MenuItem("Copy value");
+                copyValue.setOnAction(e -> copyToClipboard(row.getItem() == null ? "" : row.getItem().value()));
+                MenuItem editDoc = new MenuItem("Edit whole document…");
+                editDoc.setOnAction(e -> editDocument(documentOf(row.getTreeItem())));
+                MenuItem deleteDoc = new MenuItem("Delete document");
+                deleteDoc.setOnAction(e -> deleteDocument(documentOf(row.getTreeItem())));
+                ContextMenu menu = new ContextMenu(edit, unset, new SeparatorMenuItem(),
+                        copyPath, copyValue, new SeparatorMenuItem(), editDoc, deleteDoc);
+                row.contextMenuProperty().bind(javafx.beans.binding.Bindings
+                        .when(row.emptyProperty()).then((ContextMenu) null).otherwise(menu));
+                row.setOnMouseClicked(ev -> {
+                    if (ev.getClickCount() == 2 && !row.isEmpty()) editTreeValue(row.getTreeItem());
+                });
+                return row;
+            });
+        }
+        if (!populate) return;
+
+        TreeItem<BsonNode> root = new TreeItem<>(new BsonNode("root", "", "", BsonNode.BsonKind.DOCUMENT,
+                java.util.List.of()));
+        int index = 0;
+        for (org.bson.Document doc : lastDocs) {
+            String title = doc.containsKey("_id") ? String.valueOf(doc.get("_id")) : "document " + (index + 1);
+            BsonNode docNode = new BsonNode(String.valueOf(index++), "", title,
+                    BsonNode.BsonKind.DOCUMENT, BsonNode.of(doc));
+            TreeItem<BsonNode> item = toTreeItem(docNode);
+            item.setExpanded(lastDocs.size() == 1);   // a single result opens itself
+            root.getChildren().add(item);
+        }
+        docTree.setRoot(root);
+    }
+
+    /** Recursively turns a node and its children into tree items. */
+    private TreeItem<BsonNode> toTreeItem(BsonNode node) {
+        TreeItem<BsonNode> item = new TreeItem<>(node);
+        for (BsonNode child : node.children()) item.getChildren().add(toTreeItem(child));
+        return item;
+    }
+
+    /** The document a tree row belongs to — walk up to the row directly under the hidden root. */
+    private org.bson.Document documentOf(TreeItem<BsonNode> item) {
+        TreeItem<BsonNode> current = item;
+        while (current != null && current.getParent() != null && current.getParent().getParent() != null) {
+            current = current.getParent();
+        }
+        if (current == null || current.getValue() == null) return null;
+        try {
+            int index = Integer.parseInt(current.getValue().name());
+            return index >= 0 && index < lastDocs.size() ? lastDocs.get(index) : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Edits one field in place: the value and, explicitly, its BSON type. On OK the change is a
+     * {@code $set} on that path for that {@code _id} alone.
+     */
+    private void editTreeValue(TreeItem<BsonNode> item) {
+        if (item == null || item.getValue() == null) return;
+        BsonNode node = item.getValue();
+        if (node.path().isBlank()) { resultStatus.setText("Select a field inside a document"); return; }
+        if (node.kind().isContainer()) {
+            resultStatus.getStyleClass().setAll("meta-label");
+            resultStatus.setText("Expand " + node.name() + " and edit the values inside it");
+            return;
+        }
+        org.bson.Document doc = documentOf(item);
+        if (doc == null || !doc.containsKey("_id")) {
+            resultStatus.getStyleClass().setAll("status-4xx");
+            resultStatus.setText("This result has no _id — editing needs the whole document");
+            return;
+        }
+        if (lastCollection == null) {
+            resultStatus.setText("Editing works on find results from a single collection");
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Edit field");
+        dialog.setHeaderText(node.path() + "   —   " + lastCollection);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        ChoiceBox<BsonNode.BsonKind> kinds = new ChoiceBox<>(javafx.collections.FXCollections
+                .observableArrayList(BsonValueParser.editableKinds()));
+        kinds.setValue(BsonValueParser.editableKinds().contains(node.kind())
+                ? node.kind() : BsonNode.BsonKind.STRING);
+        TextField value = new TextField(node.value());
+        value.setPrefColumnCount(40);
+        Label warning = new Label();
+        warning.getStyleClass().add("status-4xx");
+        warning.setWrapText(true);
+        kinds.valueProperty().addListener((o, ov, nv) -> warning.setText(nv == node.kind() ? ""
+                : "Saving changes this field's type from " + node.kind().label() + " to " + nv.label()));
+
+        GridPane form = new GridPane();
+        form.setHgap(8);
+        form.setVgap(8);
+        form.setPadding(new Insets(12));
+        form.addRow(0, new Label("Type:"), kinds);
+        form.addRow(1, new Label("Value:"), value);
+        form.add(warning, 0, 2, 2, 1);
+        dialog.getDialogPane().setContent(form);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        Object typed;
+        try {
+            typed = BsonValueParser.parse(kinds.getValue(), value.getText());
+        } catch (RuntimeException e) {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText(e.getMessage());
+            return;
+        }
+        Object id = doc.get("_id");
+        String path = node.path();
+        String collection = lastCollection;
+        Task<Long> task = new Task<>() {
+            @Override protected Long call() { return service.setField(collection, id, path, typed); }
+        };
+        task.setOnSucceeded(e -> {
+            resultStatus.getStyleClass().setAll("status-2xx");
+            resultStatus.setText(task.getValue() + " document(s) modified — " + path + " is now "
+                    + kinds.getValue().label());
+            logger.accept("Mongo $set " + collection + "." + path + " (" + kinds.getValue().label() + ")");
+            run();   // re-read so the tree shows what the server stored
+        });
+        task.setOnFailed(e -> {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Update failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Removes one field from one document, with a confirm — {@code $unset} on that path. */
+    private void removeTreeField(TreeItem<BsonNode> item) {
+        if (item == null || item.getValue() == null || item.getValue().path().isBlank()) return;
+        BsonNode node = item.getValue();
+        org.bson.Document doc = documentOf(item);
+        if (doc == null || !doc.containsKey("_id") || lastCollection == null) {
+            resultStatus.setText("Removing a field needs a find result with _id");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Remove “" + node.path() + "” from this document?\nThis cannot be undone.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.setHeaderText("Remove field");
+        if (getScene() != null) confirm.initOwner(getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        Object id = doc.get("_id");
+        String path = node.path();
+        String collection = lastCollection;
+        Task<Long> task = new Task<>() {
+            @Override protected Long call() { return service.unsetField(collection, id, path); }
+        };
+        task.setOnSucceeded(e -> {
+            resultStatus.getStyleClass().setAll("status-2xx");
+            resultStatus.setText(task.getValue() + " document(s) modified — " + path + " removed");
+            run();
+        });
+        task.setOnFailed(e -> {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Remove failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    private void copyToClipboard(String text) {
+        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+        content.putString(text == null ? "" : text);
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
     }
 
     private void buildDocTable() {

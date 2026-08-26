@@ -24,16 +24,35 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
 
 ## Gaps — P1 (a Compass/Studio 3T user notices these on day one)
 
-- [ ] **MG-1 Embedded `mongosh`-style shell.** A REPL tab that evaluates `db.coll.find(...)` against the
+- [x] **MG-1 Embedded `mongosh`-style shell.** *(2026-08-26)* Pure `MongoShellCommand` parses
+      `db.<collection>.<op>(args).sort(…).limit(…).skip(…).count()` — nesting, string literals and
+      top-level commas handled — plus the read-only database helpers (`getCollectionNames`, `stats`,
+      `version`). `MongoService.runShell` maps a parsed command onto the driver (find/findOne/aggregate/
+      distinct/count/insert/update/replace/delete/drop/index helpers/explain). UI: a **Shell tab** with
+      ↑/↓ history and a printed transcript. It is a grammar parser, **not** a JS runtime, and says so
+      when a line goes beyond it. 22 unit tests + `MongoShellLiveIT` (8 tests vs MongoDB 7). A REPL tab that evaluates `db.coll.find(...)` against the
       live connection with history, completion over real collection/field names, and printed results.
       This is the single biggest "it's not a real Mongo tool" gap. Build on the existing driver — a JS
       engine is *not* required if the shell parses the `db.<coll>.<op>(<json>)` grammar (covers >90% of
       real use); document that limit rather than pretending to be Node.
-- [ ] **MG-2 Tree / table / JSON result views.** Compass's three-way toggle. Today the grid is one shape;
+- [x] **MG-2 Tree / table / JSON result views.** *(2026-08-26)* Pure `BsonNode` turns a decoded
+      document into expandable rows carrying the **real BSON type** (Int32/Int64/Double/Decimal128/
+      Date/ObjectId/Binary/…), with dotted `path()` per node. UI: a **Tree view** (Field · Value · Type),
+      now the default, beside the existing JSON/Table/Schema. `findDetailed` keeps the driver's decoded
+      documents so types survive — the old path re-parsed its own printed JSON and lost them.
+      11 tests. Compass's three-way toggle. Today the grid is one shape;
       documents with nested arrays are unreadable. A collapsible tree view is the default people expect.
-- [ ] **MG-3 In-place document editing in the tree** — type-aware (int32/int64/double/decimal/date/ObjectId/
+- [x] **MG-3 In-place document editing in the tree** *(2026-08-26)* Pure `BsonValueParser` parses text
+      as an explicitly chosen BSON type and refuses rather than coerces (an Int32 overflow says "it fits
+      Int64, change the type"), then builds the `$set`/`$unset` on the field's path — so an edit touches
+      one field of one `_id`, never the whole document. UI: double-click a tree value → type picker +
+      value, with a warning when the type would change; plus Remove field (confirmed) and copy
+      path/value. 11 tests. — type-aware (int32/int64/double/decimal/date/ObjectId/
       boolean/null), not a raw-JSON dialog. Wrong numeric type on save is the classic Mongo footgun.
-- [ ] **MG-4 Query bar with projection / sort / skip / limit fields** as first-class inputs beside the
+- [x] **MG-4 Query bar with projection / sort / skip / limit fields** *(2026-08-26)* Pure
+      `MongoQuerySpec` (normalised, paging helpers, `toShell()` rendering) drives
+      `MongoService.findDetailed`. UI: a collapsible **Query options** bar — projection, sort, skip —
+      beside the filter, with **Save query** favourites per collection. 8 tests. as first-class inputs beside the
       filter, plus a saved-query list per collection (favourites), matching Compass's bar.
 - [ ] **MG-5 Import / export a collection** — JSON and CSV, field-mapped, with a preview and a progress
       bar; export the whole collection, not just the visible page. (CSV import machinery already exists
