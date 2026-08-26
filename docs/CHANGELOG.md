@@ -9,6 +9,12 @@ records only work that is in the code and verified.
 
 ### Brand and the public site
 
+- **`docs/PIPELINE.md`** — the handover document for taking NexusLink into an organisation: what the
+  deliverable actually is (one fat JAR, no installer, no jpackage), importing the code, what to change
+  after the import, the build and deploy command, why releases and not snapshots, ready-to-adapt
+  GitHub Actions and Jenkins pipelines, what users receive and how caching behaves, a local
+  end-to-end verification that needs no real Artifactory, and a tick-list for whoever wires it up.
+
 - **The launcher no longer needs to be told where Artifactory is.** Where Maven is already set up —
   the normal case on a corporate machine — `nexuslink.sh` / `nexuslink.ps1` read the repository and
   its credentials from `~/.m2/settings.xml`: the mirror whose `mirrorOf` covers everything, else the

@@ -203,6 +203,7 @@ hand-rolled DI to avoid JPMS conflicts, Caffeine caching per the strategy in `TA
 | `docs/ARCHITECTURE.md` | Module layout, patterns, data flow |
 | `docs/CONTRIBUTING.md` | Forking, branching, testing, and opening a pull request |
 | `docs/DISTRIBUTION.md` | Publishing to Artifactory, and the one-command install for users |
+| `docs/PIPELINE.md` | Handover: importing this into an organisation and publishing it from a pipeline |
 | `docs/javadoc/` | Generated API reference — `mvn -Pjavadoc javadoc:aggregate` |
 
 ## Testing
