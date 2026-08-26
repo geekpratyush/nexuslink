@@ -33,9 +33,31 @@ scene. This page is the inventory and the assembly notes.
 
 ### Screenshots
 
-Real captures of the running application: `02-rest-client` (with a live 200 OK response),
-`03-sql-workbench`, `04-kafka`, `05-mongodb`, `06-ibmmq`, `07-graphql`, `08-s3`, `09-redis`,
-`10-sftp-commander`, `11-grpc`, `12-ldap`, `13-mqtt`, `14-certificates`.
+Twenty-one real captures of the running application, all 1920×1012, dark theme:
+
+| | |
+|---|---|
+| `01-one-console` | **The hero shot** — eight protocol tabs open in one window: REST, SQL, Kafka, Mongo, IBM MQ, GraphQL, S3, Redis |
+| `02-rest-client` | REST, with a live `200 OK` and a real JSON response |
+| `03-sql-workbench` | SQL client — schema tree, editor, result grid |
+| `04-kafka` | Produce, consume, consumer lag, groups, cluster, schema registry |
+| `05-mongodb` | Query bar, operations, projection view |
+| `06-ibmmq` | Queue manager, channel, browse and put |
+| `07-graphql` | Query editor, variables, introspection, subscriptions |
+| `08-s3` | Object storage explorer and commander |
+| `09-redis` | Console and pub/sub |
+| `10-sftp-commander` | Two-pane commander with the transfer queue |
+| `11-grpc` | Service and method pickers, request JSON |
+| `12-ldap` | Search bar, filter builder, DIT tree |
+| `13-mqtt` | Subscribe, publish, live message list |
+| `14-certificates` | Certificate manager — generate, import, build bundles |
+| `15-environments` | Environment variables per environment |
+| `16-secret-vaults` | HashiCorp Vault, AWS Secrets Manager, CyberArk |
+| `17-metrics` | Live metrics dashboard with the throughput chart |
+| `20-azure-blob` | Azure Blob explorer and commander |
+| `21-snmp` | MIB browser, GET and WALK |
+| `22-ssh-terminal` | Embedded SSH terminal |
+| `23-rabbitmq` | Exchanges, queues, bindings, publish and consume |
 
 They were taken against a throwaway profile, so they show a clean workbench — no saved connections,
 no history, nothing from anyone's machine.

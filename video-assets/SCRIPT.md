@@ -48,20 +48,24 @@ Every asset named below is in this folder. Nothing here needs to be drawn, bough
 
 ## Scene 4 — The product, in use (0:46 – 1:46)
 
-Sixty seconds of real screens. **Six to nine seconds each**, cross-dissolve between them, with a
+Sixty seconds of real screens. **Six to eight seconds each**, cross-dissolve between them, with a
 slow 3–4% zoom on each so nothing sits still. Drop `overlays/logo-bug.png` in the top-right for the
 whole sequence, and put a lower third on each screen (see *Lower thirds* below).
 
 | Time | Screenshot | Lower third |
 |---|---|---|
-| 0:46 | `screenshots/02-rest-client.png` | **REST & API testing** — collections, auth, assertions |
-| 0:54 | `screenshots/03-sql-workbench.png` | **SQL workbench** — query, edit, explain, export |
+| 0:46 | `screenshots/01-one-console.png` | *(no lower third — let the tab bar speak)* |
+| 0:50 | `screenshots/02-rest-client.png` | **REST & API testing** — collections, auth, assertions |
+| 0:57 | `screenshots/03-sql-workbench.png` | **SQL workbench** — query, edit, explain, export |
 | 1:02 | `screenshots/04-kafka.png` | **Kafka** — produce, consume, consumer lag, replay |
 | 1:10 | `screenshots/05-mongodb.png` | **MongoDB** — find, aggregate, change streams |
 | 1:18 | `screenshots/06-ibmmq.png` | **IBM MQ** — browse queues, put, replay the DLQ |
 | 1:26 | `screenshots/07-graphql.png` | **GraphQL** — introspection, variables, subscriptions |
 | 1:33 | `screenshots/08-s3.png` | **S3 & object storage** — browse, upload, presign |
 | 1:40 | `screenshots/10-sftp-commander.png` | **File transfer** — two-pane commander, queue, compare |
+
+Open the sequence on `01-one-console.png` for four seconds — eight protocol tabs in a single
+window is the whole argument in one frame — then go through the individual screens.
 
 > **Narration.** REST, with collections, enterprise authentication and assertions. A SQL workbench
 > that speaks the dialect your engine actually accepts. Kafka — produce, consume, watch consumer lag,
