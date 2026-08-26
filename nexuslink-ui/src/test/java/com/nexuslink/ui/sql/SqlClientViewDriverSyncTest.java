@@ -63,9 +63,11 @@ class SqlClientViewDriverSyncTest {
             SqlClientView view = new SqlClientView();
             view.prefill(url, "app", "secret");
             ComboBox<DriverInfo> combo = (ComboBox<DriverInfo>) view.lookup("#sqlDbCombo");
-            TextField urlField = (TextField) view.lookup("#sqlUrl");
+            // The URL is a ConnectionChip now — collapsed to a short label, with the real value
+            // underneath — so the test reads the value rather than a text field's text.
+            var urlField = (com.nexuslink.ui.controls.ConnectionChip) view.lookup("#sqlUrl");
             return new String[]{combo.getValue() == null ? null : combo.getValue().id(),
-                    urlField.getText()};
+                    urlField.getValue()};
         });
     }
 

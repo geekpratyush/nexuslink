@@ -356,7 +356,7 @@ public final class JmsView extends BorderPane {
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
-        logger.accept("JMS connect → " + url);
+        logger.accept("JMS connect → " + com.nexuslink.core.security.UriRedactor.redact(url));
         Task<Void> task = new Task<>() {
             @Override protected Void call() throws Exception {
                 service.connect(url, Env.resolve(userField.getText().trim()), Env.resolve(passField.getText()));

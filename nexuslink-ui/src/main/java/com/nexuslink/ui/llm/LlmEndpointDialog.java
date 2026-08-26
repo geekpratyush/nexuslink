@@ -43,11 +43,13 @@ final class LlmEndpointDialog {
 
     private final ComboBox<Auth> authCombo = new ComboBox<>(FXCollections.observableArrayList(Auth.values()));
     private final TextField apiKeyHeaderField = new TextField();
-    private final TextField apiKeyField = new TextField();
+    // Both are live credentials, so they are masked with a reveal toggle rather than sitting in the
+    // clear in a dialog that stays open while an endpoint is configured.
+    private final com.nexuslink.ui.controls.SecretField apiKeyField = new com.nexuslink.ui.controls.SecretField();
     private final TextField bearerField = new TextField();
     private final TextField tokenUrlField = new TextField();
     private final TextField clientIdField = new TextField();
-    private final TextField clientSecretField = new TextField();
+    private final com.nexuslink.ui.controls.SecretField clientSecretField = new com.nexuslink.ui.controls.SecretField();
     private final TextField scopeField = new TextField();
     private final GridPane authGrid = new GridPane();
 

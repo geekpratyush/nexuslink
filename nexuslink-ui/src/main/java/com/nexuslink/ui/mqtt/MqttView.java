@@ -255,7 +255,7 @@ public final class MqttView extends BorderPane {
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
-        logger.accept("MQTT connect → " + broker);
+        logger.accept("MQTT connect → " + com.nexuslink.core.security.UriRedactor.redact(broker));
 
         Task<Void> task = new Task<>() {
             @Override protected Void call() throws Exception {

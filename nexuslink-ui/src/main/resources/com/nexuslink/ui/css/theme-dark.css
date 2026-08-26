@@ -64,3 +64,13 @@
     -nl-json-null:   #FB7185;   /* null — rose               */
     -nl-json-punct:  #64748B;   /* braces/commas — slate     */
 }
+
+/* Connection chip — reads as a label, not as an input, until it is being edited. */
+.connection-chip-label {
+    -fx-background-color: #2a2f3a;
+    -fx-border-color: #3a4150;
+    -fx-text-fill: #d8dee9;
+}
+.connection-chip-label:hover {
+    -fx-border-color: #5b8def;
+}

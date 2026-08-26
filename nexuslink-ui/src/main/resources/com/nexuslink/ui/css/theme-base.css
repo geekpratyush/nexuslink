@@ -509,3 +509,24 @@
 .frozen-grid {
     -fx-border-width: 0 1 0 0;
 }
+
+/* A connection string shown as a compact chip: the host (or the saved connection's name) with any
+   embedded credentials hidden. Double-click turns it into the full editable field. */
+.connection-chip-label {
+    -fx-padding: 4 10 4 10;
+    -fx-background-radius: 4;
+    -fx-border-radius: 4;
+    -fx-border-width: 1;
+    -fx-cursor: hand;
+}
+.connection-chip-label:has-credentials {
+    -fx-font-style: italic;
+}
+.connection-chip-label:focused {
+    -fx-border-width: 2;
+}
+
+/* A secret with a reveal toggle: masked by default, shown only when asked for. */
+.secret-field .toggle-button:selected {
+    -fx-font-weight: bold;
+}

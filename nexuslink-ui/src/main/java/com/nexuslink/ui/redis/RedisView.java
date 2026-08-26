@@ -176,7 +176,7 @@ public final class RedisView extends BorderPane {
         connectBtn.setDisable(true);
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Connecting…");
-        logger.accept("Redis connect → " + uri.replaceAll(":[^:@/]+@", ":***@"));
+        logger.accept("Redis connect → " + com.nexuslink.core.security.UriRedactor.redact(uri));
 
         Task<Long> task = new Task<>() {
             @Override protected Long call() {
@@ -185,7 +185,7 @@ public final class RedisView extends BorderPane {
             }
         };
         String connKey = "Redis@" + uri;
-        String connTarget = uri.replaceAll(":[^:@/]+@", ":***@");
+        String connTarget = com.nexuslink.core.security.UriRedactor.redact(uri);
         task.setOnSucceeded(e -> {
             // Name the product and version, not just "Redis": a Valkey or KeyDB server accepts a
             // different command set, and the console's errors make more sense with that on screen.

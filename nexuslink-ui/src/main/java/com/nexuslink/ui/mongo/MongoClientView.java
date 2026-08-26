@@ -32,7 +32,14 @@ public final class MongoClientView extends BorderPane {
     private final MongoExplorer explorerModel = new MongoExplorer(service);
     private final ResourceExplorerView explorer = new ResourceExplorerView("Databases");
 
-    private final TextField connField = new TextField("mongodb://localhost:27017");
+    /**
+     * The connection string as a compact chip rather than a permanently expanded text box: a Mongo
+     * URI with a replica set and options is longer than every other control put together, and one
+     * with credentials in it would otherwise put a password on every screenshot.
+     */
+    private final com.nexuslink.ui.controls.ConnectionChip connField =
+            new com.nexuslink.ui.controls.ConnectionChip(
+                    "mongodb://host:27017  or  mongodb+srv://user:pass@cluster/…");
     private final Button connectBtn = new Button("Connect");
     private final Label statusLabel = new Label("Not connected");
 
@@ -98,7 +105,7 @@ public final class MongoClientView extends BorderPane {
 
     /** Pre-fills the connection string (used when opening a saved/sample connection). */
     public void prefill(String connectionString) {
-        if (connectionString != null && !connectionString.isBlank()) connField.setText(connectionString);
+        if (connectionString != null && !connectionString.isBlank()) connField.setValue(connectionString);
     }
 
     private void editDocument(org.bson.Document doc) {
@@ -981,7 +988,7 @@ public final class MongoClientView extends BorderPane {
         Button apply = new Button("Use this connection string");
         apply.getStyleClass().add("btn-primary");
         apply.setOnAction(e -> {
-            connField.setText(buildUri(host.getText(), port.getText(), user.getText(), pass.getText(),
+            connField.setValue(buildUri(host.getText(), port.getText(), user.getText(), pass.getText(),
                     authSource.getText(), mech.getValue(), tls.isSelected(), srv.isSelected(), false));
             statusLabel.getStyleClass().setAll("meta-label");
             statusLabel.setText("Connection string updated — press Connect");
@@ -1154,7 +1161,7 @@ public final class MongoClientView extends BorderPane {
     }
 
     private void saveCurrent() {
-        String conn = connField.getText().trim();
+        String conn = connField.getValue().trim();
         if (conn.isEmpty()) { statusLabel.setText("Enter a connection string before saving"); return; }
         TextInputDialog dialog = new TextInputDialog(conn);
         dialog.setTitle("Save connection");
@@ -1171,9 +1178,9 @@ public final class MongoClientView extends BorderPane {
     }
 
     private VBox buildConnectionBar() {
-        connField.getStyleClass().add("nl-field");
         HBox.setHgrow(connField, Priority.ALWAYS);
-        connField.setPromptText("mongodb://host:27017  or  mongodb+srv://user:pass@cluster/…");
+        connField.setValue("mongodb://localhost:27017");
+        connField.setOnCommit(this::connect);   // committing an edit connects, as pressing Enter did
 
         connectBtn.getStyleClass().add("btn-primary");
         connectBtn.setOnAction(e -> connect());
@@ -1731,8 +1738,8 @@ public final class MongoClientView extends BorderPane {
     private void connect() {
         connectBtn.setDisable(true);
         statusLabel.setText("Connecting…");
-        String conn = Env.resolve(connField.getText().trim());   // resolve ${VAR} against active environment
-        logger.accept("Mongo connect → " + conn.replaceAll(":[^:@/]+@", ":***@"));
+        String conn = Env.resolve(connField.getValue().trim());   // resolve ${VAR} against active environment
+        logger.accept("Mongo connect → " + com.nexuslink.core.security.UriRedactor.redact(conn));
         Task<List<String>> task = new Task<>() {
             @Override protected List<String> call() { return service.connect(conn); }
         };

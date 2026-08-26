@@ -98,7 +98,7 @@ public final class SseView extends BorderPane {
         String url = com.nexuslink.ui.env.Env.resolve(raw);   // resolve ${VAR} against active environment
         statusLabel.setText("Connecting…");
         connectBtn.setDisable(true);
-        logger.accept("SSE connect → " + url);
+        logger.accept("SSE connect → " + com.nexuslink.core.security.UriRedactor.redact(url));
 
         service.connect(url, Map.of(), new SseService.Listener() {
             @Override public void onOpen(int status) {

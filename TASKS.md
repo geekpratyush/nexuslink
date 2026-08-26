@@ -1566,6 +1566,28 @@ protocol clients from becoming thirteen codebases. **Start here.**
 - [ ] **Diff-then-apply for configuration** — `ConfigDiff`/`SchemaDiff` exist; wire to Kafka configs
       (`KF-1`), queue-manager drift (`MQ-15`), RabbitMQ objects (`MSG-R1`)
 
+### Credential exposure in the UI — audit and fix (2026-08-26)
+
+- [x] **Connection strings are shown as a chip, not a text box** — `ConnectionChip` collapses a
+      connection string to the saved connection's **name**, or a short `host:port/db` label, and expands
+      to the full editable field on double-click (Enter commits, Escape cancels). Two problems solved at
+      once: a Mongo URI with a replica set and options was longer than every other control put together,
+      and one with `user:pass@` in it put a password on every screenshot. Applied to the **Mongo**
+      connection string and the **SQL** JDBC URL. The tooltip and *Copy* are redacted too — revealing is
+      always deliberate — with *Copy including credentials* as the explicit alternative.
+- [x] **Pure `UriRedactor`** (core) masks credentials in any connection string: `scheme://user:pass@`
+      userinfo for every wire protocol, plus `password=`/`token=`/`secret=`/`apikey=`/`accesskey=` style
+      parameters in query strings and JDBC property lists. Also produces the short label the chip shows.
+      **13 tests.**
+- [x] **Secrets that were plain text are now masked with a reveal toggle** (`SecretField` — a
+      `PasswordField` cannot be checked after pasting, which is why plain fields got used): REST
+      **bearer token**, **API-key value** and **AWS session token**; the LLM endpoint dialog's
+      **API key** and **client secret**. Everything else already used `PasswordField` — SQL, SFTP, FTP,
+      LDAP, IBM MQ, JMS, MQTT, RabbitMQ, Solace, SNMP, S3, SQS, gRPC, WebSocket, MCP, the vault and the
+      connection-bundle prompts were all checked.
+- [x] **The activity log no longer prints credentials** — SQL/Mongo/JMS/WebSocket/SSE/MQTT/RabbitMQ
+      connect lines go through `UriRedactor`, replacing Redis's one ad-hoc regex with the shared rule.
+
 ### 10.1–10.6 rollup
 
 - [x] **10.1 MongoDB** — **all 7 P1 items shipped 2026-08-26** (Compass/Studio 3T parity): MG-1 mongosh-style

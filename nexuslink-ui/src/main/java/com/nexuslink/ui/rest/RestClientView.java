@@ -100,9 +100,12 @@ public final class RestClientView extends BorderPane {
     private ComboBox<RestRequest.AuthType> authTypeCombo;
     private final TextField authUser = new TextField();
     private final PasswordField authPass = new PasswordField();
-    private final TextField authToken = new TextField();
+    // Bearer token, API-key value and AWS session token are credentials: masked by default, with a
+    // reveal toggle so a pasted value can still be checked. They were plain text fields, which left a
+    // live token on screen for the whole session.
+    private final com.nexuslink.ui.controls.SecretField authToken = new com.nexuslink.ui.controls.SecretField();
     private final TextField apiKeyName = new TextField("X-API-Key");
-    private final TextField apiKeyValue = new TextField();
+    private final com.nexuslink.ui.controls.SecretField apiKeyValue = new com.nexuslink.ui.controls.SecretField();
     private ComboBox<RestRequest.ApiKeyLocation> apiKeyLocation;
     private final TextField oauthTokenUrl = new TextField();
     private final TextField oauthClientId = new TextField();
@@ -112,7 +115,7 @@ public final class RestClientView extends BorderPane {
     private final TextField awsService = new TextField("execute-api");
     private final TextField awsAccessKey = new TextField();
     private final PasswordField awsSecretKey = new PasswordField();
-    private final TextField awsSessionToken = new TextField();
+    private final com.nexuslink.ui.controls.SecretField awsSessionToken = new com.nexuslink.ui.controls.SecretField();
     private ComboBox<com.nexuslink.protocol.http.rest.HmacAuthenticator.Algorithm> hmacAlgorithm;
     private ComboBox<com.nexuslink.protocol.http.rest.HmacAuthenticator.Encoding> hmacEncoding;
     private final TextField hmacKeyId = new TextField();
@@ -1096,9 +1099,10 @@ public final class RestClientView extends BorderPane {
         tokenLbl.getStyleClass().add("meta-label");
         authUser.getStyleClass().add("nl-field");
         authPass.getStyleClass().add("nl-field");
-        authToken.getStyleClass().add("nl-field");
+        authToken.setPromptText("bearer token");
         authUser.setPrefWidth(280);
         authToken.setPrefWidth(280);
+        authToken.setMaxWidth(320);
 
         Label keyNameLbl = new Label("Key name:");
         Label keyValueLbl = new Label("Key value:");
@@ -1107,9 +1111,10 @@ public final class RestClientView extends BorderPane {
         keyValueLbl.getStyleClass().add("meta-label");
         keyInLbl.getStyleClass().add("meta-label");
         apiKeyName.getStyleClass().add("nl-field");
-        apiKeyValue.getStyleClass().add("nl-field");
+        apiKeyValue.setPromptText("API key value");
         apiKeyName.setPrefWidth(280);
         apiKeyValue.setPrefWidth(280);
+        apiKeyValue.setMaxWidth(320);
         apiKeyLocation = new ComboBox<>(FXCollections.observableArrayList(RestRequest.ApiKeyLocation.values()));
         apiKeyLocation.setValue(RestRequest.ApiKeyLocation.HEADER);
 
@@ -1151,10 +1156,12 @@ public final class RestClientView extends BorderPane {
         Label secretKeyLbl = new Label("Secret key:");
         Label sessionTokenLbl = new Label("Session token:");
         for (Label l : new Label[]{regionLbl, serviceLbl, accessKeyLbl, secretKeyLbl, sessionTokenLbl}) l.getStyleClass().add("meta-label");
-        for (TextField f : new TextField[]{awsRegion, awsService, awsAccessKey, awsSecretKey, awsSessionToken}) {
+        for (TextField f : new TextField[]{awsRegion, awsService, awsAccessKey, awsSecretKey}) {
             f.getStyleClass().add("nl-field");
             f.setPrefWidth(280);
         }
+        awsSessionToken.setPrefWidth(280);
+        awsSessionToken.setMaxWidth(320);
         awsSessionToken.setPromptText("optional, for temporary credentials");
         grid.add(regionLbl, 0, 12);       grid.add(awsRegion, 1, 12);
         grid.add(serviceLbl, 0, 13);      grid.add(awsService, 1, 13);

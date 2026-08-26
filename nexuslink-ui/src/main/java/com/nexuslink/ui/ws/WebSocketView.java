@@ -159,7 +159,7 @@ public final class WebSocketView extends BorderPane {
         String url = com.nexuslink.ui.env.Env.resolve(raw);   // resolve ${VAR} against active environment
         statusLabel.setText("Connecting…");
         connectBtn.setDisable(true);
-        logger.accept("WS connect → " + url);
+        logger.accept("WS connect → " + com.nexuslink.core.security.UriRedactor.redact(url));
 
         service.connect(url, new WebSocketService.Listener() { // (TLS config passed below)
             @Override public void onOpen() {

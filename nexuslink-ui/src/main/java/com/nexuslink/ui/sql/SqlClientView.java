@@ -61,7 +61,13 @@ public final class SqlClientView extends BorderPane {
     /** True while the picker is being moved to match the URL, so it must not rewrite that URL. */
     private boolean syncingDriver;
     private final Button driverBtn = new Button("Load Driver…");
-    private final TextField urlField = new TextField("jdbc:sqlite::memory:");
+    /**
+     * The JDBC URL as a compact chip: an Oracle or SQL Server URL is long enough to crowd out every
+     * other control, and one with {@code ?password=} in it would otherwise sit on screen in the clear.
+     * Double-click to edit; the real value is always what {@link #connect()} uses.
+     */
+    private final com.nexuslink.ui.controls.ConnectionChip urlField =
+            new com.nexuslink.ui.controls.ConnectionChip("jdbc:… connection URL");
     private final TextField userField = new TextField();
     private final PasswordField passField = new PasswordField();
     private final Button connectBtn = new Button("Connect");
@@ -171,7 +177,7 @@ public final class SqlClientView extends BorderPane {
             var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(detailJson);
             String url = node.path("url").asText("");
             String sql = node.path("sql").asText("");
-            if (!url.isBlank()) { urlField.setText(url); syncDriverToUrl(); }
+            if (!url.isBlank()) { urlField.setValue(url); syncDriverToUrl(); }
             if (!sql.isBlank()) setEditorText(sql);
         } catch (Exception ignored) {
             // A malformed detail blob just leaves the editor as-is.
@@ -189,7 +195,7 @@ public final class SqlClientView extends BorderPane {
      * share a wire protocol (CockroachDB vs PostgreSQL) or a user-supplied driver.
      */
     public void prefill(String url, String user, String password, String driverId) {
-        if (url != null && !url.isBlank()) urlField.setText(url);
+        if (url != null && !url.isBlank()) urlField.setValue(url);
         if (user != null) userField.setText(user);
         if (password != null) passField.setText(password);
         syncDriverToUrl();
@@ -208,7 +214,7 @@ public final class SqlClientView extends BorderPane {
      * @return true if a connection attempt was started
      */
     public boolean connectNow() {
-        if (urlField.getText() == null || urlField.getText().isBlank()) return false;
+        if (urlField.getValue() == null || urlField.getValue().isBlank()) return false;
         DriverInfo d = dbCombo.getValue();
         if (d != null && !d.bundled() && !JdbcDriverRegistry.isAvailable(d)) return false;
         connect();
@@ -221,7 +227,7 @@ public final class SqlClientView extends BorderPane {
      * which also fed the wrong driver id to the TLS parameter mapping.
      */
     private void syncDriverToUrl() {
-        String url = Env.resolve(urlField.getText());
+        String url = Env.resolve(urlField.getValue());
         JdbcUrls.forUrl(JdbcDriverRegistry.allIncludingUser(), url).ifPresent(this::selectDriverQuietly);
     }
 
@@ -254,14 +260,15 @@ public final class SqlClientView extends BorderPane {
         String selected = sqlEditor.getSelectedText();
         String sql = selected == null || selected.isBlank() ? sqlEditor.getText() : selected;
         return new com.nexuslink.protocol.db.SqlCodeGenerator.Request(
-                Env.resolve(urlField.getText().trim()),
+                Env.resolve(urlField.getValue().trim()),
                 Env.resolve(userField.getText().trim()),
                 sql);
     }
 
     private VBox buildConnectionBar() {
-        urlField.getStyleClass().add("nl-field");
         HBox.setHgrow(urlField, Priority.ALWAYS);
+        urlField.setValue("jdbc:sqlite::memory:");
+        urlField.setOnCommit(this::syncDriverToUrl);   // an edited URL re-picks the driver
         userField.getStyleClass().add("nl-field");
         userField.setPromptText("user (optional)");
         userField.setPrefWidth(120);
@@ -468,7 +475,7 @@ public final class SqlClientView extends BorderPane {
         // When the picker is following the URL (not the other way round), keep the URL the user
         // actually connected with — overwriting it with the template would discard their host/db.
         if (!syncingDriver && d.sampleUrl() != null && !d.sampleUrl().isBlank()) {
-            urlField.setText(d.sampleUrl());
+            urlField.setValue(d.sampleUrl());
         }
         // A jar fetched earlier (downloaded, or placed here by the user's own mvn run) makes the
         // driver usable straight away, so check that before declaring it missing.
@@ -1320,7 +1327,7 @@ public final class SqlClientView extends BorderPane {
     private SqlDialect dialect() {
         // The live connection wins: the URL field may have been edited since connecting.
         if (service.isConnected() && service.url() != null) return service.dialect();
-        return SqlDialect.forUrl(urlField.getText() == null ? "" : urlField.getText().trim());
+        return SqlDialect.forUrl(urlField.getValue() == null ? "" : urlField.getValue().trim());
     }
 
     /** Quotes an identifier for the connected database. */
@@ -2082,7 +2089,7 @@ public final class SqlClientView extends BorderPane {
     }
 
     private void saveCurrent() {
-        String url = urlField.getText().trim();
+        String url = urlField.getValue().trim();
         if (url.isEmpty()) { statusLabel.setText("Enter a JDBC URL before saving"); return; }
         TextInputDialog dialog = new TextInputDialog(url);
         dialog.setTitle("Save connection");
@@ -2121,14 +2128,14 @@ public final class SqlClientView extends BorderPane {
         connectBtn.setDisable(true);
         statusLabel.setText("Connecting…");
         // Resolve ${VAR} against the active environment for the JDBC URL + credentials.
-        String url = Env.resolve(urlField.getText().trim());
+        String url = Env.resolve(urlField.getValue().trim());
         String user = Env.resolve(userField.getText());
         String pass = Env.resolve(passField.getText());
         DriverInfo driver = dbCombo.getValue();
         String driverId = driver == null ? null : driver.id();
         java.util.Map<String, String> tlsProps = JdbcTlsParams.forDriver(driverId, tlsSpec());
         if (!tlsProps.isEmpty()) logger.accept("JDBC TLS params: " + tlsProps.keySet());
-        logger.accept("JDBC connect → " + url);
+        logger.accept("JDBC connect → " + com.nexuslink.core.security.UriRedactor.redact(url));   // a JDBC URL can carry ?password=
         Task<String> task = new Task<>() {
             @Override protected String call() throws Exception {
                 service.connect(url, user, pass, tlsProps);
@@ -2604,7 +2611,7 @@ public final class SqlClientView extends BorderPane {
     private void recordQueryHistory(String statement, QueryResult r) {
         if (statement == null || r == null) return;
         try {
-            String url = urlField.getText().trim();
+            String url = urlField.getValue().trim();
             String summary = truncate(statement) + " → " + r.summary();
             var detail = new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode();
             detail.put("url", url);
