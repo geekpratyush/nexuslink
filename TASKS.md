@@ -231,7 +231,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       yielding partial data. Self-contained (`javax.crypto` + Jackson). 8 tests. **UI wired:** Export…/Import…
       buttons on the `ConnectionsPanel` (FileChooser + masked passphrase dialog) export the Saved connections
       and merge imported ones back via `ConnectionStore`. _(team share-link TODO.)_
-- [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide; _folders, tags, color dots, drag-to-reorder TODO_
+- [-] `ConnectionTreeView` — `ConnectionsPanel`: Saved + Samples groups, protocol icons, open/delete/hide,
+      **type-to-search box** (pure `QuickFilter`: prefix > word-start/initials > substring, every query word
+      must match; searches name + protocol + target + user; groups expand with match counts, best match
+      selected so Enter opens it, ↓ into the tree, Esc clears, **Ctrl+K** focuses it);
+      _folders, tags, color dots, drag-to-reorder TODO_
+- [x] **Sidebar connection-type filter** — a *Filter connection types…* box above the protocol buttons,
+      backed by `ProtocolSearch` keywords so the everyday word finds the button (`postgres` → SQL,
+      `queue` → every broker, `bucket` → S3/GCS/Azure Blob); shows "n of m", Enter opens the top match
 - [x] **Bundled public sample catalog** (`SampleCatalog`) — deletable/hideable public test endpoints (REST/WS/SQL/Mongo/MCP/LLM + SFTP/Kafka placeholders)
 - [ ] `ProfileEditorDialog` — generic fields + protocol-specific section (pluggable)
 - [x] `ProfileValidator` — per-protocol pre-save validation (name, target shape per protocol, auth-method

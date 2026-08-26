@@ -33,11 +33,23 @@ Once connected, the workspace opens in a new tab. Each protocol has its own pane
 | Action | Shortcut |
 |--------|----------|
 | Open Help | F1 |
-| Command Palette | Ctrl+K |
-| Global Search | Ctrl+Shift+F |
-| New Tab | Ctrl+T |
+| Search saved connections | Ctrl+K |
+| New REST tab | Ctrl+T |
 | Send Request | Ctrl+Enter |
-| Save Profile | Ctrl+S |
+| Toggle the activity log | Ctrl+` |
+| Switch light / dark theme | Ctrl+Shift+T |
+
+## Finding Things in the Sidebar
+
+The left sidebar has two search boxes, and both filter as you type:
+
+- **Search connections…** narrows your Saved connections and the public Samples together. It matches
+  a connection's name, protocol, host and user, so `kafka`, `prod kafka`, `5432` and initials like
+  `asb` all work. The best match is selected as you type — press **Enter** to open it, **↓** to step
+  into the list, **Esc** to clear. **Ctrl+K** puts the caret straight in the box.
+- **Filter connection types…** narrows the list of protocol buttons below it. It knows the everyday
+  word for each thing, not just the button label: `postgres` finds the SQL client, `queue` finds
+  every broker, `bucket` finds S3 / GCS / Azure Blob. **Enter** opens the top match.
 
 ## Environment Variables
 

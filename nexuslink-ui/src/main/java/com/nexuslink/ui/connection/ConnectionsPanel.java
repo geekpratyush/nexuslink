@@ -4,6 +4,7 @@ import com.nexuslink.core.connection.ConnectionProfile;
 import com.nexuslink.core.connection.ConnectionStore;
 import com.nexuslink.core.connection.ProfileImportExport;
 import com.nexuslink.core.connection.SampleCatalog;
+import com.nexuslink.core.search.QuickFilter;
 import com.nexuslink.ui.icons.Icons;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -14,6 +15,8 @@ import javafx.stage.FileChooser;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -23,11 +26,17 @@ import java.util.function.Consumer;
  * {@link ConnectionStore}) and bundled <b>Samples (public)</b> (from {@link SampleCatalog}) — each
  * leaf rendered with its protocol icon. Double-click (or the context menu) opens a profile;
  * saved entries can be deleted and samples hidden, so corporate users can clear the samples.
+ *
+ * <p>A search box at the top narrows both groups as you type, matching a connection's name, protocol,
+ * target and username through {@link QuickFilter} — so "kaf", "prod kafka", "5432" or "asb" all find
+ * what you would expect. While a search is active the groups expand and the best match is selected,
+ * so Enter opens it without touching the mouse; Escape clears the box.
  */
 public final class ConnectionsPanel extends VBox {
 
     private final ConnectionStore store;
     private final TreeView<Object> tree = new TreeView<>();
+    private final TextField search = new TextField();
     private Consumer<ConnectionProfile> onOpen = p -> {};
 
     public ConnectionsPanel(ConnectionStore store) {
@@ -42,8 +51,61 @@ public final class ConnectionsPanel extends VBox {
             }
         });
         VBox.setVgrow(tree, Priority.ALWAYS);
-        getChildren().addAll(buildToolbar(), tree);
+        getChildren().addAll(buildSearchBox(), buildToolbar(), tree);
         refresh();
+    }
+
+    /**
+     * The type-to-filter search box. Typing rebuilds the tree with only the matching connections;
+     * Enter opens the selected (by default the best) match, Down jumps into the tree, and Escape
+     * clears the box.
+     */
+    private HBox buildSearchBox() {
+        search.getStyleClass().add("nl-field");
+        search.setPromptText("Search connections…");
+        search.setTooltip(new Tooltip("Filter by name, protocol, host or user — try “kafka”, "
+                + "“prod kafka”, “5432” or initials like “asb”"));
+        HBox.setHgrow(search, Priority.ALWAYS);
+        search.textProperty().addListener((o, ov, nv) -> refresh());
+        search.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case ESCAPE -> { if (!search.getText().isEmpty()) { search.clear(); e.consume(); } }
+                case ENTER -> {
+                    ConnectionProfile p = selectedProfile();
+                    if (p != null) { onOpen.accept(p); e.consume(); }
+                }
+                case DOWN -> { tree.requestFocus(); e.consume(); }
+                default -> { }
+            }
+        });
+
+        Button clear = new Button("✕");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setTooltip(new Tooltip("Clear the search"));
+        clear.setOnAction(e -> { search.clear(); search.requestFocus(); });
+        clear.visibleProperty().bind(search.textProperty().isNotEmpty());
+        clear.managedProperty().bind(clear.visibleProperty());
+
+        HBox box = new HBox(4, search, clear);
+        box.setPadding(new Insets(6, 4, 0, 4));
+        return box;
+    }
+
+    /** Everything about a profile the search box looks at. */
+    private static String haystack(ConnectionProfile p) {
+        return p.name + " " + p.protocol + " " + p.target + " " + p.username;
+    }
+
+    /** The profiles from {@code all} that match the current search, best match first. */
+    private List<ConnectionProfile> filtered(List<ConnectionProfile> all) {
+        String query = search.getText();
+        List<ConnectionProfile> out = new ArrayList<>();
+        for (ConnectionProfile p : all) if (QuickFilter.matches(query, haystack(p))) out.add(p);
+        if (query != null && !query.isBlank()) {
+            out.sort(Comparator.comparingInt((ConnectionProfile p) -> -QuickFilter.score(query, haystack(p)))
+                    .thenComparing(p -> p.name == null ? "" : p.name));
+        }
+        return out;
     }
 
     /** A small Export/Import bar for sharing the Saved connections as an encrypted bundle. */
@@ -135,6 +197,12 @@ public final class ConnectionsPanel extends VBox {
         a.showAndWait();
     }
 
+    /** Puts the caret in the search box (the Ctrl+K shortcut), selecting whatever is already there. */
+    public void focusSearch() {
+        search.requestFocus();
+        search.selectAll();
+    }
+
     public void setOnOpen(Consumer<ConnectionProfile> onOpen) {
         this.onOpen = onOpen == null ? p -> {} : onOpen;
     }
@@ -145,27 +213,56 @@ public final class ConnectionsPanel extends VBox {
         refresh();
     }
 
-    /** Rebuilds the tree from the store + sample catalog (hidden samples excluded). */
+    /**
+     * Rebuilds the tree from the store + sample catalog (hidden samples excluded), narrowed to the
+     * current search. While searching, both groups are expanded, each header carries its match count
+     * and the first match is selected so Enter opens it.
+     */
     public void refresh() {
+        String query = search.getText();
+        boolean searching = query != null && !query.isBlank();
+
+        List<ConnectionProfile> savedMatches = filtered(store.saved());
+        List<ConnectionProfile> visibleSamples = new ArrayList<>();
+        for (ConnectionProfile p : SampleCatalog.all()) {
+            if (!store.isSampleHidden(p.id)) visibleSamples.add(p);
+        }
+        List<ConnectionProfile> sampleMatches = filtered(visibleSamples);
+
         TreeItem<Object> root = new TreeItem<>("root");
 
-        TreeItem<Object> saved = group("Saved", true);
-        for (ConnectionProfile p : store.saved()) saved.getChildren().add(new TreeItem<>(p));
-        if (saved.getChildren().isEmpty()) {
-            saved.getChildren().add(new TreeItem<>(new Hint("No saved connections yet")));
+        TreeItem<Object> saved = group("Saved" + (searching ? "  (" + savedMatches.size() + ")" : ""), true);
+        for (ConnectionProfile p : savedMatches) saved.getChildren().add(new TreeItem<>(p));
+        if (savedMatches.isEmpty()) {
+            saved.getChildren().add(new TreeItem<>(new Hint(searching
+                    ? "No saved connection matches" : "No saved connections yet")));
         }
 
         // Samples ship collapsed so the (long) public catalogue doesn't flood the sidebar on open;
-        // the user expands it on demand. Saved connections stay expanded — that's their workspace.
-        TreeItem<Object> samples = group("Samples (public)", false);
-        int sampleCount = 0;
-        for (ConnectionProfile p : SampleCatalog.all()) {
-            if (!store.isSampleHidden(p.id)) { samples.getChildren().add(new TreeItem<>(p)); sampleCount++; }
+        // the user expands it on demand. A search expands it, since a match in there is the point of
+        // having typed. Saved connections stay expanded — that's their workspace.
+        TreeItem<Object> samples = group("Samples (public)  (" + sampleMatches.size() + ")", searching);
+        for (ConnectionProfile p : sampleMatches) samples.getChildren().add(new TreeItem<>(p));
+        if (searching && sampleMatches.isEmpty()) {
+            samples.getChildren().add(new TreeItem<>(new Hint("No sample matches")));
         }
-        samples.setValue(new Group("Samples (public)  (" + sampleCount + ")"));
 
         root.getChildren().addAll(saved, samples);
         tree.setRoot(root);
+
+        if (searching) selectFirstProfile(root);
+    }
+
+    /** Selects the first profile leaf in the rebuilt tree, so Enter in the search box opens it. */
+    private void selectFirstProfile(TreeItem<Object> root) {
+        for (TreeItem<Object> group : root.getChildren()) {
+            for (TreeItem<Object> leaf : group.getChildren()) {
+                if (leaf.getValue() instanceof ConnectionProfile) {
+                    tree.getSelectionModel().select(leaf);
+                    return;
+                }
+            }
+        }
     }
 
     private TreeItem<Object> group(String name, boolean expanded) {

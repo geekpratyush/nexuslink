@@ -9,6 +9,7 @@ import com.nexuslink.core.history.HistoryEntry;
 import com.nexuslink.core.history.HistoryStore;
 import com.nexuslink.ui.agent.AgentView;
 import com.nexuslink.ui.azure.AzureBlobView;
+import com.nexuslink.core.search.QuickFilter;
 import com.nexuslink.ui.connection.ConnectionsPanel;
 import com.nexuslink.ui.env.EnvironmentManagerView;
 import com.nexuslink.ui.ftp.FtpView;
@@ -78,6 +79,8 @@ public final class MainWindow {
     private final EnvironmentService environmentService = new EnvironmentService();
     private final com.nexuslink.core.metrics.MetricsCollector metricsCollector = new com.nexuslink.core.metrics.MetricsCollector();
     private ConnectionsPanel connectionsPanel;
+    private final TextField protocolFilter = new TextField();
+    private final Label protocolFilterCount = new Label();
 
     {
         AppContext.get().registerInstance(EnvironmentService.class, environmentService);
@@ -107,8 +110,10 @@ public final class MainWindow {
                 this::toggleLog);
         scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+Shift+T"),
                 this::toggleTheme);
+        scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+K"),
+                () -> connectionsPanel.focusSearch());
 
-        log("NexusLink started. Press F1 for help, Ctrl+T for a new REST tab.");
+        log("NexusLink started. Press F1 for help, Ctrl+T for a new REST tab, Ctrl+K to search connections.");
 
         // First-run onboarding — shows once, then never again (unless re-opened from Help).
         javafx.application.Platform.runLater(
@@ -249,7 +254,7 @@ public final class MainWindow {
         buttonScroll.setMaxHeight(320);
         // Buttons are populated (and filtered by enabled protocols) in rebuildProtocols()
 
-        VBox sidebar = new VBox(title, connectionsPanel, buttonScroll);
+        VBox sidebar = new VBox(title, connectionsPanel, buildProtocolFilter(), buttonScroll);
         sidebar.getStyleClass().add("sidebar");
         sidebar.setMinWidth(180);
         return sidebar;
@@ -822,7 +827,47 @@ public final class MainWindow {
                 new ProtocolDef("agent", "AI Agent (MCP tools)", "New AI Agent", "ai", this::openAgentTab));
     }
 
-    /** Rebuilds the File menu + sidebar buttons from the enabled protocols. */
+    /** Everything the protocol filter box looks at for a connection type. */
+    private static String protocolHaystack(ProtocolDef d) {
+        return ProtocolSearch.haystack(d.id(), d.label());
+    }
+
+    /**
+     * The type-to-filter box above the connection-type buttons. Typing narrows the list to matching
+     * types — by label, id, or the everyday word for the thing ("postgres", "queue", "bucket") —
+     * Enter opens the top match, and Escape clears the box.
+     */
+    private HBox buildProtocolFilter() {
+        protocolFilter.getStyleClass().add("nl-field");
+        protocolFilter.setPromptText("Filter connection types…");
+        protocolFilter.setTooltip(new Tooltip("Filter the list below — try “queue”, “postgres”, "
+                + "“bucket” or “ai”"));
+        HBox.setHgrow(protocolFilter, Priority.ALWAYS);
+        protocolFilter.textProperty().addListener((o, ov, nv) -> rebuildProtocols());
+        protocolFilter.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case ESCAPE -> { if (!protocolFilter.getText().isEmpty()) { protocolFilter.clear(); e.consume(); } }
+                case ENTER -> {
+                    if (!protocolButtons.getChildren().isEmpty()
+                            && protocolButtons.getChildren().get(0) instanceof Button first) {
+                        first.fire();
+                        e.consume();
+                    }
+                }
+                default -> { }
+            }
+        });
+        protocolFilterCount.getStyleClass().add("muted");
+        HBox box = new HBox(6, protocolFilter, protocolFilterCount);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(6, 8, 0, 8));
+        return box;
+    }
+
+    /**
+     * Rebuilds the File menu + sidebar buttons from the enabled protocols. The menu always lists
+     * every enabled type; the sidebar buttons additionally honour the filter box, best match first.
+     */
     private void rebuildProtocols() {
         java.util.List<ProtocolDef> enabled = protocolDefs().stream()
                 .filter(d -> protocolPrefs.isEnabled(d.id())).toList();
@@ -835,10 +880,26 @@ public final class MainWindow {
         }
         fileMenu.getItems().addAll(new SeparatorMenuItem(), quitItem);
 
-        protocolButtons.getChildren().clear();
+        String query = protocolFilter.getText();
+        boolean filtering = query != null && !query.isBlank();
+        java.util.List<ProtocolDef> shown = new java.util.ArrayList<>();
         for (ProtocolDef d : enabled) {
+            if (QuickFilter.matches(query, protocolHaystack(d))) shown.add(d);
+        }
+        if (filtering) {
+            shown.sort(java.util.Comparator.comparingInt(d -> -QuickFilter.score(query, protocolHaystack(d))));
+        }
+
+        protocolButtons.getChildren().clear();
+        for (ProtocolDef d : shown) {
             protocolButtons.getChildren().add(sidebarButton(d.label(), d.icon(), d.opener()));
         }
+        if (shown.isEmpty()) {
+            Label none = new Label("No connection type matches");
+            none.getStyleClass().add("muted");
+            protocolButtons.getChildren().add(none);
+        }
+        protocolFilterCount.setText(filtering ? shown.size() + " of " + enabled.size() : "");
     }
 
     /** Lets the user choose which connection types are shown (persisted). */
