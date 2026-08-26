@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><style>
+:root {
+  --ink:#070B19; --fg:#F8FAFC; --muted:#93A6C4; --blue:#3B82F6; --red:#E31837; --line:#1E293B;
+  --sans:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:1920px; height:1080px; overflow:hidden; }
+body {
+  background:var(--ink); color:var(--fg); font-family:var(--sans);
+  display:flex; align-items:center; justify-content:center;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(0,71,171,.38), transparent 46%),
+    radial-gradient(circle at 84% 78%, rgba(227,24,55,.18), transparent 44%);
+}
+.grid {
+  position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.075) 1px, transparent 1px);
+  background-size:80px 80px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 45%, #000 30%, transparent 74%);
+}
+.stage { position:relative; z-index:1; width:1520px; }
+
+/* Every animated element uses this: paused, positioned by --t, holding its start and end states. */
+.a { animation-play-state:paused; animation-fill-mode:both; animation-timing-function:cubic-bezier(.22,.9,.28,1); }
+
+@keyframes rise   { from { opacity:0; transform:translateY(34px); } to { opacity:1; transform:none; } }
+@keyframes pop    { from { opacity:0; transform:scale(.82); }      to { opacity:1; transform:none; } }
+@keyframes fadein { from { opacity:0; }                            to { opacity:1; } }
+@keyframes draw   { from { stroke-dashoffset:760; }                to { stroke-dashoffset:0; } }
+@keyframes track  { from { opacity:0; letter-spacing:.9em; }       to { opacity:1; letter-spacing:.19em; } }
+@keyframes wipe   { from { clip-path:inset(0 100% 0 0); }          to { clip-path:inset(0 0 0 0); } }
+
+.eyebrow { font-size:22px; letter-spacing:.42em; text-transform:uppercase; color:var(--blue);
+           font-weight:600; margin-bottom:26px; }
+h2 { font-size:82px; line-height:1.06; letter-spacing:-.035em; font-weight:600; }
+.sub { font-size:34px; color:var(--muted); margin-top:30px; line-height:1.5; max-width:1180px; }
+.cols { display:flex; gap:26px; margin-top:60px; }
+.card { flex:1; border:1px solid var(--line); border-radius:20px; padding:34px 32px;
+        background:rgba(255,255,255,.032); }
+.card .k { font-size:52px; font-weight:600; letter-spacing:-.03em; color:var(--red); }
+.card .t { font-size:26px; color:var(--muted); margin-top:12px; line-height:1.4; }
+</style><body style="--t:2.0s">
+<div class="grid"></div>
+<div class="stage">
+  <div class="eyebrow a" style="animation-name:rise;animation-duration:0.7s;animation-delay:calc(0s - var(--t));">The working day today</div>
+  <h2 class="a" style="animation-name:rise;animation-duration:0.8s;animation-delay:calc(0.2s - var(--t));">Six tools to test one<br>transaction.</h2>
+  <div class="sub a" style="animation-name:fadein;animation-duration:0.9s;animation-delay:calc(0.9s - var(--t));">A payment leaves a REST endpoint, lands on a
+  Kafka topic, updates a row in Oracle, drops a document in Mongo, triggers an IBM MQ message, and
+  archives to S3. Six products. Six logins. One engineer, all day.</div>
+  <div class="cols">
+    <div class="card a" style="animation-name:rise;animation-duration:0.7s;animation-delay:calc(1.9s - var(--t));"><div class="k">6+</div><div class="t">tools open to follow one flow</div></div>
+    <div class="card a" style="animation-name:rise;animation-duration:0.7s;animation-delay:calc(2.2s - var(--t));"><div class="k">4&times;</div><div class="t">credentials re-entered per environment</div></div>
+    <div class="card a" style="animation-name:rise;animation-duration:0.7s;animation-delay:calc(2.5s - var(--t));"><div class="k">0</div><div class="t">shared history across any of them</div></div>
+  </div>
+</div></body>

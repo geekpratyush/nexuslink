@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8"><style>
+:root {
+  --ink:#070B19; --fg:#F8FAFC; --muted:#93A6C4; --blue:#3B82F6; --red:#E31837; --line:#1E293B;
+  --sans:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:1920px; height:1080px; overflow:hidden; }
+body {
+  background:var(--ink); color:var(--fg); font-family:var(--sans);
+  display:flex; align-items:center; justify-content:center;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(0,71,171,.38), transparent 46%),
+    radial-gradient(circle at 84% 78%, rgba(227,24,55,.18), transparent 44%);
+}
+.grid {
+  position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.075) 1px, transparent 1px);
+  background-size:80px 80px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 45%, #000 30%, transparent 74%);
+}
+.stage { position:relative; z-index:1; width:1520px; }
+
+/* Every animated element uses this: paused, positioned by --t, holding its start and end states. */
+.a { animation-play-state:paused; animation-fill-mode:both; animation-timing-function:cubic-bezier(.22,.9,.28,1); }
+
+@keyframes rise   { from { opacity:0; transform:translateY(34px); } to { opacity:1; transform:none; } }
+@keyframes pop    { from { opacity:0; transform:scale(.82); }      to { opacity:1; transform:none; } }
+@keyframes fadein { from { opacity:0; }                            to { opacity:1; } }
+@keyframes draw   { from { stroke-dashoffset:760; }                to { stroke-dashoffset:0; } }
+@keyframes track  { from { opacity:0; letter-spacing:.9em; }       to { opacity:1; letter-spacing:.19em; } }
+@keyframes wipe   { from { clip-path:inset(0 100% 0 0); }          to { clip-path:inset(0 0 0 0); } }
+
+.eyebrow { font-size:22px; letter-spacing:.42em; text-transform:uppercase; color:var(--blue);
+           font-weight:600; margin-bottom:26px; }
+h2 { font-size:82px; line-height:1.06; letter-spacing:-.035em; font-weight:600; }
+.wall { display:flex; flex-wrap:wrap; gap:16px; margin-top:56px; }
+.chip { border:1px solid var(--line); border-radius:14px; padding:16px 26px; font-size:30px;
+        background:rgba(255,255,255,.03); }
+.chip.hot { border-color:rgba(59,130,246,.65); background:rgba(59,130,246,.14); font-weight:600; }
+</style><body style="--t:2.0s">
+<div class="grid"></div>
+<div class="stage">
+  <div class="eyebrow a" style="animation-name:rise;animation-duration:0.7s;animation-delay:calc(0s - var(--t));">The alternative</div>
+  <h2 class="a" style="animation-name:rise;animation-duration:0.8s;animation-delay:calc(0.25s - var(--t));">One console.<br>Twenty-six protocols.</h2>
+  <div class="wall"><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.35s - var(--t));">REST</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.435s - var(--t));">GraphQL</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.52s - var(--t));">gRPC</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.605s - var(--t));">WebSocket</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.69s - var(--t));">SSE</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.775s - var(--t));">SQL / JDBC</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.86s - var(--t));">MongoDB</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(0.9450000000000001s - var(--t));">Redis</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.03s - var(--t));">Kafka</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.115s - var(--t));">MQTT</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.2000000000000002s - var(--t));">RabbitMQ</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.2850000000000001s - var(--t));">JMS</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.37s - var(--t));">IBM MQ</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.455s - var(--t));">Solace</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.54s - var(--t));">SQS / SNS</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.625s - var(--t));">Pub/Sub</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.71s - var(--t));">Service Bus</div><div class="chip hot a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.795s - var(--t));">S3</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.88s - var(--t));">Azure Blob</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(1.9650000000000003s - var(--t));">GCS</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.0500000000000003s - var(--t));">SFTP</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.1350000000000002s - var(--t));">FTP</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.22s - var(--t));">LDAP</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.305s - var(--t));">SNMP</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.39s - var(--t));">SSH</div><div class="chip a" style="animation-name:pop;animation-duration:0.5s;animation-delay:calc(2.475s - var(--t));">MCP</div></div>
+</div></body>

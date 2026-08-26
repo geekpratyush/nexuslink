@@ -105,6 +105,33 @@ h2 { font-size:82px; line-height:1.06; letter-spacing:-.035em; font-weight:600; 
   font-size:22px; letter-spacing:.28em; text-transform:uppercase; color:#5C6B85; z-index:1; }
 """
 
+# ---- the Citi logo -----------------------------------------------------------------------------
+# Drop the approved asset at video-assets/src/citi-logo.svg (or .png) and every slide, overlay and
+# animated clip picks it up on the next render. Until then a dashed placeholder slot is drawn, so
+# nothing here ever ships an approximated trademark.
+CITI = None
+for _ext in ("svg", "png"):
+    _p = ROOT / "video-assets" / "src" / f"citi-logo.{_ext}"
+    if _p.exists():
+        CITI = _p
+        break
+
+
+def citi_slot(width, height, label="Citi logo", note=None):
+    """The official logo if it has been supplied, otherwise a placeholder of the same footprint."""
+    if CITI is None:
+        text = label if note is None else f"{label}<br>{note}"
+        return (f'<div class="slot" style="width:{width}px;height:{height}px">{text}</div>')
+    if CITI.suffix == ".svg":
+        inner = CITI.read_text()
+    else:
+        import base64
+        data = base64.b64encode(CITI.read_bytes()).decode()
+        inner = f'<img src="data:image/png;base64,{data}" style="max-width:100%;max-height:100%">'
+    return (f'<div style="width:{width}px;height:{height}px;display:flex;align-items:center;'
+            f'justify-content:center">{inner}</div>')
+
+
 MARK_DIV = f'<div class="mark">{MARK}</div>'
 
 
@@ -133,7 +160,7 @@ SLIDES_HTML = {
   <div style="display:flex;justify-content:center;align-items:center;gap:56px;margin-bottom:56px">
     <div class="icon" style="width:130px;height:130px">{MARK}</div>
     <div class="divider" style="height:130px"></div>
-    <div class="slot" style="width:300px;height:130px">Citi logo<br>drop the approved asset here</div>
+    {citi_slot(300, 130, note="drop the approved asset here")}
   </div>
   <h2>Built at Citi. Built for Citi.</h2>
   <div class="sub" style="margin:30px auto 0">Not a licence to renew, not a vendor to review &mdash;
@@ -146,7 +173,7 @@ SLIDES_HTML = {
   <div style="display:flex;justify-content:center;align-items:center;gap:48px;margin-bottom:52px">
     <div class="icon" style="width:104px;height:104px">{MARK}</div>
     <div class="divider" style="height:104px"></div>
-    <div class="slot" style="width:250px;height:104px">Citi logo</div>
+    {citi_slot(250, 104)}
   </div>
   <div class="eyebrow" style="margin-bottom:18px">Developed as part of</div>
   <h2 style="font-size:64px">VPs &amp; SVPs who Code</h2>
@@ -288,7 +315,7 @@ OVERLAY_HTML = {
       Built at Citi &middot; Built for Citi</div>
   </div>
   <div class="divider" style="height:120px"></div>
-  <div class="slot" style="width:240px;height:120px;flex:none">Citi logo</div>
+  {citi_slot(240, 120)}
 </div>""", cls="transparent"),
 
 "lower-third-blank": page("""

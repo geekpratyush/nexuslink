@@ -1,0 +1,59 @@
+<!doctype html><meta charset="utf-8"><style>
+:root {
+  --ink:#070B19; --fg:#F8FAFC; --muted:#93A6C4; --blue:#3B82F6; --red:#E31837; --line:#1E293B;
+  --sans:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',Arial,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html,body { width:1920px; height:1080px; overflow:hidden; }
+body {
+  background:var(--ink); color:var(--fg); font-family:var(--sans);
+  display:flex; align-items:center; justify-content:center;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(0,71,171,.38), transparent 46%),
+    radial-gradient(circle at 84% 78%, rgba(227,24,55,.18), transparent 44%);
+}
+.grid {
+  position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(148,163,184,.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.075) 1px, transparent 1px);
+  background-size:80px 80px;
+  -webkit-mask-image:radial-gradient(ellipse at 50% 45%, #000 30%, transparent 74%);
+}
+.stage { position:relative; z-index:1; width:1520px; }
+
+/* Every animated element uses this: paused, positioned by --t, holding its start and end states. */
+.a { animation-play-state:paused; animation-fill-mode:both; animation-timing-function:cubic-bezier(.22,.9,.28,1); }
+
+@keyframes rise   { from { opacity:0; transform:translateY(34px); } to { opacity:1; transform:none; } }
+@keyframes pop    { from { opacity:0; transform:scale(.82); }      to { opacity:1; transform:none; } }
+@keyframes fadein { from { opacity:0; }                            to { opacity:1; } }
+@keyframes draw   { from { stroke-dashoffset:760; }                to { stroke-dashoffset:0; } }
+@keyframes track  { from { opacity:0; letter-spacing:.9em; }       to { opacity:1; letter-spacing:.19em; } }
+@keyframes wipe   { from { clip-path:inset(0 100% 0 0); }          to { clip-path:inset(0 0 0 0); } }
+
+h1 { font-size:118px; line-height:1.02; letter-spacing:-.045em; font-weight:600; }
+.tag { font-size:26px; text-transform:uppercase; color:var(--muted); margin-top:26px; font-weight:500; }
+</style><body style="--t:2.0s">
+<div class="grid"></div>
+<div class="stage" style="text-align:center">
+  <div style="display:flex;justify-content:center;margin-bottom:44px">
+<svg viewBox="0 0 512 512" width="150" height="150">
+  <defs><linearGradient id="b" gradientUnits="userSpaceOnUse" x1="160" y1="250" x2="352" y2="396">
+    <stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#0047AB"/></linearGradient></defs>
+  <rect width="512" height="512" rx="116" fill="#0A1128"/>
+  <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#1E293B" stroke-width="3"/>
+  <path class="a" d="M 116 196 C 178 100 334 100 396 196" fill="none" stroke="#E31837"
+        stroke-width="36" stroke-linecap="round"
+        style="stroke-dasharray:400;animation-name:draw;animation-duration:0.9s;animation-delay:calc(0.0s - var(--t));"/>
+  <g fill="none" stroke="url(#b)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path class="a" d="M 158 400 L 158 246" style="stroke-dasharray:200;animation-name:draw;animation-duration:0.45s;animation-delay:calc(0.45s - var(--t));"/>
+    <path class="a" d="M 158 246 L 354 400" style="stroke-dasharray:280;animation-name:draw;animation-duration:0.5s;animation-delay:calc(0.73s - var(--t));"/>
+    <path class="a" d="M 354 400 L 354 246" style="stroke-dasharray:200;animation-name:draw;animation-duration:0.45s;animation-delay:calc(1.07s - var(--t));"/>
+  </g>
+  <circle class="a" cx="158" cy="246" r="23" fill="#93C5FD" style="animation-name:pop;animation-duration:0.35s;animation-delay:calc(1.15s - var(--t));"/>
+  <circle class="a" cx="354" cy="400" r="23" fill="#93C5FD" style="animation-name:pop;animation-duration:0.35s;animation-delay:calc(1.27s - var(--t));"/>
+</svg></div>
+  <h1 class="a" style="animation-name:rise;animation-duration:0.9s;animation-delay:calc(1.5s - var(--t));">Nexus<span style="color:var(--red)">Link</span></h1>
+  <div class="tag a" style="animation-name:track;animation-duration:1.2s;animation-delay:calc(2.1s - var(--t));">One Console &middot; Every Protocol &middot; Zero Context Switching</div>
+</div></body>

@@ -13,7 +13,7 @@ scene. This page is the inventory and the assembly notes.
 
 | Folder | What it is | Size |
 |---|---|---|
-| `motion/` | **Six finished MP4 clips** — drop them on the timeline as they are | 1920×1080, 30fps |
+| `motion/` | **Seven finished MP4 clips**, six of them genuinely animated | 1920×1080, 30fps |
 | `slides/` | Eleven designed 1920×1080 title cards — the spine of the video | full-frame |
 | `screenshots/` | Twenty-one real screens of the running application, dark theme, 1920×1012 | full-frame |
 | `overlays/` | Transparent PNGs to lay **over** footage or screenshots | full-frame, alpha |
@@ -23,14 +23,28 @@ scene. This page is the inventory and the assembly notes.
 
 | File | Length | What it is |
 |---|---|---|
-| `01-logo-reveal.mp4` | 6s | The logo and tagline, pushed in slowly, fading up from black |
-| `02-built-at-citi.mp4` | 6s | "Built at Citi. Built for Citi." — the sign-off |
-| `03-protocol-wall.mp4` | 6s | The 26-protocol wall |
+| `01-logo-reveal.mp4` | 5.4s | **Animated.** The mark draws itself — the red canopy strokes on, the N builds run by run, the nodes pop — then the wordmark rises and the tagline tracks in from wide letter-spacing. |
+| `02-built-at-citi.mp4` | 5.4s | **Animated.** The lockup assembles, then "Built at Citi. Built for Citi." rises in. |
+| `03-protocol-wall.mp4` | 6s | **Animated.** All 26 protocol chips build in, one every 85 ms. |
 | `04-product-montage.mp4` | 28s | **The centrepiece.** Eight real screens — connected, with live data — each pushed in and cross-dissolved. Ready to use as one clip. |
-| `05-credits.mp4` | 8s | VPs & SVPs who Code · Pratyush Ranjan Mishra |
-| `06-request-response.mp4` | 4.6s | A request in flight dissolving into the 200 OK and its payload — two real captures from one run |
+| `05-credits.mp4` | 7s | **Animated.** The lockup fades up, then the program, the name and the tagline, each on its own beat. |
+| `06-request-response.mp4` | 4.6s | A request in flight dissolving into the 200 OK and its payload — two real captures from one run. |
+| `07-problem.mp4` | 6s | **Animated.** The headline and body rise in, then the three red stat cards land one after another. |
 
-Rebuild them any time with `./video-assets/src/make_motion.sh` (needs `ffmpeg`).
+Rebuild them with:
+
+```bash
+python3 video-assets/src/make_animation.py     # the six animated scenes
+./video-assets/src/make_motion.sh              # the montage and the request/response clip
+```
+
+**How the animation works**, in case you want to change it: each scene is ordinary CSS, written
+*paused*, with every element's `animation-delay` driven by one variable, `--t`. Setting `--t: 1.4s`
+renders the exact state the animation would be in 1.4 seconds in. The renderer steps `--t` frame by
+frame, screenshots each one with headless Chrome, and hands the frames to ffmpeg. No screen capture,
+no video editor, and the same `--t` always produces the same pixel — so a scene can be tweaked and
+re-rendered identically. Scene definitions are in `src/make_animation.py`; each one also leaves a
+readable HTML snapshot in `src/anim/`.
 
 ### Slides
 
@@ -93,20 +107,30 @@ no history, nothing from anyone's machine.
 
 ## The Citi logo
 
-Three assets carry a **placeholder slot** for the Citi logo, drawn as a dashed box at the right size
-and position: `slides/00-citi.png`, `slides/10-credits.png` and `overlays/cobrand-lockup.png`.
+**Put the approved file here and everything picks it up:**
 
-They are deliberately empty. Reproducing a company's trademark from memory gets the proportions and
-the colour wrong, and co-branding is usually governed by brand rules anyway. Take the approved asset
-from Citi's brand portal and either:
+```
+video-assets/src/citi-logo.svg      (or citi-logo.png)
+```
 
-- **In Clipchamp** — drop the logo image on a track above the slide, positioned over the dashed box,
-  and it will cover it; or
-- **In the source** — put the file in `video-assets/src/`, replace the `<div class="slot">…</div>` in
-  `src/make_slides.py` with an `<img>` pointing at it, and re-run the renderer. Cleaner, because the
-  slot disappears rather than being covered.
+Then re-render:
 
-Check the placement against whatever internal branding guidance applies before you present.
+```bash
+python3 video-assets/src/make_slides.py       # the two Citi slides + the co-brand overlay
+python3 video-assets/src/make_animation.py citi credits    # the two animated clips
+```
+
+The logo appears in all five places at the right size, and the dashed placeholder disappears. No
+editing in Clipchamp, no positioning by hand.
+
+Until that file exists, those five assets draw a dashed slot of exactly the right footprint:
+`slides/00-citi.png`, `slides/10-credits.png`, `overlays/cobrand-lockup.png`, and the
+`02-built-at-citi` and `05-credits` clips.
+
+**Why it is not already filled in.** Reproducing a company's trademark from memory gets the mark,
+the proportions and the red subtly wrong, and that is exactly what a brand-conscious audience
+notices. Co-branding is usually governed by brand rules too. Take the real asset from Citi's brand
+portal — an SVG is best — and check the placement against whatever internal guidance applies.
 
 ## The office footage
 
