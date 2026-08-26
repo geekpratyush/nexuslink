@@ -123,7 +123,27 @@ python3 video-assets/src/make_animation.py citi credits    # the two animated cl
 The logo appears in all five places at the right size, and the dashed placeholder disappears. No
 editing in Clipchamp, no positioning by hand.
 
-Until that file exists, those five assets draw a dashed slot of exactly the right footprint:
+### Or drop it in with Clipchamp instead
+
+Clipchamp can do it too — put the logo on a track **above** the clip and it covers the dashed box.
+It is more fiddly than re-rendering, but it needs no tooling. The boxes, measured on the 1920×1080
+frame:
+
+| Asset | Box (px) | Centre | Size | Placeholder appears |
+|---|---|---|---|---|
+| `02-built-at-citi.mp4`, `slides/00-citi.png` | x 932, y 338, 300×130 | 56.4% across, 37.3% down | 15.6% × 12.0% | 1.3 s in (solid by 1.9 s) |
+| `05-credits.mp4`, `slides/10-credits.png` | x 936, y 299, 250×104 | 55.3% across, 32.5% down | 13.0% × 9.6% | 1.2 s in (solid by 1.8 s) |
+| `overlays/cobrand-lockup.png` | x 1198, y 480, 188×120 | 67.3% across, 50.0% down | 9.8% × 11.1% | static |
+
+For the two MP4s: add the logo image on the track above, drag its left edge to about **1.3 seconds**
+into the clip so it arrives with the placeholder rather than before it, then position and scale it to
+the box. Give it a 0.3 s fade-in so it matches the way the slot fades up. Scale to fit *inside* the
+box — the logo should not touch its edges.
+
+Re-rendering is still the better route where you can: the placeholder disappears rather than being
+covered, so there is no risk of a dashed edge peeking out at the wrong scale.
+
+Until the file exists, those five assets draw a dashed slot of exactly the right footprint:
 `slides/00-citi.png`, `slides/10-credits.png`, `overlays/cobrand-lockup.png`, and the
 `02-built-at-citi` and `05-credits` clips.
 
