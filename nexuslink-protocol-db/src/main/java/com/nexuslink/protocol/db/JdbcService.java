@@ -23,6 +23,11 @@ public final class JdbcService implements AutoCloseable {
     // Pooled-session state: when connected via a HikariCP pool, the borrowed connection is held for
     // the session (preserving the single-connection model used by the SQL editor/explorer) and simply
     // returned to the pool on close(). The pool itself is owned by the caller — we never close it.
+    // Server output (DBMS_OUTPUT / RAISE NOTICE): buffered lines drained after each execution, and
+    // whether the user has switched the panel on for this connection.
+    private final List<String> serverOutput = new ArrayList<>();
+    private boolean serverOutputEnabled;
+
     private JdbcConnectionPool pool;
     private String poolKey;
 
@@ -162,6 +167,7 @@ public final class JdbcService implements AutoCloseable {
         if (!isConnected()) return QueryResult.error("Not connected", 0);
         try (Statement st = connection.createStatement()) {
             boolean hasResultSet = st.execute(sql);
+            collectServerOutput(st);
             if (hasResultSet) {
                 try (ResultSet rs = st.getResultSet()) {
                     return readResultSet(rs, ms(start));
@@ -195,7 +201,9 @@ public final class JdbcService implements AutoCloseable {
                 if (value == null) ps.setNull(i + 1, java.sql.Types.VARCHAR);
                 else ps.setString(i + 1, value);
             }
-            if (ps.execute()) {
+            boolean produced = ps.execute();
+            collectServerOutput(ps);
+            if (produced) {
                 try (ResultSet rs = ps.getResultSet()) {
                     return readResultSet(rs, ms(start));
                 }
@@ -204,6 +212,73 @@ public final class JdbcService implements AutoCloseable {
                     ps.getUpdateCount(), ms(start), false, null);
         } catch (SQLException e) {
             return QueryResult.error(e.getMessage(), ms(start));
+        }
+    }
+
+    /** How this connection surfaces printed output, decided from its URL. */
+    public ServerOutput serverOutputMode() { return ServerOutput.forUrl(url); }
+
+    /** Whether the server-output panel is switched on for this connection. */
+    public boolean isServerOutputEnabled() { return serverOutputEnabled; }
+
+    /**
+     * Turns the server-output panel on or off. On Oracle this also runs
+     * {@code DBMS_OUTPUT.ENABLE}/{@code DISABLE}, without which the server discards everything
+     * printed; elsewhere it just decides whether JDBC warnings are collected.
+     *
+     * @throws SQLException if the enable/disable block fails
+     */
+    public void setServerOutputEnabled(boolean enabled) throws SQLException {
+        ServerOutput mode = serverOutputMode();
+        if (mode.needsEnabling() && isConnected()) {
+            try (Statement st = connection.createStatement()) {
+                st.execute(enabled ? mode.enableSql() : mode.disableSql());
+            }
+        }
+        serverOutputEnabled = enabled;
+        if (!enabled) serverOutput.clear();
+    }
+
+    /**
+     * Takes the lines printed since the last drain and clears the buffer — the SQL client calls this
+     * after every execution to refresh the Server Output panel. Empty when output is switched off.
+     */
+    public List<String> drainServerOutput() {
+        if (!serverOutputEnabled) return List.of();
+        if (serverOutputMode() == ServerOutput.DBMS_OUTPUT) fetchDbmsOutput();
+        List<String> lines = List.copyOf(serverOutput);
+        serverOutput.clear();
+        return lines;
+    }
+
+    /** Buffers any warnings the statement raised (PostgreSQL notices arrive this way). */
+    private void collectServerOutput(Statement st) {
+        if (!serverOutputEnabled || serverOutputMode() != ServerOutput.WARNINGS) return;
+        try {
+            for (SQLWarning w = st.getWarnings(); w != null; w = w.getNextWarning()) {
+                serverOutput.add(w.getMessage());
+            }
+            st.clearWarnings();
+        } catch (SQLException ignored) {
+            // Output is a convenience; never let draining it break the query flow.
+        }
+    }
+
+    /** Pulls Oracle's buffered lines out one at a time until the server reports the buffer empty. */
+    private void fetchDbmsOutput() {
+        if (!isConnected()) return;
+        try (CallableStatement cs = connection.prepareCall(serverOutputMode().fetchLineSql())) {
+            cs.registerOutParameter(1, Types.VARCHAR);
+            cs.registerOutParameter(2, Types.INTEGER);
+            while (true) {
+                cs.execute();
+                if (cs.getInt(2) != 0) return;   // status != 0 → nothing left in the buffer
+                String line = cs.getString(1);
+                serverOutput.add(line == null ? "" : line);
+                if (serverOutput.size() > 10_000) return;   // guard against a runaway loop
+            }
+        } catch (SQLException ignored) {
+            // Same as above: a database that does not really speak DBMS_OUTPUT simply prints nothing.
         }
     }
 
@@ -267,6 +342,7 @@ public final class JdbcService implements AutoCloseable {
                 }
             }
             boolean hasResultSet = cs.execute();
+            collectServerOutput(cs);
             QueryResult rows = null;
             // The result set is read but deliberately left open until the OUT parameters have been
             // collected: some drivers (H2 among them) tie the callable's output access to it, and
@@ -532,6 +608,9 @@ public final class JdbcService implements AutoCloseable {
 
     @Override
     public void close() {
+        // Server output is per-connection: the buffer and Oracle's ENABLE do not survive a close.
+        serverOutput.clear();
+        serverOutputEnabled = false;
         if (connection != null) {
             // Discard any uncommitted manual transaction and restore auto-commit so a pooled
             // connection is handed back clean (a physical close would drop it anyway).

@@ -1124,7 +1124,14 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       UI: **Structure ▸ Run Procedure…** and **Run…** on a procedure/function in the schema tree open a
       parameter form (direction + type per row, value editable only where one is passed in, live call
       preview); rows land in the grid, OUT values in Messages. **10 spec tests + 6 end-to-end vs H2**
-- [ ] **P1** Server output panel (`DBMS_OUTPUT`) drained after each execution
+- [x] **P1** Server output panel (`DBMS_OUTPUT`) drained after each execution — pure `ServerOutput`
+      picks the mechanism from the JDBC URL (Oracle → `DBMS_OUTPUT`, everyone else → JDBC warnings,
+      which is how a PostgreSQL `RAISE NOTICE` arrives) and owns the enable/disable/fetch SQL.
+      `JdbcService` collects warnings off every statement and callable, runs `DBMS_OUTPUT.ENABLE` when
+      the panel is switched on, and `drainServerOutput()` pulls Oracle's buffer a line at a time until
+      the server says it's empty. UI: a **Server Output** tab with an enable toggle and Clear, drained
+      after every execution and after a procedure call; output is per-connection, so it resets on
+      connect and close. **8 tests**
 - [x] **P1** Export as INSERT statements / XML / HTML / delimited-with-options; export a whole table —
       `ResultGridExporter` gained `toInsertStatements` (dialect-agnostic, via `SqlInsertBuilder`, NULL for
       null cells), `toXml` (sanitised element names, `xsi:nil` for NULL), `toHtml` (standalone page, null

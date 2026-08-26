@@ -131,6 +131,11 @@ public final class SqlClientView extends BorderPane {
 
     // In-tab statement history: newest first, capped, each entry recallable into the editor.
     private static final int HISTORY_LIMIT = 200;
+    // Server output (Oracle DBMS_OUTPUT / PostgreSQL notices) drained after each execution.
+    private final TextArea serverOutputArea = new TextArea();
+    private final CheckBox serverOutputToggle = new CheckBox("Enable server output");
+    private final Label serverOutputStatus = new Label("Server output off");
+
     private final ObservableList<HistoryRow> tabHistory = FXCollections.observableArrayList();
     private final TableView<HistoryRow> historyGrid = new TableView<>(tabHistory);
 
@@ -673,7 +678,9 @@ public final class SqlClientView extends BorderPane {
         msgTab.setClosable(false);
         Tab historyTab = new Tab("History", buildHistoryPane());
         historyTab.setClosable(false);
-        resultTabs.getTabs().setAll(resultTab, msgTab, historyTab);
+        Tab outputTab = new Tab("Server Output", buildServerOutputPane());
+        outputTab.setClosable(false);
+        resultTabs.getTabs().setAll(resultTab, msgTab, outputTab, historyTab);
         resultTabs.getStyleClass().add("editor-tabs");
         VBox.setVgrow(resultTabs, Priority.ALWAYS);
 
@@ -982,6 +989,7 @@ public final class SqlClientView extends BorderPane {
             messagesArea.setText(msg.toString());
             selectTab(r.failed() || r.resultSet() == null ? "Messages" : "Result");
             logger.accept("SQL call " + spec.sql() + " → " + r.summary());
+            drainServerOutput();
             recordTabHistory(spec.sql(), r.failed() ? "✖ " + r.errorMessage() : r.summary());
         });
         task.setOnFailed(e -> {
@@ -1920,6 +1928,10 @@ public final class SqlClientView extends BorderPane {
             // A fresh connection is in auto-commit mode; reset the controls to match.
             autoCommitBox.setDisable(false);
             autoCommitBox.setSelected(true);
+            // Server output belongs to the connection that was just replaced, so it starts off.
+            serverOutputToggle.setSelected(false);
+            serverOutputStatus.setText("Server output off · " + service.serverOutputMode().label()
+                    + " on this database");
             updateTxnButtons();
             updateConnectionIndicator();
             refreshExplorer();
@@ -2240,6 +2252,7 @@ public final class SqlClientView extends BorderPane {
             if (o.display() != null && o.display().failed()) selectTab("Messages");
             recordQueryHistory(o.displayStmt(), o.display());
             recordTabHistory(o.displayStmt(), o.display());
+            drainServerOutput();
         });
         task.setOnFailed(e -> {
             resultStatus.getStyleClass().setAll("status-err");
@@ -2252,7 +2265,58 @@ public final class SqlClientView extends BorderPane {
         for (Tab t : resultTabs.getTabs()) if (text.equals(t.getText())) { resultTabs.getSelectionModel().select(t); return; }
     }
 
-    /** One executed statement in this tab's history: when it ran, the SQL, and how it went. */
+    /**
+     * The Server Output panel: everything the database printed — Oracle's {@code DBMS_OUTPUT}, a
+     * PostgreSQL {@code RAISE NOTICE}, or whatever else the driver reports as a warning. Oracle
+     * discards printed lines unless output is switched on first, so the toggle here does that on the
+     * connection; the buffer is then drained after every execution.
+     */
+    private Node buildServerOutputPane() {
+        serverOutputArea.setEditable(false);
+        serverOutputArea.getStyleClass().add("code-area");
+        serverOutputArea.setPromptText("Lines the database prints appear here once output is enabled");
+        VBox.setVgrow(serverOutputArea, Priority.ALWAYS);
+
+        serverOutputToggle.setOnAction(e -> {
+            if (!service.isConnected()) {
+                serverOutputToggle.setSelected(false);
+                statusLabel.setText("Connect to a database first");
+                return;
+            }
+            try {
+                service.setServerOutputEnabled(serverOutputToggle.isSelected());
+                serverOutputStatus.setText(serverOutputToggle.isSelected()
+                        ? "Collecting " + service.serverOutputMode().label()
+                        : "Server output off");
+            } catch (Exception ex) {
+                serverOutputToggle.setSelected(false);
+                serverOutputStatus.setText("Could not enable server output: " + ex.getMessage());
+            }
+        });
+
+        Button clear = new Button("Clear");
+        clear.getStyleClass().add("btn-secondary");
+        clear.setOnAction(e -> serverOutputArea.clear());
+
+        serverOutputStatus.getStyleClass().add("muted");
+        HBox tools = new HBox(8, serverOutputToggle, clear, serverOutputStatus);
+        tools.setAlignment(Pos.CENTER_LEFT);
+        VBox pane = new VBox(6, tools, serverOutputArea);
+        pane.setPadding(new Insets(6));
+        return pane;
+    }
+
+    /** Appends whatever the last execution printed, and points at the tab the first time it does. */
+    private void drainServerOutput() {
+        if (!service.isServerOutputEnabled()) return;
+        List<String> lines = service.drainServerOutput();
+        if (lines.isEmpty()) return;
+        boolean wasEmpty = serverOutputArea.getText().isEmpty();
+        serverOutputArea.appendText(String.join("\n", lines) + "\n");
+        if (wasEmpty) statusLabel.setText("The database printed output — see the Server Output tab");
+    }
+
+    /** One executed statement in this tab's history    /** One executed statement in this tab's history: when it ran, the SQL, and how it went. */
     private record HistoryRow(String time, String sql, String outcome) {}
 
     /**
