@@ -82,6 +82,45 @@ java ... com.nexuslink.app.NexusLinkLauncher -Dnexuslink.autosearch=oauth
 ```
 (Pass `-D…` before `-cp`/main class as a JVM arg.)
 
+## Console messages you can ignore
+
+### `Error in glXCreateNewContext, remote GLX is likely disabled`
+
+Not an application error, and nothing is broken. JavaFX tries its hardware-accelerated **ES2**
+pipeline first; on a display where GLX cannot hand out a hardware context (a remote X session, a
+VM without 3D, some Wayland/XWayland setups) that probe fails and JavaFX falls back to the software
+renderer. Verified with `-Dprism.verbose=true`:
+
+```
+Prism pipeline init order: es2 sw
+GLFactory ... could not be initialized. ES2Pipeline not available.
+*** Fallback to Prism SW pipeline
+Prism pipeline name = com.sun.prism.sw.SWPipeline
+```
+
+The message is printed by the native GL library before JavaFX runs any of its own code, so the app
+cannot catch or silence it. To skip the probe (and the message) entirely, ask for the software
+pipeline up front:
+
+```bash
+JAVA_TOOL_OPTIONS=-Dprism.order=sw mvn javafx:run
+```
+
+Only do that where the probe is known to fail — on a machine with working hardware acceleration it
+would give up the GPU for nothing.
+
+### `SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder"` — **fixed 2026-08-26**
+
+This meant the embedded drivers' own diagnostics were being **discarded**: every library NexusLink
+uses (Kafka, Mongo, Lettuce, the JDBC drivers, the AWS/Azure SDKs) logs through SLF4J, and with no
+binding on the classpath SLF4J installs a no-op logger and throws everything away. A poor trade for a
+connectivity tool — "SASL authentication failed", "leader not available", "connection reset by peer"
+are exactly the sentences that explain a failure.
+
+`nexuslink-app` now ships the `slf4j-jdk14` binding, and `LibraryLogBridge` forwards library
+**warnings and above** into the in-app **Activity log**, where the rest of the session's activity
+already is. Driver INFO chatter stays out (Kafka alone logs its whole producer config on every send).
+
 ## Known quirk (dev environments)
 When the process is launched **detached/backgrounded** from a non-interactive shell
 (e.g. `nohup … &` from a CI/agent shell), the GTK event loop can exit immediately and

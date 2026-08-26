@@ -28,6 +28,15 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
         </dependency>
+        <!-- An SLF4J binding, so the drivers' own diagnostics are not silently discarded. Routes to
+             java.util.logging, which LibraryLogBridge forwards into the app's Activity log. Without
+             this, SLF4J falls back to its no-op logger and prints the "StaticLoggerBinder" notice. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>1.7.36</version>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>

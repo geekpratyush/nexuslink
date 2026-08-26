@@ -113,6 +113,10 @@ public final class MainWindow {
         scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+K"),
                 () -> connectionsPanel.focusSearch());
 
+        // The embedded drivers log through SLF4J; forward their warnings into the Activity log so a
+        // "SASL authentication failed" or "leader not available" is visible where the user is looking.
+        com.nexuslink.ui.diagnostics.LibraryLogBridge.install(this::log);
+
         log("NexusLink started. Press F1 for help, Ctrl+T for a new REST tab, Ctrl+K to search connections.");
 
         // First-run onboarding — shows once, then never again (unless re-opened from Help).
