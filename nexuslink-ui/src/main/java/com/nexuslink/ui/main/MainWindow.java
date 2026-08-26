@@ -217,7 +217,7 @@ public final class MainWindow {
         help.getItems().addAll(helpIndex, shortcuts, new SeparatorMenuItem(), welcomeTour);
 
         menuBar.getMenus().addAll(file, buildEditMenu(), view,
-                new Menu("Connection", Icons.of("connection", 14)), tools, ai, help);
+                buildConnectionMenu(), tools, ai, help);
         HBox.setHgrow(menuBar, Priority.ALWAYS);
 
         TextField search = new TextField();
@@ -744,6 +744,28 @@ public final class MainWindow {
 
     private javafx.stage.Window owner() {
         return root.getScene() == null ? null : root.getScene().getWindow();
+    }
+
+    /**
+     * The Connection menu: the saved-connection actions that previously lived only in the sidebar's
+     * buttons and its right-click menu. (The menu existed but was empty — it opened to nothing.)
+     */
+    private Menu buildConnectionMenu() {
+        Menu connection = new Menu("Connection", Icons.of("connection", 14));
+        MenuItem search = new MenuItem("Search Connections");
+        search.setAccelerator(KeyCombination.keyCombination("Shortcut+K"));
+        search.setOnAction(e -> connectionsPanel.focusSearch());
+        MenuItem openSelected = new MenuItem("Open Selected Connection");
+        openSelected.setOnAction(e -> connectionsPanel.openSelected());
+        MenuItem importItem = new MenuItem("Import Connections…");
+        importItem.setOnAction(e -> connectionsPanel.importConnectionsBundle());
+        MenuItem exportItem = new MenuItem("Export Connections…");
+        exportItem.setOnAction(e -> connectionsPanel.exportConnectionsBundle());
+        MenuItem restoreSamples = new MenuItem("Restore Hidden Samples");
+        restoreSamples.setOnAction(e -> connectionsPanel.restoreHiddenSamples());
+        connection.getItems().addAll(search, openSelected, new SeparatorMenuItem(),
+                importItem, exportItem, new SeparatorMenuItem(), restoreSamples);
+        return connection;
     }
 
     // ---- Edit menu: clipboard actions routed to the focused text control ----

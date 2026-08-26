@@ -103,6 +103,10 @@ public final class UriRedactor {
 
         int schemeEnd = working.indexOf("://");
         String body = schemeEnd >= 0 ? working.substring(schemeEnd + 3) : working;
+        // A JDBC URL has already had its "jdbc:<engine>:" removed above, leaving "//host/db" — that
+        // "//" is punctuation from a scheme that is no longer there. Only the pair is dropped: a
+        // single slash is a real path (jdbc:sqlite:/var/data/app.db).
+        if (body.startsWith("//")) body = body.substring(2);
         int at = body.lastIndexOf('@');
         if (at >= 0) body = body.substring(at + 1);           // drop user:mask@
 

@@ -123,6 +123,24 @@ public final class ConnectionsPanel extends VBox {
         return bar;
     }
 
+    /** Opens the connection selected in the tree, as a double-click does. */
+    public void openSelected() {
+        ConnectionProfile selected = selectedProfile();
+        if (selected != null) onOpen.accept(selected);
+    }
+
+    /** Exports the saved connections — the same action as the panel's Export button. */
+    public void exportConnectionsBundle() { exportConnections(); }
+
+    /** Imports connections from an encrypted bundle — the panel's Import button. */
+    public void importConnectionsBundle() { importConnections(); }
+
+    /** Restores every hidden sample connection. */
+    public void restoreHiddenSamples() {
+        store.resetSamples();
+        refresh();
+    }
+
     private void exportConnections() {
         List<ConnectionProfile> profiles = store.saved();
         if (profiles.isEmpty()) { info("Nothing to export", "There are no saved connections yet."); return; }

@@ -67,3 +67,11 @@ Passwords and tokens are never stored in plain text. NexusLink uses AES-256-GCM 
 - Press **F1** on any field for context-sensitive help
 - Search in this dialog — results appear instantly as you type
 - Errors include a **"What does this mean?"** link to the relevant help section
+
+## Where to go next
+
+- **Menus & Toolbars** — every menu, submenu and per-tab toolbar, and what each item does.
+- **Installing & Updating** — if your organisation publishes NexusLink internally, how to install it
+  and refresh it without the source code.
+- The client topics: **REST Client**, **SQL / Database Clients**, **MongoDB Client**, **Kafka
+  Client**, **MQTT**, **RabbitMQ**, **gRPC**, **GraphQL**, **SFTP**, **LDAP**, **SNMP**.

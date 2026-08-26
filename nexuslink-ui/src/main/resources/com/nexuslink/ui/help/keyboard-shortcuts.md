@@ -1,77 +1,77 @@
 # Keyboard Shortcuts
 
-All shortcuts are customizable via **Edit → Preferences → Keyboard Shortcuts**.
+These are the shortcuts NexusLink actually binds today. **Ctrl** is **Cmd** on macOS.
 
 ## Global
 
 | Action | Shortcut |
 |--------|----------|
-| Open Help | F1 |
-| Command Palette | Ctrl+K |
-| Global Search | Ctrl+Shift+F |
-| New Connection Tab | Ctrl+T |
-| Close Tab | Ctrl+W |
-| Next Tab | Ctrl+Tab |
-| Previous Tab | Ctrl+Shift+Tab |
-| Toggle Dark/Light Theme | Ctrl+Shift+T |
-| Toggle Log Panel | Ctrl+` |
-| Open Certificate Manager | Ctrl+Shift+C |
-| Open Environment Editor | Ctrl+Shift+E |
-| Open Credential Vault | Ctrl+Shift+V |
-| Preferences | Ctrl+, |
-| Quit | Ctrl+Q |
+| Open Help | **F1** |
+| Search saved connections (focus the sidebar box) | **Ctrl+K** |
+| New REST tab | **Ctrl+T** |
+| Send / run the current tab's request or query | **Ctrl+Enter** |
+| Toggle the Activity log panel | **Ctrl+`** |
+| Switch light / dark theme | **Ctrl+Shift+T** |
+| Preferences | **Ctrl+,** |
 
-## Request / Message
+## Editing (anywhere text has focus)
 
 | Action | Shortcut |
 |--------|----------|
-| Send Request / Publish Message | Ctrl+Enter |
-| Save Profile | Ctrl+S |
-| Focus URL Bar | Ctrl+L |
-| Format Body (pretty print) | Ctrl+Shift+P |
-| Minify Body | Ctrl+Shift+M |
-| Copy as cURL | Ctrl+Shift+U |
-| Open Code Generator | Ctrl+Shift+G |
+| Undo / Redo | **Ctrl+Z** / **Ctrl+Shift+Z** |
+| Cut / Copy / Paste | **Ctrl+X** / **Ctrl+C** / **Ctrl+V** |
+| Select All | **Ctrl+A** |
 
-## Response / Message View
+## SQL editor
 
 | Action | Shortcut |
 |--------|----------|
-| Search in Response | Ctrl+F |
-| Copy Response Body | Ctrl+Shift+C |
-| Export Response | Ctrl+Shift+S |
-| Toggle Raw / Tree View | Ctrl+Shift+R |
+| Run | **Ctrl+Enter** |
+| Autocomplete (tables, columns, keywords) | **Ctrl+Space** |
+| Toggle line comment | **Ctrl+/** |
 
-## File Transfer (SFTP/FTP)
-
-| Action | Shortcut |
-|--------|----------|
-| Upload Selected | Ctrl+U |
-| Download Selected | Ctrl+D |
-| Refresh Remote | F5 |
-| New Remote Directory | Ctrl+Shift+N |
-| Delete Remote File | Delete |
-
-## Kafka
+## MongoDB and GraphQL editors
 
 | Action | Shortcut |
 |--------|----------|
-| Send Message | Ctrl+Enter |
-| Start Consumer | Ctrl+R |
-| Stop Consumer | Ctrl+. |
-| Refresh Topics | F5 |
-| Reset Offset | Ctrl+Shift+O |
+| Run the query / pipeline | **Ctrl+Enter** |
 
-## Editor
+## Mongo shell tab
 
 | Action | Shortcut |
 |--------|----------|
-| Find | Ctrl+F |
-| Replace | Ctrl+H |
-| Select All | Ctrl+A |
-| Undo | Ctrl+Z |
-| Redo | Ctrl+Y |
-| Comment Line | Ctrl+/ |
-| Duplicate Line | Ctrl+D |
-| Move Line Up | Alt+Up |
-| Move Line Down | Alt+Down |
+| Run the line | **Enter** |
+| Previous / next command in history | **↑** / **↓** |
+
+## Sidebar search boxes
+
+| Action | Shortcut |
+|--------|----------|
+| Open the selected connection | **Enter** |
+| Move into the results list | **↓** |
+| Clear the box | **Esc** |
+
+## Result grids and tables
+
+| Action | Shortcut |
+|--------|----------|
+| Copy the selected cells | **Ctrl+C** |
+| Find next match (REST/SQL find boxes) | **Enter** |
+
+## File browser (SFTP / FTP / object stores / GridFS)
+
+| Action | Shortcut |
+|--------|----------|
+| Delete the selected entry | **Delete** |
+| Copy the selected path | **Ctrl+Shift+C** |
+
+## Connection chip (the collapsed connection string)
+
+| Action | Shortcut |
+|--------|----------|
+| Edit the full string | **double-click**, or **Enter** when focused |
+| Commit the edit | **Enter** |
+| Cancel the edit | **Esc** |
+
+> Shortcuts are fixed in this version — there is no rebinding UI yet. Everything above is bound in
+> the application; menu items show their own shortcut next to the label.

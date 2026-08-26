@@ -23,3 +23,16 @@ ER / schema diagrams render with Mermaid, which loads from a CDN — they need *
 
 ## A public sample (HTTP 403 / blocked)
 Some public APIs rate-limit or block by region. Try another sample, or your own endpoint.
+
+## Messages on the console
+
+**`Error in glXCreateNewContext, remote GLX is likely disabled`** — not an error, and not from
+NexusLink. JavaFX tries a hardware-accelerated graphics pipeline first; where the display cannot
+provide one (a remote X session, a VM without 3D) it falls back to software rendering and carries
+on. The line comes from the native graphics library before any application code runs, so it cannot
+be caught. To skip the probe entirely, start with `JAVA_TOOL_OPTIONS=-Dprism.order=sw`.
+
+**`SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder"`** — fixed. It used to mean the
+protocol drivers' own diagnostics were being discarded. NexusLink now ships a logging binding and
+forwards driver **warnings** into the Activity log, so a failed SASL handshake or an unavailable
+Kafka leader appears next to your own actions.

@@ -33,14 +33,24 @@ nexuslink-parent (pom)
 ├── nexuslink-protocol-s3     — S3Service (AWS SDK v2, S3-compatible)
 ├── nexuslink-protocol-azure  — AzureBlobService (Azure SDK)
 ├── nexuslink-protocol-gcs    — GcsService (Google Cloud Storage)
+├── nexuslink-protocol-sqs    — SqsSnsService (AWS SQS + SNS)
+├── nexuslink-protocol-jms    — JmsService (ActiveMQ / Artemis)
+├── nexuslink-protocol-ibmmq  — MqService (IBM MQ client)
+├── nexuslink-protocol-solace — SolaceService (Solace PubSub+)
+├── nexuslink-protocol-servicebus — ServiceBusService (Azure Service Bus)
+├── nexuslink-protocol-pubsub — PubSubService (Google Pub/Sub)
+├── nexuslink-protocol-ssh    — SshService + VtScreen (SSH terminal)
+├── nexuslink-protocol-secrets — external secret vaults (HashiCorp, Conjur, cloud)
 ├── nexuslink-ui              — MainWindow shell, HelpDialog, protocol views, theming
 └── nexuslink-app             — NexusLinkLauncher (JavaFX Application)
 ```
 
-Reserved/empty protocol modules (`protocol-messaging`, `protocol-file`,
-`protocol-enterprise`) exist as placeholders for RabbitMQ/JMS/IBM-MQ/Solace — they are
-not yet implemented and carry no source. (MQTT now has its own implemented module,
-`protocol-mqtt`.)
+Every protocol listed above is implemented and has its own module; the placeholder modules that
+once stood in for the messaging and file protocols are gone. The rule the layout enforces is that a
+protocol module owns its client library and its **pure** logic (parsers, planners, formatters,
+diff/compare, dialect rules) and knows nothing about JavaFX, while `nexuslink-ui` owns the views and
+depends on the protocol modules — never the other way round. That is what keeps the interesting
+logic testable without a UI, and it is why most tests live in the protocol modules.
 
 ## Layering
 
@@ -168,6 +178,23 @@ validated against their service contracts and exercised manually; several
 (REST/SSE/GraphQL/gRPC/SFTP/FTP/S3/MQTT) were confirmed against real public endpoints — see the
 Progress Log in `TASKS.md`.
 
+### Live integration tests
+
+Alongside the unit tests, the `test-env/` Docker Compose stack runs the real servers, and the
+`*LiveIT` tests are gated behind `-Dnexuslink.it=true` so the default build needs no Docker:
+
+```bash
+cd test-env && docker compose up -d kafka mongo redis      # and the rest as needed
+mvn test -Dnexuslink.it=true
+```
+
+These are what catch the failures unit tests cannot. Recent examples: a Kafka consumer that never
+left its group after Stop (holding partitions until the session timeout), a Mongo change stream that
+delivered one more event after being closed, Lettuce's `ObjectOutput` throwing on a top-level scalar,
+and Maven publishing snapshots under a timestamped filename. The stack includes a single-node
+**replica set** (`mongo-rs`, port 27018) because change streams and transactions cannot be exercised
+against a standalone `mongod` at all.
+
 ## Adding a Protocol — Checklist
 
 1. Create/enable the module and add it to the parent `<modules>` + `<dependencyManagement>`.
@@ -175,4 +202,6 @@ Progress Log in `TASKS.md`.
 3. Write the `*View` (JavaFX, programmatic) that drives the service on a `Task`.
 4. Wire it into `MainWindow` (menu item, sidebar button, `open*Tab()` method).
 5. Add a help Markdown topic and register it in `HelpService`.
-6. Update `TASKS.md` (check off items, add a progress-log entry).
+6. Add a live `*LiveIT` gated on `-Dnexuslink.it=true`, and a `test-env` service if it needs one.
+7. Update `TASKS.md` (check off items, add a progress-log entry) and the relevant spec in
+   `.agent-os/specs/`.

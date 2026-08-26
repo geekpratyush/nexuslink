@@ -73,11 +73,18 @@ class UriRedactorTest {
     }
 
     @Test
+    void aJdbcLabelReadsAsEngineThenHostWithNoLeftoverSlashes() {
+        assertEquals("mysql mysql-rfam-public.ebi.ac.uk:4497/Rfam",
+                UriRedactor.shortLabel("jdbc:mysql://mysql-rfam-public.ebi.ac.uk:4497/Rfam"));
+        assertEquals("postgresql db.internal:5432/orders",
+                UriRedactor.shortLabel("jdbc:postgresql://db.internal:5432/orders?user=app&password=pw"));
+        assertEquals("sqlite /var/data/app.db", UriRedactor.shortLabel("jdbc:sqlite:/var/data/app.db"));
+    }
+
+    @Test
     void aJdbcLabelNamesTheEngine() {
-        assertEquals("postgresql //db.internal:5432/orders".replace(" //", "//"),
-                UriRedactor.shortLabel("jdbc:postgresql://db.internal:5432/orders?user=app&password=pw")
-                        .replace("postgresql ", "postgresql"));
         assertTrue(UriRedactor.shortLabel("jdbc:mysql://h/db").startsWith("mysql"));
+        assertTrue(UriRedactor.shortLabel("jdbc:oracle:thin:@//db:1521/ORCL").startsWith("oracle"));
     }
 
     @Test
