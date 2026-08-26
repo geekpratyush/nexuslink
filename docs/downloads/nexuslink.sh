@@ -311,11 +311,23 @@ sha256_of() {
   else echo ""; fi
 }
 
+# The newest jar in the cache, or nothing. Used when the repository cannot be reached.
+newest_cached() {
+  shopt -s nullglob
+  local newest="" jar
+  for jar in "$CACHE"/$ARTIFACT-*.jar; do
+    [[ -z "$newest" || "$jar" -nt "$newest" ]] && newest="$jar"
+  done
+  # Prints nothing when the cache is empty, and always succeeds: under `set -e` a non-zero return
+  # here would kill the script instead of letting the caller decide what an empty cache means.
+  printf '%s' "$newest"
+}
+
 # Resolves RELEASE / LATEST against the repository's maven-metadata.xml.
+# Returns non-zero when the repository cannot be read, so the caller can fall back to the cache.
 resolve_version() {
   local meta="$CACHE/.metadata.xml"
-  fetch "$REPO_URL/$GROUP_PATH/$ARTIFACT/maven-metadata.xml" "$meta" \
-    || die "could not read maven-metadata.xml from $REPO_URL (from $REPO_SOURCE) — check the repository and your credentials"
+  fetch "$REPO_URL/$GROUP_PATH/$ARTIFACT/maven-metadata.xml" "$meta" 2>/dev/null || return 1
   local tag="release"
   [[ "$VERSION" == "LATEST" ]] && tag="latest"
   local resolved
@@ -324,7 +336,7 @@ resolve_version() {
     # Some repositories publish no <release>/<latest>; fall back to the last <version> listed.
     resolved="$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' "$meta" | tail -1)"
   fi
-  [[ -z "$resolved" ]] && die "the repository lists no versions of $ARTIFACT"
+  [[ -z "$resolved" ]] && return 1
   printf '%s' "$resolved"
 }
 
@@ -350,11 +362,7 @@ resolve_snapshot_file() {
 if [[ "$VERSION" == "RELEASE" || "$VERSION" == "LATEST" ]]; then
   if [[ $OFFLINE -eq 1 ]]; then
     # Offline cannot ask the repository what "latest" means, so it uses the newest cached jar.
-    shopt -s nullglob
-    newest=""
-    for jar in "$CACHE"/$ARTIFACT-*.jar; do
-      [[ -z "$newest" || "$jar" -nt "$newest" ]] && newest="$jar"
-    done
+    newest="$(newest_cached)"
     [[ -z "$newest" ]] && die "nothing cached in $CACHE, and --offline was requested"
     JAR="$newest"
     VERSION="$(basename "$JAR" .jar)"; VERSION="${VERSION#"$ARTIFACT-"}"
@@ -366,8 +374,18 @@ if [[ "$VERSION" == "RELEASE" || "$VERSION" == "LATEST" ]]; then
       [[ -z "$fallback" ]] && die "no repository found in ~/.m2/settings.xml — set NEXUSLINK_REPO_URL or pass --repo, or run ./dist/publish.sh --local first (see --help)"
     fi
     if [[ -z "${JAR:-}" ]]; then
-      VERSION="$(resolve_version)"
-      JAR="$CACHE/$ARTIFACT-$VERSION.jar"
+      if resolved="$(resolve_version)"; then
+        VERSION="$resolved"
+        JAR="$CACHE/$ARTIFACT-$VERSION.jar"
+      else
+        # The repository is unreachable — off the VPN, or down. A machine that has run before
+        # already has the application; start it rather than refusing to work.
+        newest="$(newest_cached)"
+        [[ -z "$newest" ]] && die "could not read maven-metadata.xml from $REPO_URL (from $REPO_SOURCE), and nothing is cached in $CACHE — check the repository and your credentials"
+        JAR="$newest"
+        VERSION="$(basename "$JAR" .jar)"; VERSION="${VERSION#"$ARTIFACT-"}"
+        log "nexuslink: $REPO_URL is unreachable — running the cached $VERSION"
+      fi
     fi
   fi
 else

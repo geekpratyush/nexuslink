@@ -333,6 +333,7 @@ mvn -q -pl nexuslink-protocol-kafka test   <span class="c"># just the module you
       <tr><th>Message</th><th>What it means</th></tr>
       <tr><td><code>no repository found in ~/.m2/settings.xml</code></td><td>This machine has no Maven repository configured and no <code>NEXUSLINK_REPO_URL</code>. Pass <code>--repo &lt;url&gt;</code>, or ask for the <code>bootstrap.conf</code>.</td></tr>
       <tr><td><code>checksum mismatch</code></td><td>What arrived does not match the repository — usually a proxy interfering. Retry; if it persists, tell whoever maintains the repository. Nothing is cached.</td></tr>
+      <tr><td><code>… is unreachable — running the cached <em>version</em></code></td><td>Not an error. The repository could not be reached — off the VPN, or down — so the launcher started the copy it already had.</td></tr>
       <tr><td><code>nothing cached … --offline</code></td><td>This machine has never run online. Run once with network access first.</td></tr>
       <tr><td><code>Java N found, but … needs 21</code></td><td>Install a newer JDK, or point <code>JAVA_HOME</code> at one you have.</td></tr>
       <tr><td><code>Error in glXCreateNewContext</code></td><td>Not an error. JavaFX could not get a hardware graphics context and fell back to software rendering; the app runs normally.</td></tr>

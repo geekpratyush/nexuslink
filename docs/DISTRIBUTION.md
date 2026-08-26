@@ -145,6 +145,7 @@ NEXUSLINK_TOKEN=...
 | `nexuslink.sh` | Run. Downloads only if the version is not already cached. |
 | `nexuslink.sh --update` | Force a re-download of the resolved version. |
 | `nexuslink.sh --offline` | Never touch the network; run the newest cached build, or fail saying so. |
+| — | A machine that has run before does not need `--offline`: if the repository cannot be reached, the launcher says so and starts the newest cached build anyway. It only fails when nothing is cached. |
 | `nexuslink.sh --version 1.2.0` | Run one specific version (several can sit side by side). |
 | `nexuslink.sh --list` | Show what is cached. |
 | `nexuslink.sh --where` | Print the JAR that would run, without running it. |

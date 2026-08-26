@@ -15,6 +15,12 @@ records only work that is in the code and verified.
   first repository a profile declares, with the matching `<server>` for username and password. The
   order is `--repo`, then `NEXUSLINK_REPO_URL`, then `bootstrap.conf`, then `settings.xml`, and the
   error when nothing is found says so. `MAVEN_SETTINGS` overrides which file is read.
+- **An unreachable repository no longer stops the launcher.** Resolving `RELEASE` used to fail hard
+  when the repository could not be read, so a laptop off the VPN could not start an application it
+  had already downloaded. It now says the repository is unreachable and runs the newest cached
+  build, failing only when nothing is cached. Verified end to end against a local Maven repository
+  served over HTTP: fresh download with only `settings.xml` configured, cached second run, and both
+  repository-down cases.
 - **The mark is drawn heavier** so it survives being scaled to a 16–32 px icon, and it is now the
   **application icon**: `AppIcons` puts the rendered PNGs on every window, and `jpackage` stamps the
   packaged app with `dist/icons/nexuslink.ico` on Windows and `nexuslink.png` elsewhere.

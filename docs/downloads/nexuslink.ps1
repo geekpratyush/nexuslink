@@ -250,14 +250,23 @@ function Fetch($url, $dest) {
     Invoke-WebRequest -Uri $url -OutFile $dest -Headers (Get-AuthHeaders) -UseBasicParsing
 }
 
+# The newest jar in the cache, or $null. Used when the repository cannot be reached.
+function Get-NewestCached {
+    $newest = Get-ChildItem -Path $cache -Filter "$Artifact-*.jar" -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    return $newest
+}
+
+# Resolves RELEASE / LATEST against the repository's maven-metadata.xml.
+# Returns $null when the repository cannot be read, so the caller can fall back to the cache.
 function Resolve-Version {
     $meta = Join-Path $cache '.metadata.xml'
     try { Fetch "$repoUrl/$GroupPath/$Artifact/maven-metadata.xml" $meta }
-    catch { Fail "could not read maven-metadata.xml from $repoUrl (from $repoSource) - check the repository and your credentials" }
+    catch { return $null }
     $xml = [xml](Get-Content $meta)
     $tag = if ($version -eq 'LATEST') { $xml.metadata.versioning.latest } else { $xml.metadata.versioning.release }
     if (-not $tag) { $tag = ($xml.metadata.versioning.versions.version | Select-Object -Last 1) }
-    if (-not $tag) { Fail "the repository lists no versions of $Artifact" }
+    if (-not $tag) { return $null }
     return $tag
 }
 
@@ -276,8 +285,7 @@ function Resolve-SnapshotFile($v) {
 
 if ($version -in @('RELEASE', 'LATEST')) {
     if ($offline) {
-        $newest = Get-ChildItem -Path $cache -Filter "$Artifact-*.jar" -ErrorAction SilentlyContinue |
-                  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $newest = Get-NewestCached
         if (-not $newest) { Fail "nothing cached in $cache, and --offline was requested" }
         $jar = $newest.FullName
         $version = $newest.BaseName -replace "^$Artifact-", ''
@@ -292,8 +300,21 @@ if ($version -in @('RELEASE', 'LATEST')) {
         & $javaBin @javaOpts -jar $fallback @appArgs
         exit $LASTEXITCODE
     } else {
-        $version = Resolve-Version
-        $jar = Join-Path $cache "$Artifact-$version.jar"
+        $resolved = Resolve-Version
+        if ($resolved) {
+            $version = $resolved
+            $jar = Join-Path $cache "$Artifact-$version.jar"
+        } else {
+            # The repository is unreachable - off the VPN, or down. A machine that has run before
+            # already has the application; start it rather than refusing to work.
+            $newest = Get-NewestCached
+            if (-not $newest) {
+                Fail "could not read maven-metadata.xml from $repoUrl (from $repoSource), and nothing is cached in $cache - check the repository and your credentials"
+            }
+            $jar = $newest.FullName
+            $version = $newest.BaseName -replace "^$Artifact-", ''
+            Write-Host "nexuslink: $repoUrl is unreachable - running the cached $version"
+        }
     }
 } else {
     $jar = Join-Path $cache "$Artifact-$version.jar"

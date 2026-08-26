@@ -70,6 +70,9 @@ All optional — including the repository, which falls back to `~/.m2/settings.x
 no `NEXUSLINK_REPO_URL`. Pass `--repo <url>`, export the variable, or ask your admin for the
 `bootstrap.conf`.
 
+**"… is unreachable — running the cached <version>"** — not an error. The repository could not be
+reached, so NexusLink started the copy this machine already had. It only stops if nothing is cached.
+
 **"checksum mismatch"** — what arrived does not match the repository. Usually a proxy interfering;
 retry, and if it persists tell whoever maintains the repository.
 
