@@ -43,12 +43,43 @@ Three facts that shape everything below:
 
 ### About Java 17
 
-**Java 17 is not enough — for the build or for users.** The launcher checks the JVM version before
-anything else and stops with a plain sentence if it is below 21, and the bytecode would not load
-anyway. If your organisation standardises on 17, that is a project change, not a configuration flag:
-someone has to retarget `maven.compiler.source`/`target`, replace the Java 21 language constructs the
-code uses, and pin a JavaFX release that supports 17. Budget it as work, and until it is done, ship
-users a JDK 21 runtime alongside the launcher or point `JAVA_HOME` at one they already have.
+**As shipped, Java 17 is not enough — for the build or for users.** The launcher checks the JVM
+version before anything else and stops with a plain sentence if it is below 21, and the bytecode
+would not load anyway. Until someone does the port below, users on 17 need a JDK 21 installed, or
+`JAVA_HOME` pointed at one they already have.
+
+It is worth knowing exactly what that port costs, because it is smaller than it sounds — **four
+files, about twenty lines** — and none of it is risky.
+
+First, what does *not* work: lowering only the bytecode target. `javac` refuses to emit 17 class
+files from 21 source (`source release 21 requires target release 21`, exit 2), so the source level
+comes down with it, and at source 17 the Java 21 constructs below stop compiling. There is no
+flag-only route, and no reason to want a multi-release JAR either — a single artifact built at 17
+runs on 17 and 21 alike.
+
+| What blocks it | Where | The port |
+|---|---|---|
+| `Executors.newVirtualThreadPerTaskExecutor()` — a Java 21 API | `nexuslink-core/.../core/event/EventBus.java` | A cached daemon thread pool. One line. |
+| Type-pattern `switch` — Java 21 syntax | `nexuslink-protocol-redis/.../redis/RespCodec.java` | `if` / `else if` with `instanceof` patterns, which are legal in 17 |
+| Type-pattern `switch` | `nexuslink-protocol-redis/.../redis/RedisPubSubEvent.java` | same |
+| Type-pattern `switch` | `nexuslink-security/.../security/cert/CertificateParser.java` | same — three cases |
+
+Then the settings: `java.version` and `maven.compiler.source`/`target` in the root `pom.xml`, and
+`MIN_JAVA` in `dist/nexuslink.sh` and `dist/nexuslink.ps1`.
+
+What is **not** in the way, which is the part people assume wrongly:
+
+- **JavaFX needs no change.** 21.0.4 is compiled to class file 61 — that is Java 17 — so it runs on
+  a 17 JVM as it is.
+- **No `SequencedCollection` usage.** Every `.reversed()` in the codebase is `Comparator.reversed()`
+  from Java 8.
+- **No other virtual threads**, in main or test sources. That one executor is the only use.
+- Records and sealed types are all Java 17 features already.
+
+These findings come from compiling the project at `-Dmaven.compiler.release=17` and reading what
+javac rejected. Two things were not established: the test sources were only compiled as far as the
+first failures, so a straggler there is possible, and nothing has yet been *run* on a real 17 JVM —
+do that once before promising it to users.
 
 ---
 
@@ -357,6 +388,8 @@ Everything a pipeline author has to do, in order. Tick these off and it works.
 - [ ] The three launcher files are published where users can get them.
 - [ ] The §7 verification passed against the real repository, from a clean machine.
 - [ ] Users told: install JDK 21, download the launcher, run it. Nothing else.
+- [ ] If your users are on Java 17, the port in §1 decided one way or the other — it is four files,
+      but it has to happen before they can run this at all.
 
 ---
 
