@@ -57,9 +57,18 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
 - [ ] **MG-5 Import / export a collection** — JSON and CSV, field-mapped, with a preview and a progress
       bar; export the whole collection, not just the visible page. (CSV import machinery already exists
       for SQL in `CsvImportPlanner` — the mapping UI is reusable.)
-- [ ] **MG-6 Index usage and suggestions.** `$indexStats` per collection, an "unused index" flag, and the
+- [x] **MG-6 Index usage and suggestions.** *(2026-08-26)* Pure `IndexAdvice`: reads `$indexStats`
+      usage counters (with the counter start date, since "unused" on a freshly restarted server means
+      nothing), flags drop candidates excluding `_id_`, and suggests the index a query wants —
+      equality fields, then sort fields, then ranges — staying silent when an existing index's prefix
+      already covers it. UI: an **Indexes view** beside the other result views. 10 unit tests +
+      `MongoAnalysisLiveIT`. `$indexStats` per collection, an "unused index" flag, and the
       index the current query *would* want. Compass's Performance Insights, without the Atlas account.
-- [ ] **MG-7 Schema analyser panel** — sample N documents, show per-field type distribution, null rate and
+- [x] **MG-7 Schema analyser panel** *(2026-08-26)* Pure `SchemaProfile` over a `$sample` of the
+      collection: per-field presence %, BSON type distribution, null rate and distinct count, with
+      nested documents flattened to dotted paths. Calls out the two findings that matter — a field
+      *missing from some documents* and one stored as *mixed types*. UI: the Schema view now shows the
+      real analysis with a summary line. 10 unit tests + live coverage. — sample N documents, show per-field type distribution, null rate and
       cardinality as a table + bars. The inference already exists for the diagram (`inferDiagram`); this is
       a second rendering of the same sample, not new sampling code.
 

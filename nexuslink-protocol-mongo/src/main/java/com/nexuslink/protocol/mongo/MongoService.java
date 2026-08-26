@@ -560,6 +560,65 @@ public final class MongoService implements AutoCloseable {
 
     // ---- users / auth ----
 
+    /**
+     * Samples up to {@code sampleSize} documents and profiles their shape — the schema analyser.
+     * Sampling uses {@code $sample} so it is spread across the collection rather than being the first
+     * page, which is what makes an optional field show up at all.
+     */
+    public SchemaProfile profileSchema(String collection, int sampleSize) {
+        int size = Math.max(1, Math.min(sampleSize, 10_000));
+        List<Document> sample = new ArrayList<>();
+        for (Document d : collection(collection)
+                .aggregate(List.of(new Document("$sample", new Document("size", size))))) {
+            sample.add(d);
+        }
+        return SchemaProfile.of(sample);
+    }
+
+    /**
+     * {@code $indexStats} for a collection — how many operations have used each index since the
+     * server's counters started. Empty when the deployment does not expose it (some managed services
+     * do not).
+     */
+    public List<Document> indexStats(String collection) {
+        List<Document> out = new ArrayList<>();
+        try {
+            for (Document d : collection(collection)
+                    .aggregate(List.of(new Document("$indexStats", new Document())))) {
+                out.add(d);
+            }
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+        return out;
+    }
+
+    /** The key documents of a collection's indexes, for the "is this already covered" check. */
+    public List<Document> indexKeys(String collection) {
+        List<Document> keys = new ArrayList<>();
+        for (Document d : collection(collection).listIndexes()) {
+            Document key = d.get("key", Document.class);
+            if (key != null) keys.add(key);
+        }
+        return keys;
+    }
+
+    /**
+     * The index the given find would want, or an empty string when the existing indexes already
+     * serve it. Filter and sort are Extended JSON, as typed in the query bar.
+     */
+    public String indexRecommendation(String collection, String filterJson, String sortJson) {
+        try {
+            Document filter = filterJson == null || filterJson.isBlank()
+                    ? new Document() : Document.parse(filterJson);
+            Document sort = sortJson == null || sortJson.isBlank()
+                    ? new Document() : Document.parse(sortJson);
+            return IndexAdvice.recommendation(filter, sort, indexKeys(collection));
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
     /** {@code connectionStatus} — the authenticated user and its roles, or empty when unauthenticated. */
     public java.util.Map<String, String> authStatus() {
         Document r = client.getDatabase("admin").runCommand(new Document("connectionStatus", 1));

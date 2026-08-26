@@ -653,7 +653,7 @@ public final class MongoClientView extends BorderPane {
         runBtn.getStyleClass().add("btn-primary");
         runBtn.setOnAction(e -> run());
 
-        viewCombo.getItems().addAll("Tree", "JSON", "Table", "Schema");
+        viewCombo.getItems().addAll("Tree", "JSON", "Table", "Schema", "Indexes");
         viewCombo.setValue("Tree");
         viewCombo.valueProperty().addListener((o, ov, nv) -> renderView());
         Label viewLbl = new Label("View:");
@@ -1094,7 +1094,8 @@ public final class MongoClientView extends BorderPane {
         switch (v == null ? "Tree" : v) {
             case "Tree" -> { buildDocTree(true); showNode(docTree); }
             case "Table" -> { buildDocTable(); showNode(docTable); }
-            case "Schema" -> { buildSchema(); showNode(schemaTable); }
+            case "Schema" -> { buildSchemaAnalysis(); showNode(schemaTable); }
+            case "Indexes" -> { buildIndexAnalysis(); showNode(schemaTable); }
             default -> {
                 if (!lastDocs.isEmpty()) {
                     org.bson.json.JsonWriterSettings pretty =
@@ -1341,6 +1342,115 @@ public final class MongoClientView extends BorderPane {
             docTable.getColumns().add(col);
         }
         docTable.setItems(javafx.collections.FXCollections.observableArrayList(lastDocs));
+    }
+
+    /**
+     * The schema analyser (Compass's Schema tab): samples the collection with {@code $sample} and
+     * reports, per field, how often it is present, which BSON types it holds in what proportion, how
+     * often it is null and how many distinct values there are.
+     *
+     * <p>Two findings matter more than the rest and are called out in the row: a field that is
+     * <em>sometimes absent</em> (queries silently miss those documents) and one stored as
+     * <em>more than one type</em> (comparisons and sorts behave differently per document).
+     */
+    private void buildSchemaAnalysis() {
+        if (activeCollection == null) {
+            schemaTable.setPlaceholder(new Label("Select a collection to analyse its schema"));
+            schemaTable.getItems().clear();
+            return;
+        }
+        setSchemaColumns("Field", "Type(s)", "Present", "Null", "Distinct", "Note");
+        String collection = activeCollection;
+        int sample = Math.max(parseLimit(), 100);
+        resultStatus.setText("Sampling " + sample + " document(s)…");
+        Task<com.nexuslink.protocol.mongo.SchemaProfile> task = new Task<>() {
+            @Override protected com.nexuslink.protocol.mongo.SchemaProfile call() {
+                return service.profileSchema(collection, sample);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            var profile = task.getValue();
+            java.util.List<String[]> rows = new java.util.ArrayList<>();
+            for (var f : profile.fields()) {
+                String note = f.isPolymorphic() ? "mixed types"
+                        : f.isOptional() ? "missing from some documents" : "";
+                rows.add(new String[]{f.path(), f.typeSummary(),
+                        Math.round(f.presencePercent()) + "%  (" + f.present() + "/" + f.sampled() + ")",
+                        Math.round(f.nullPercent()) + "%", String.valueOf(f.distinct()), note});
+            }
+            schemaTable.setItems(javafx.collections.FXCollections.observableArrayList(rows));
+            resultStatus.getStyleClass().setAll("meta-label");
+            resultStatus.setText(profile.fields().size() + " field(s) across " + profile.sampled()
+                    + " sampled document(s) · " + profile.optionalFields().size() + " optional · "
+                    + profile.polymorphicFields().size() + " mixed-type");
+        });
+        task.setOnFailed(e -> {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Schema analysis failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /**
+     * Index usage and advice — Compass's Performance Insights without the Atlas account.
+     * {@code $indexStats} says how many operations have used each index since the server's counters
+     * started (so an index at zero is a drop candidate, with the counter's start date shown so that
+     * "zero" can be judged), and the current query gets the index it would want when nothing existing
+     * already covers it.
+     */
+    private void buildIndexAnalysis() {
+        if (activeCollection == null) {
+            schemaTable.setPlaceholder(new Label("Select a collection to see its index usage"));
+            schemaTable.getItems().clear();
+            return;
+        }
+        setSchemaColumns("Index", "Key", "Operations", "Counting since", "Note", "");
+        String collection = activeCollection;
+        String filter = Env.resolve(queryEditor.getText().trim());
+        String sort = Env.resolve(sortField.getText().trim());
+        Task<java.util.List<String[]>> task = new Task<>() {
+            @Override protected java.util.List<String[]> call() {
+                java.util.List<String[]> rows = new java.util.ArrayList<>();
+                var stats = service.indexStats(collection);
+                for (var u : com.nexuslink.protocol.mongo.IndexAdvice.usage(stats)) {
+                    rows.add(new String[]{u.name(), u.keyLabel(), String.valueOf(u.operations()),
+                            u.since(), u.isUnused() && !u.isIdIndex() ? "unused — drop candidate" : "", ""});
+                }
+                if (stats.isEmpty()) {
+                    rows.add(new String[]{"(no $indexStats)", "", "", "",
+                            "this deployment does not expose index usage", ""});
+                }
+                String advice = service.indexRecommendation(collection, filter, sort);
+                if (!advice.isEmpty()) {
+                    rows.add(new String[]{"suggested", advice, "", "",
+                            "the current query has no index that serves it", ""});
+                }
+                return rows;
+            }
+        };
+        task.setOnSucceeded(e -> {
+            schemaTable.setItems(javafx.collections.FXCollections.observableArrayList(task.getValue()));
+            resultStatus.getStyleClass().setAll("meta-label");
+            resultStatus.setText(task.getValue().size() + " row(s)");
+        });
+        task.setOnFailed(e -> {
+            resultStatus.getStyleClass().setAll("status-err");
+            resultStatus.setText("Index analysis failed: " + task.getException().getMessage());
+        });
+        runBg(task);
+    }
+
+    /** Re-labels the shared analysis table's columns for whichever panel is showing. */
+    private void setSchemaColumns(String... headers) {
+        schemaTable.getColumns().clear();
+        for (int i = 0; i < headers.length; i++) {
+            if (headers[i].isEmpty()) continue;
+            final int idx = i;
+            TableColumn<String[], String> c = new TableColumn<>(headers[i]);
+            c.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
+                    idx < cd.getValue().length ? cd.getValue()[idx] : ""));
+            schemaTable.getColumns().add(c);
+        }
     }
 
     private void buildSchemaTable() {
