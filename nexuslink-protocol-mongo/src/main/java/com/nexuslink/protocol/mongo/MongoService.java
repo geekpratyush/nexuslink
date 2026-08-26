@@ -275,6 +275,116 @@ public final class MongoService implements AutoCloseable {
         return t;
     }
 
+    // ---- GridFS ----
+
+    /** One file stored in a GridFS bucket. */
+    public record GridFsEntry(String id, String filename, long length, java.util.Date uploadDate) {}
+
+    /**
+     * The GridFS buckets in the current database. A bucket is a pair of collections
+     * ({@code <name>.files} and {@code <name>.chunks}), so the {@code .files} collections name them.
+     */
+    public List<String> gridFsBuckets() {
+        List<String> buckets = new ArrayList<>();
+        for (String name : listCollectionNames()) {
+            if (name.endsWith(".files")) buckets.add(name.substring(0, name.length() - ".files".length()));
+        }
+        return buckets;
+    }
+
+    private com.mongodb.client.gridfs.GridFSBucket bucket(String bucket) {
+        String name = bucket == null || bucket.isBlank() ? "fs" : bucket;
+        return com.mongodb.client.gridfs.GridFSBuckets.create(db(), name);
+    }
+
+    /** The files in a bucket, newest first. */
+    public List<GridFsEntry> gridFsList(String bucketName) {
+        List<GridFsEntry> out = new ArrayList<>();
+        for (var file : bucket(bucketName).find().sort(new Document("uploadDate", -1))) {
+            out.add(new GridFsEntry(file.getObjectId().toHexString(), file.getFilename(),
+                    file.getLength(), file.getUploadDate()));
+        }
+        return out;
+    }
+
+    /** Uploads a local file into a bucket under {@code filename}, reporting bytes as it goes. */
+    public void gridFsUpload(String bucketName, String filename, java.nio.file.Path source,
+                             java.util.function.LongConsumer progress) throws java.io.IOException {
+        try (java.io.InputStream in = new java.io.BufferedInputStream(
+                java.nio.file.Files.newInputStream(source));
+             var upload = bucket(bucketName).openUploadStream(filename)) {
+            byte[] buffer = new byte[64 * 1024];
+            long total = 0;
+            int read;
+            while ((read = in.read(buffer)) > 0) {
+                upload.write(buffer, 0, read);
+                total += read;
+                if (progress != null) progress.accept(total);
+            }
+        }
+    }
+
+    /** Stores {@code data} in a bucket under {@code filename}. */
+    public void gridFsWrite(String bucketName, String filename, byte[] data) {
+        try (var upload = bucket(bucketName).openUploadStream(filename)) {
+            upload.write(data);
+        }
+    }
+
+    /** Downloads a file from a bucket to a local path, reporting bytes as it goes. */
+    public void gridFsDownload(String bucketName, String filename, java.nio.file.Path target,
+                               java.util.function.LongConsumer progress) throws java.io.IOException {
+        try (var download = bucket(bucketName).openDownloadStream(filename);
+             java.io.OutputStream out = new java.io.BufferedOutputStream(
+                     java.nio.file.Files.newOutputStream(target))) {
+            byte[] buffer = new byte[64 * 1024];
+            long total = 0;
+            int read;
+            while ((read = download.read(buffer)) > 0) {
+                out.write(buffer, 0, read);
+                total += read;
+                if (progress != null) progress.accept(total);
+            }
+        }
+    }
+
+    /** Reads up to {@code maxBytes} of a GridFS file into memory — the quick-view path. */
+    public byte[] gridFsRead(String bucketName, String filename, long maxBytes) throws java.io.IOException {
+        try (var download = bucket(bucketName).openDownloadStream(filename);
+             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[64 * 1024];
+            long total = 0;
+            int read;
+            while (total < maxBytes && (read = download.read(buffer)) > 0) {
+                int keep = (int) Math.min(read, maxBytes - total);
+                out.write(buffer, 0, keep);
+                total += keep;
+            }
+            return out.toByteArray();
+        }
+    }
+
+    /** Deletes every revision of {@code filename} from a bucket. */
+    public void gridFsDelete(String bucketName, String filename) {
+        var gridFs = bucket(bucketName);
+        for (var file : gridFs.find(new Document("filename", filename))) {
+            gridFs.delete(file.getObjectId());
+        }
+    }
+
+    /** Renames every revision of {@code filename} in a bucket. */
+    public void gridFsRename(String bucketName, String filename, String newName) {
+        var gridFs = bucket(bucketName);
+        for (var file : gridFs.find(new Document("filename", filename))) {
+            gridFs.rename(file.getObjectId(), newName);
+        }
+    }
+
+    /** Drops a whole bucket — both its {@code .files} and {@code .chunks} collections. */
+    public void gridFsDropBucket(String bucketName) {
+        bucket(bucketName).drop();
+    }
+
     /**
      * Watches a collection (or the whole database when {@code collection} is blank) and reports each
      * change as it happens — the change-streams panel.

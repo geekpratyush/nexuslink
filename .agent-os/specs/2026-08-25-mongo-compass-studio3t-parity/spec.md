@@ -103,9 +103,21 @@ cannot get in either. Audited against the source on 2026-08-25 (`MongoService`, 
       `slowOperations` reading `system.profile`. UI: **Server… ▸ Operations** (filter by duration, kill
       with a confirm) and **▸ Profiler** (level + slow-ms, slowest operations). Live-verified. — running operations, slow-query profile level
       control, and a slow-op table. No desktop client does this well.
-- [ ] **MG-11 Collection compare / sync between two connections** (Studio 3T's Data Compare) — document diff
+- [x] **MG-11 Collection compare / sync between two collections** *(2026-08-26)* Pure `CollectionDiff`
+      matches on `_id` and classifies each document (left-only / right-only / differing / identical),
+      naming **which fields differ** for a differing pair (nested paths included) rather than just
+      "not equal"; a document with no `_id` is reported, not dropped. `syncScript` generates the
+      statements that would make the right side match the left — inserts and replaces, with **deletes
+      emitted commented out**. UI: **Export ▸ Compare with another collection…** with the result table,
+      a counts summary and the script (copy, or send to the Shell tab); nothing is ever applied.
+      10 tests. _(Cross-connection compare is still same-database only.)_ (Studio 3T's Data Compare) — document diff
       by `_id`, then a generated apply script. Reuse the `DirectoryDiff` mental model from the file commander.
-- [ ] **MG-12 GridFS browser** — list buckets/files, upload, download, delete. The file commander's
+- [x] **MG-12 GridFS browser** *(2026-08-26)* `MongoService` gained the GridFS layer (buckets, list,
+      streaming upload/download with progress, read-with-limit, rename and delete across revisions,
+      drop bucket) and `GridFsFileSystem` adapts it to the existing `FileSystem`/`FileTransfer` seam —
+      so the **whole two-pane commander** (transfer queue, drag-and-drop, quick-view, checksums) works
+      on GridFS for free. UI: a **Files (GridFS)** tab. Compass shows GridFS only as raw `.files` /
+      `.chunks` collections. 5 live tests incl. a multi-chunk round trip. — list buckets/files, upload, download, delete. The file commander's
       `FileSystem` seam already fits: a `GridFsFileSystem` gives the whole two-pane commander for free.
 - [x] **MG-13 Replica-set / sharding status panel** *(2026-08-26)* `topologyStatus()` renders replica-set
       members with role, health and **seconds behind primary**, or a cluster's shards (flagging draining

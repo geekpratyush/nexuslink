@@ -1574,8 +1574,10 @@ protocol clients from becoming thirteen codebases. **Start here.**
       **6 of 8 P2 also shipped:** MG-8 stage-by-stage pipeline preview · MG-9 change streams panel
       (new `mongo-rs` replica-set fixture in `test-env`) · MG-10 currentOp/kill-op + profiler ·
       MG-13 replica-set/sharding status · MG-14 bulk-write guardrail · MG-15 readable explain +
-      explain for aggregate. **Remaining: MG-11** (collection compare/sync) and **MG-12** (GridFS
-      browser), plus the three P3s — see the spec.
+      explain for aggregate · MG-11 collection compare + generated sync script · MG-12 GridFS browser
+      through the existing two-pane commander. **All 7 P1 and all 8 P2 shipped; the three P3s remain**
+      (MG-16 Atlas Search / time-series index management · MG-17 query performance drift ·
+      MG-18 map-reduce/`$out` job runner) — see the spec.
 - [ ] **10.2 SQL beyond parity** — `SQLX-1` (DML undo + blast radius) and `SQLX-2` shipped
 - [ ] **10.3 File transfer** — P1 complete (FileZilla/WinSCP parity)
 - [ ] **10.4 IBM MQ** — P1 complete (PCF layer, explorer, message browser, DLQ replay)

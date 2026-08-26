@@ -456,6 +456,138 @@ public final class MongoClientView extends BorderPane {
     }
 
     /**
+     * Compares the active collection with another in the same database, document by document matched
+     * on {@code _id} — Studio 3T's Data Compare. Each row says which side a document is on, or which
+     * fields differ; the generated sync script makes the other side match this one and is shown for
+     * reading, never applied.
+     */
+    private void compareCollectionsDialog() {
+        if (!service.isConnected() || activeCollection == null) {
+            statusLabel.setText("Select a collection in the tree first");
+            return;
+        }
+        java.util.List<String> collections;
+        try {
+            collections = new java.util.ArrayList<>(service.listCollectionNames());
+        } catch (RuntimeException ex) {
+            statusLabel.setText("Could not list collections: " + ex.getMessage());
+            return;
+        }
+        collections.remove(activeCollection);
+        if (collections.isEmpty()) {
+            statusLabel.setText("There is no other collection in this database to compare with");
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Compare collections");
+        dialog.setHeaderText("Compare " + activeCollection + " (left) with another collection (right)");
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.setResizable(true);
+
+        ChoiceBox<String> other = new ChoiceBox<>(javafx.collections.FXCollections
+                .observableArrayList(collections));
+        other.setValue(collections.get(0));
+        TextField limit = new TextField("1000");
+        limit.setPrefWidth(80);
+        CheckBox onlyDifferences = new CheckBox("Only show differences");
+        onlyDifferences.setSelected(true);
+
+        TableView<com.nexuslink.protocol.mongo.CollectionDiff.Entry> results = new TableView<>();
+        TableColumn<com.nexuslink.protocol.mongo.CollectionDiff.Entry, String> idCol =
+                new TableColumn<>("_id");
+        idCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(cd.getValue().id()));
+        idCol.setPrefWidth(260);
+        TableColumn<com.nexuslink.protocol.mongo.CollectionDiff.Entry, String> statusCol =
+                new TableColumn<>("Difference");
+        statusCol.setCellValueFactory(cd ->
+                new javafx.beans.property.SimpleStringProperty(cd.getValue().summary()));
+        statusCol.setPrefWidth(420);
+        results.getColumns().setAll(java.util.List.of(idCol, statusCol));
+        results.setPlaceholder(new Label("Press Compare"));
+        VBox.setVgrow(results, Priority.ALWAYS);
+
+        Label summary = new Label();
+        summary.getStyleClass().add("meta-label");
+        TextArea script = new TextArea();
+        script.setEditable(false);
+        script.getStyleClass().add("code-area");
+        script.setPrefRowCount(7);
+        script.setPromptText("The script that would make the right collection match the left appears here");
+
+        Button compareBtn = new Button("Compare");
+        compareBtn.getStyleClass().add("btn-primary");
+        Button copyScript = new Button("Copy script");
+        copyScript.getStyleClass().add("btn-secondary");
+        copyScript.setOnAction(e -> copyToClipboard(script.getText()));
+        Button toShell = new Button("Send to shell");
+        toShell.getStyleClass().add("btn-secondary");
+        toShell.setTooltip(new Tooltip("Put the script in the Shell tab's input, one line to run at a time"));
+        toShell.setOnAction(e -> {
+            shellOutput.appendText("// --- sync script (review before running) ---\n"
+                    + script.getText() + "\n");
+            statusLabel.setText("Sync script written to the Shell tab — nothing has been applied");
+        });
+
+        compareBtn.setOnAction(e -> {
+            String right = other.getValue();
+            int cap;
+            try { cap = Integer.parseInt(limit.getText().trim()); }
+            catch (NumberFormatException ex) { cap = 1000; }
+            String left = activeCollection;
+            int max = Math.max(1, cap);
+            results.setPlaceholder(new Label("Comparing…"));
+            Task<java.util.List<com.nexuslink.protocol.mongo.CollectionDiff.Entry>> task = new Task<>() {
+                @Override protected java.util.List<com.nexuslink.protocol.mongo.CollectionDiff.Entry> call() {
+                    var leftDocs = service.findDetailed(left,
+                            new com.nexuslink.protocol.mongo.MongoQuerySpec("", "", "", 0, max)).documents();
+                    var rightDocs = service.findDetailed(right,
+                            new com.nexuslink.protocol.mongo.MongoQuerySpec("", "", "", 0, max)).documents();
+                    return com.nexuslink.protocol.mongo.CollectionDiff.compare(leftDocs, rightDocs);
+                }
+            };
+            task.setOnSucceeded(ev -> {
+                var all = task.getValue();
+                var counts = com.nexuslink.protocol.mongo.CollectionDiff.counts(all);
+                var shown = onlyDifferences.isSelected()
+                        ? all.stream().filter(x -> x.status()
+                                != com.nexuslink.protocol.mongo.CollectionDiff.Status.SAME).toList()
+                        : all;
+                results.setItems(javafx.collections.FXCollections.observableArrayList(shown));
+                results.setPlaceholder(new Label("The collections match"));
+                summary.setText(counts.get(com.nexuslink.protocol.mongo.CollectionDiff.Status.SAME)
+                        + " identical · "
+                        + counts.get(com.nexuslink.protocol.mongo.CollectionDiff.Status.DIFFERENT) + " differing · "
+                        + counts.get(com.nexuslink.protocol.mongo.CollectionDiff.Status.LEFT_ONLY)
+                        + " only in " + left + " · "
+                        + counts.get(com.nexuslink.protocol.mongo.CollectionDiff.Status.RIGHT_ONLY)
+                        + " only in " + right
+                        + (all.size() >= max * 2 ? "   (capped at " + max + " per side)" : ""));
+                script.setText(com.nexuslink.protocol.mongo.CollectionDiff.syncScript(right, all));
+            });
+            task.setOnFailed(ev -> {
+                results.getItems().clear();
+                results.setPlaceholder(new Label("Compare failed: " + task.getException().getMessage()));
+            });
+            runBg(task);
+        });
+
+        HBox controls = new HBox(8, metaLabel("Compare with:"), other,
+                metaLabel("documents per side:"), limit, onlyDifferences, compareBtn);
+        controls.setAlignment(Pos.CENTER_LEFT);
+        HBox scriptTools = new HBox(8, copyScript, toShell);
+        scriptTools.setAlignment(Pos.CENTER_LEFT);
+        VBox content = new VBox(8, controls, summary, results,
+                metaLabel("Sync script — generated, never applied"), script, scriptTools);
+        content.setPadding(new Insets(10));
+        content.setPrefSize(860, 560);
+        dialog.getDialogPane().setContent(content);
+        com.nexuslink.ui.theme.ThemeManager.get().register(dialog.getDialogPane().getScene());
+        dialog.showAndWait();
+    }
+
+    /**
      * Exports the whole collection — not the page on screen — streaming straight to the file, so the
      * size of the collection is not bounded by the heap. The current filter is offered as the export
      * filter, since "export what I am looking at" is the common case.
@@ -1070,8 +1202,10 @@ public final class MongoClientView extends BorderPane {
         exportCollection.setOnAction(e -> exportCollectionDialog());
         MenuItem importCollection = new MenuItem("Import into collection…");
         importCollection.setOnAction(e -> importCollectionDialog());
+        MenuItem compare = new MenuItem("Compare with another collection…");
+        compare.setOnAction(e -> compareCollectionsDialog());
         exportBtn.getItems().addAll(exportJson, exportCsv, new SeparatorMenuItem(),
-                exportCollection, importCollection);
+                exportCollection, importCollection, new SeparatorMenuItem(), compare);
 
         MenuButton structureBtn = new MenuButton("Structure");
         structureBtn.getStyleClass().add("btn-secondary");
@@ -1194,7 +1328,9 @@ public final class MongoClientView extends BorderPane {
         shellTab.setClosable(false);
         Tab watchTab = new Tab("Watch", buildWatchPane());
         watchTab.setClosable(false);
-        TabPane rightTabs = new TabPane(queryTab, shellTab, watchTab);
+        Tab filesTab = new Tab("Files (GridFS)", buildGridFsPane());
+        filesTab.setClosable(false);
+        TabPane rightTabs = new TabPane(queryTab, shellTab, watchTab, filesTab);
         rightTabs.getStyleClass().add("editor-tabs");
 
         SplitPane sp = new SplitPane(explorer, rightTabs);
@@ -1470,6 +1606,46 @@ public final class MongoClientView extends BorderPane {
             activeWatch.close();
             activeWatch = null;
         }
+    }
+
+    /**
+     * The GridFS tab: the database's file buckets in the same two-pane commander used for SFTP, FTP
+     * and the object stores — local disk on one side, buckets and their files on the other, with the
+     * transfer queue, drag-and-drop, quick-view and rename that come with it.
+     *
+     * <p>Compass shows GridFS only as the raw {@code .files} and {@code .chunks} collections, which is
+     * not a way to get a file in or out. The commander is already built, so this is an adapter rather
+     * than a feature.
+     */
+    private javafx.scene.Node buildGridFsPane() {
+        Label hint = new Label("Buckets in the selected database. Files are flat inside a bucket — "
+                + "a “/” in a name is part of the name.");
+        hint.getStyleClass().add("meta-label");
+        hint.setWrapText(true);
+
+        Button open = new Button("Open GridFS browser");
+        open.getStyleClass().add("btn-primary");
+        Label gridFsStatus = new Label("Select a database in the tree, then open the browser");
+        gridFsStatus.getStyleClass().add("meta-label");
+
+        VBox pane = new VBox(8, hint, open, gridFsStatus);
+        pane.setPadding(new Insets(8));
+        open.setOnAction(e -> {
+            if (!service.isConnected() || activeDb == null) {
+                gridFsStatus.setText("Connect and select a database first");
+                return;
+            }
+            service.useDatabase(activeDb);
+            GridFsFileSystem gridFs = new GridFsFileSystem(service);
+            com.nexuslink.ui.files.DualPaneBrowser browser = new com.nexuslink.ui.files.DualPaneBrowser(
+                    new com.nexuslink.ui.files.LocalFileSystem(), gridFs, gridFs);
+            browser.setLogger(logger);
+            VBox.setVgrow(browser, Priority.ALWAYS);
+            pane.getChildren().setAll(hint, browser);
+            gridFsStatus.setText("");
+            logger.accept("Mongo GridFS browser opened on " + activeDb);
+        });
+        return pane;
     }
 
     /** Runs the shell line, printing the command and its reply into the transcript. */
