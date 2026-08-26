@@ -13,6 +13,8 @@ import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.JdbcTlsParams;
 import com.nexuslink.protocol.db.JdbcTlsSpec;
+import com.nexuslink.protocol.db.CallResult;
+import com.nexuslink.protocol.db.CallableSpec;
 import com.nexuslink.protocol.db.QueryResult;
 import com.nexuslink.protocol.db.ResultGridExporter;
 import com.nexuslink.protocol.db.SqlInsertBuilder;
@@ -277,7 +279,10 @@ public final class SqlClientView extends BorderPane {
         createIndex.setOnAction(e -> createIndexDialog());
         MenuItem exportStructure = new MenuItem("Export Structure…");
         exportStructure.setOnAction(e -> exportStructureDialog());
-        structureBtn.getItems().addAll(createTable, createIndex, new SeparatorMenuItem(), exportStructure);
+        MenuItem runProcedure = new MenuItem("Run Procedure…");
+        runProcedure.setOnAction(e -> runProcedureDialog(null));
+        structureBtn.getItems().addAll(createTable, createIndex, new SeparatorMenuItem(),
+                runProcedure, new SeparatorMenuItem(), exportStructure);
 
         // Database picker — fills the URL template; flags on-demand drivers that need loading.
         dbCombo.setId("sqlDbCombo");
@@ -773,6 +778,14 @@ public final class SqlClientView extends BorderPane {
             menu.getItems().add(drop);
             return menu;
         }
+        if (id.startsWith("proc:") || id.startsWith("func:")) {
+            String name = id.substring(id.indexOf(':') + 1);
+            MenuItem run = new MenuItem("Run…");
+            run.setOnAction(e -> runProcedureDialog(name));
+            MenuItem copy = new MenuItem("Copy name");
+            copy.setOnAction(e -> copyToClipboard(name));
+            return new ContextMenu(run, copy);
+        }
         if (id.startsWith("col:")) {
             String rest = id.substring("col:".length());
             int dot = rest.lastIndexOf('.');   // "table.column" — column names carry no dot
@@ -791,6 +804,125 @@ public final class SqlClientView extends BorderPane {
             return new ContextMenu(copy, insert, new SeparatorMenuItem(), rename, drop);
         }
         return null;
+    }
+
+    /**
+     * Runs a stored procedure or function through a {@code CallableStatement}. The routine's
+     * parameters are read from {@link JdbcService#describeProcedure} so the form matches what the
+     * database declares — one row per parameter with its direction and type, editable only where a
+     * value is actually passed in. On OK the call runs off the FX thread; OUT/INOUT values land in
+     * the Messages tab and any returned rows in the result grid.
+     *
+     * @param routine the routine to run, or {@code null} to pick one from the database's list
+     */
+    private void runProcedureDialog(String routine) {
+        if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
+        String name = routine;
+        if (name == null) {
+            List<String> routines = new ArrayList<>();
+            try {
+                routines.addAll(service.listProcedures());
+                for (String f : service.listFunctions()) if (!routines.contains(f)) routines.add(f);
+            } catch (Exception ex) {
+                statusLabel.setText("Could not list routines: " + ex.getMessage());
+                return;
+            }
+            if (routines.isEmpty()) {
+                statusLabel.getStyleClass().setAll("status-4xx");
+                statusLabel.setText("This database reports no stored procedures or functions");
+                return;
+            }
+            ChoiceDialog<String> pick = new ChoiceDialog<>(routines.get(0), routines);
+            pick.setTitle("Run Procedure");
+            pick.setHeaderText("Choose a procedure or function to run");
+            if (getScene() != null) pick.initOwner(getScene().getWindow());
+            name = pick.showAndWait().orElse(null);
+            if (name == null) return;
+        }
+
+        CallableSpec spec;
+        try {
+            spec = service.describeProcedure(name);
+        } catch (Exception ex) {
+            statusLabel.getStyleClass().setAll("status-4xx");
+            statusLabel.setText("Could not read the parameters of " + name + ": " + ex.getMessage());
+            return;
+        }
+
+        GridPane form = new GridPane();
+        form.setHgap(8);
+        form.setVgap(6);
+        form.setPadding(new Insets(12));
+        form.addRow(0, boldLabel("Parameter"), boldLabel("Direction"), boldLabel("Type"), boldLabel("Value"));
+        List<TextField> valueFields = new ArrayList<>();
+        int row = 1;
+        for (CallableSpec.Param p : spec.params()) {
+            TextField value = new TextField();
+            value.setPromptText(p.direction().isInput() ? "leave blank for NULL" : "set by the routine");
+            value.setDisable(!p.direction().isInput());
+            if (p.direction().isInput()) valueFields.add(value);
+            form.addRow(row++, new Label(p.name()), new Label(p.direction().name()),
+                    new Label(p.typeLabel() == null ? "" : p.typeLabel()), value);
+        }
+        Label call = new Label(spec.sql());
+        call.getStyleClass().add("muted");
+        form.add(call, 0, row, 4, 1);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Run " + (spec.isFunction() ? "function" : "procedure"));
+        dialog.setHeaderText(spec.routine());
+        dialog.getDialogPane().setContent(form);
+        dialog.getDialogPane().getButtonTypes().setAll(ButtonType.OK, ButtonType.CANCEL);
+        if (getScene() != null) dialog.initOwner(getScene().getWindow());
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) return;
+
+        List<String> values = new ArrayList<>();
+        for (TextField f : valueFields) {
+            String text = f.getText();
+            values.add(text == null || text.isEmpty() ? null : text);
+        }
+        runCall(spec.withValues(values));
+    }
+
+    private static Label boldLabel(String text) {
+        Label l = new Label(text);
+        l.setStyle("-fx-font-weight: bold;");
+        return l;
+    }
+
+    /** Executes a described call off the FX thread and renders its rows, OUT values and outcome. */
+    private void runCall(CallableSpec spec) {
+        statusLabel.getStyleClass().setAll("muted");
+        statusLabel.setText("Calling " + spec.routine() + "…");
+        Task<CallResult> task = new Task<>() {
+            @Override protected CallResult call() { return service.call(spec); }
+        };
+        task.setOnSucceeded(e -> {
+            CallResult r = task.getValue();
+            StringBuilder msg = new StringBuilder(spec.sql()).append('\n');
+            if (r.failed()) {
+                msg.append("✖ ").append(r.errorMessage());
+                statusLabel.getStyleClass().setAll("status-err");
+                statusLabel.setText("Call failed: " + r.errorMessage());
+            } else {
+                r.outputs().forEach((k, v) -> msg.append(k).append(" = ").append(v).append('\n'));
+                if (r.resultSet() == null && r.outputs().isEmpty()) {
+                    msg.append(r.updateCount()).append(" row(s) affected\n");
+                }
+                statusLabel.getStyleClass().setAll("status-2xx");
+                statusLabel.setText(spec.routine() + " → " + r.summary());
+                if (r.resultSet() != null) { renderResult(r.resultSet()); setEditContext(null); }
+            }
+            messagesArea.setText(msg.toString());
+            selectTab(r.failed() || r.resultSet() == null ? "Messages" : "Result");
+            logger.accept("SQL call " + spec.sql() + " → " + r.summary());
+            recordTabHistory(spec.sql(), r.failed() ? "✖ " + r.errorMessage() : r.summary());
+        });
+        task.setOnFailed(e -> {
+            statusLabel.getStyleClass().setAll("status-err");
+            statusLabel.setText("Call failed: " + task.getException().getMessage());
+        });
+        runBg(task);
     }
 
     private void copyToClipboard(String text) {
@@ -1977,9 +2109,14 @@ public final class SqlClientView extends BorderPane {
 
     /** Adds an executed statement to this tab's history, newest first and capped at the limit. */
     private void recordTabHistory(String statement, QueryResult r) {
-        if (statement == null || statement.isBlank() || r == null) return;
+        if (r == null) return;
+        recordTabHistory(statement, r.failed() ? "✖ " + r.errorMessage() : r.summary());
+    }
+
+    /** Adds an already-summarised entry (used by procedure calls, which aren't plain statements). */
+    private void recordTabHistory(String statement, String outcome) {
+        if (statement == null || statement.isBlank()) return;
         String time = java.time.LocalTime.now().withNano(0).toString();
-        String outcome = r.failed() ? "✖ " + r.errorMessage() : r.summary();
         tabHistory.add(0, new HistoryRow(time, statement.strip().replaceAll("\\s+", " "), outcome));
         while (tabHistory.size() > HISTORY_LIMIT) tabHistory.remove(tabHistory.size() - 1);
     }

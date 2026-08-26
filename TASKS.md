@@ -1114,7 +1114,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 #### 8.1.3 SQL Developer parity — **audit + backlog: `.agent-os/specs/2026-08-25-sql-developer-parity/`**
 > Full capability table and prioritised gaps live in the spec. Summary of what remains:
 
-- [ ] **P1** Execute a stored procedure/function with an IN/OUT parameter form (`CallableStatement`)
+- [x] **P1** Execute a stored procedure/function with an IN/OUT parameter form (`CallableStatement`) —
+      pure `CallableSpec` (routine + ordered `Param`s with `IN`/`OUT`/`INOUT` direction, JDBC type and the
+      database's own type label) renders the driver-portable escape syntax `{call p(?, ?)}` /
+      `{? = call f(?)}`; `JdbcService.describeProcedure` builds it straight from
+      `DatabaseMetaData.getProcedureColumns`, and `JdbcService.call` binds the INs, registers the OUTs and
+      returns a `CallResult` (out values by name + any result set + update count). Engines that hand a
+      function's return back as a one-cell result set instead of an OUT parameter are handled.
+      UI: **Structure ▸ Run Procedure…** and **Run…** on a procedure/function in the schema tree open a
+      parameter form (direction + type per row, value editable only where one is passed in, live call
+      preview); rows land in the grid, OUT values in Messages. **10 spec tests + 6 end-to-end vs H2**
 - [ ] **P1** Server output panel (`DBMS_OUTPUT`) drained after each execution
 - [x] **P1** Export as INSERT statements / XML / HTML / delimited-with-options; export a whole table —
       `ResultGridExporter` gained `toInsertStatements` (dialect-agnostic, via `SqlInsertBuilder`, NULL for

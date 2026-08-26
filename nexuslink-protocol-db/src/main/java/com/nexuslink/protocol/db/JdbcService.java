@@ -207,6 +207,97 @@ public final class JdbcService implements AutoCloseable {
         }
     }
 
+    /**
+     * Reads a routine's parameter list from {@link DatabaseMetaData}, producing the
+     * {@link CallableSpec} the parameter form is built from. A {@code procedureColumnReturn} column
+     * makes it a function (rendered as {@code {? = call …}}); everything else becomes an IN, OUT or
+     * INOUT parameter carrying the database's own type name. Pass the bare routine name — the
+     * {@code  (function)} suffix from {@link #listProcedures()}/{@link #listFunctions()} is stripped for you.
+     */
+    public CallableSpec describeProcedure(String routine) throws SQLException {
+        String name = routine == null ? "" : routine.replace("  (function)", "").trim();
+        DatabaseMetaData md = connection.getMetaData();
+        List<CallableSpec.Param> params = new ArrayList<>();
+        boolean function = false;
+        try (ResultSet rs = md.getProcedureColumns(null, null, name, "%")) {
+            while (rs.next()) {
+                short kind = rs.getShort("COLUMN_TYPE");
+                if (kind == DatabaseMetaData.procedureColumnResult) continue; // result-set column, not a parameter
+                String pname = rs.getString("COLUMN_NAME");
+                int sqlType = rs.getInt("DATA_TYPE");
+                String typeLabel = rs.getString("TYPE_NAME");
+                if (kind == DatabaseMetaData.procedureColumnReturn) {
+                    function = true;
+                    params.add(0, new CallableSpec.Param(
+                            pname == null || pname.isBlank() ? "return" : pname,
+                            CallableSpec.Direction.OUT, sqlType, typeLabel, null));
+                    continue;
+                }
+                CallableSpec.Direction dir = switch (kind) {
+                    case DatabaseMetaData.procedureColumnOut -> CallableSpec.Direction.OUT;
+                    case DatabaseMetaData.procedureColumnInOut -> CallableSpec.Direction.INOUT;
+                    default -> CallableSpec.Direction.IN;
+                };
+                params.add(new CallableSpec.Param(
+                        pname == null || pname.isBlank() ? "p" + (params.size() + 1) : pname,
+                        dir, sqlType, typeLabel, null));
+            }
+        }
+        return function ? CallableSpec.function(name, params) : CallableSpec.procedure(name, params);
+    }
+
+    /**
+     * Executes a stored procedure or function. IN values are bound as strings (drivers coerce, which
+     * is more portable than guessing a type here) with a blank/null value bound as SQL NULL; OUT and
+     * INOUT parameters are registered with the type from {@code spec} and read back afterwards. A
+     * routine that returns rows has them in {@link CallResult#resultSet()}.
+     */
+    public CallResult call(CallableSpec spec) {
+        long start = System.nanoTime();
+        if (!isConnected()) return CallResult.error("Not connected", 0);
+        List<CallableSpec.Param> params = spec.params();
+        try (CallableStatement cs = connection.prepareCall(spec.sql())) {
+            for (int i = 0; i < params.size(); i++) {
+                CallableSpec.Param p = params.get(i);
+                int idx = i + 1;
+                if (p.direction().isOutput()) cs.registerOutParameter(idx, p.sqlType());
+                if (p.direction().isInput()) {
+                    if (p.value() == null) cs.setNull(idx, java.sql.Types.VARCHAR);
+                    else cs.setString(idx, p.value());
+                }
+            }
+            boolean hasResultSet = cs.execute();
+            QueryResult rows = null;
+            // The result set is read but deliberately left open until the OUT parameters have been
+            // collected: some drivers (H2 among them) tie the callable's output access to it, and
+            // closing the statement below closes the result set anyway.
+            if (hasResultSet) rows = readResultSet(cs.getResultSet(), ms(start));
+            Map<String, String> outputs = new LinkedHashMap<>();
+            boolean first = true;
+            for (int i = 0; i < params.size(); i++) {
+                CallableSpec.Param p = params.get(i);
+                if (!p.direction().isOutput()) continue;
+                String rendered;
+                try {
+                    Object v = cs.getObject(i + 1);
+                    rendered = v == null ? "NULL" : v.toString();
+                } catch (SQLException outUnsupported) {
+                    // Some engines (H2's function aliases, for one) hand a function's return value
+                    // back as a one-cell result set rather than through an OUT parameter. Fall back
+                    // to that cell for the first output rather than losing the value.
+                    if (!first || rows == null || rows.rows().isEmpty()) throw outUnsupported;
+                    rendered = rows.rows().get(0).get(0);
+                    rows = null;
+                }
+                outputs.put(p.name(), rendered);
+                first = false;
+            }
+            return CallResult.of(outputs, rows, hasResultSet ? 0 : cs.getUpdateCount(), ms(start));
+        } catch (SQLException e) {
+            return CallResult.error(e.getMessage(), ms(start));
+        }
+    }
+
     /** Lists table names (and views) in the current schema. */
     public List<String> listTables() throws SQLException {
         List<String> tables = new ArrayList<>();
