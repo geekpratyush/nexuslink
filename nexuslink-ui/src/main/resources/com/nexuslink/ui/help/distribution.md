@@ -6,19 +6,21 @@ a build tool, or an installer. You need **Java 21 or newer** and one script.
 ## First run
 
 Your admin gives you a launcher — `nexuslink.sh` (Linux/macOS), or `nexuslink.bat` and
-`nexuslink.ps1` together (Windows) — and a repository URL. They may also point you at an internal
-web page that offers all three as downloads.
+`nexuslink.ps1` together (Windows). They may also point you at an internal web page that offers all
+three as downloads.
 
 ```bash
-export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
 ./nexuslink.sh
 ```
 
 The first run downloads the application into `~/.nexuslink/runtime` and starts it. Every run after
 that uses the cached copy — no network, no wait.
 
-If your admin has shipped a `~/.nexuslink/bootstrap.conf`, even the URL is already set and you just
-run the script.
+**Usually there is nothing to configure.** If Maven works on this machine, the launcher reads the
+repository and its credentials from `~/.m2/settings.xml` — the mirror that covers everything, else
+the first repository a profile declares, with the matching `<server>` for credentials. It only needs
+telling when there is no Maven set-up: `./nexuslink.sh --repo <url>`, an exported
+`NEXUSLINK_REPO_URL`, or a `~/.nexuslink/bootstrap.conf` your admin ships.
 
 ## Day-to-day
 
@@ -42,13 +44,13 @@ at a relative path: `NEXUSLINK_HOME=./nexuslink-cache ./nexuslink.sh`.
 
 ## Settings
 
-All optional except the repository URL:
+All optional — including the repository, which falls back to `~/.m2/settings.xml`:
 
 | Variable | Meaning |
 |---|---|
-| `NEXUSLINK_REPO_URL` | The Maven repository to fetch from |
+| `NEXUSLINK_REPO_URL` | The Maven repository to fetch from. Without it, `~/.m2/settings.xml` is read. |
 | `NEXUSLINK_VERSION` | `RELEASE` (default), `LATEST`, or an exact version |
-| `NEXUSLINK_USER` / `NEXUSLINK_TOKEN` | Repository credentials, if it needs them |
+| `NEXUSLINK_USER` / `NEXUSLINK_TOKEN` | Repository credentials, if it needs them. Without them, the `<server>` in `settings.xml` is used. |
 | `NEXUSLINK_HOME` | Where the cache lives (default `~/.nexuslink`) |
 | `NEXUSLINK_JAVA_OPTS` | Extra JVM options, e.g. `-Xmx2g` |
 | `JAVA_HOME` | The JDK to run with, if not the one on `PATH` |
@@ -64,8 +66,9 @@ All optional except the repository URL:
 
 ## Troubleshooting
 
-**"set NEXUSLINK_REPO_URL…"** — the script does not know where to fetch from. Export the variable, or
-ask your admin for the `bootstrap.conf`.
+**"no repository found in ~/.m2/settings.xml"** — this machine has no Maven repository configured and
+no `NEXUSLINK_REPO_URL`. Pass `--repo <url>`, export the variable, or ask your admin for the
+`bootstrap.conf`.
 
 **"checksum mismatch"** — what arrived does not match the repository. Usually a proxy interfering;
 retry, and if it persists tell whoever maintains the repository.

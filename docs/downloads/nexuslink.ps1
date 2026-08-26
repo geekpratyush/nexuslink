@@ -44,6 +44,9 @@ OTHER
 
 CONFIGURATION  (environment, or KEY=VALUE lines in %USERPROFILE%\.nexuslink\bootstrap.conf)
   NEXUSLINK_REPO_URL    Maven repository base, e.g. https://artifactory.corp/artifactory/libs-release
+                        Optional: with Maven already set up, the repository and its credentials are
+                        read from ~/.m2\settings.xml (a mirror of *, else the first profile
+                        repository, with the matching <server> for credentials).
   NEXUSLINK_VERSION     Version to run, or RELEASE / LATEST          (default: RELEASE)
   NEXUSLINK_USER        Repository username                          (optional)
   NEXUSLINK_TOKEN       Repository password or API token             (optional)
@@ -110,6 +113,62 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 if ($action -eq 'help') { Show-Usage; exit 0 }
 
 New-Item -ItemType Directory -Force -Path $cache | Out-Null
+
+# ---- the repository, from Maven's own settings --------------------------------------------------
+# Where a machine already builds with Maven, the repository and its credentials are configured once
+# in settings.xml and nothing else should have to be set. Read them from there when neither --repo
+# nor NEXUSLINK_REPO_URL says otherwise: a mirror that covers everything wins, then the first
+# repository declared in a profile. Credentials come from the <server> whose id matches.
+
+function Get-MavenSettingsPath {
+    if ($env:MAVEN_SETTINGS -and (Test-Path $env:MAVEN_SETTINGS)) { return $env:MAVEN_SETTINGS }
+    $user = Join-Path $HOME '.m2\settings.xml'
+    if (Test-Path $user) { return $user }
+    return $null
+}
+
+# Returns @{ Id = ...; Url = ... } for the repository Maven would use, or $null.
+function Get-MavenSettingsRepo($settingsPath) {
+    try { $xml = [xml](Get-Content -Raw -Path $settingsPath) } catch { return $null }
+    $covering = @('*', 'external:*', 'central')
+    foreach ($m in @($xml.settings.mirrors.mirror)) {
+        if ($m -and $m.url -and ($m.mirrorOf -split ',' | Where-Object { $covering -contains $_.Trim() })) {
+            return @{ Id = $m.id; Url = $m.url }
+        }
+    }
+    foreach ($p in @($xml.settings.profiles.profile)) {
+        foreach ($r in @($p.repositories.repository)) {
+            if ($r -and $r.url) { return @{ Id = $r.id; Url = $r.url } }
+        }
+    }
+    return $null
+}
+
+# Fills NEXUSLINK_USER / NEXUSLINK_TOKEN from the <server> with this id, if they are not already set.
+function Set-MavenSettingsCredentials($settingsPath, $id) {
+    if (-not $id -or $env:NEXUSLINK_USER -or $env:NEXUSLINK_TOKEN) { return }
+    try { $xml = [xml](Get-Content -Raw -Path $settingsPath) } catch { return }
+    foreach ($srv in @($xml.settings.servers.server)) {
+        if ($srv -and $srv.id -eq $id) {
+            $env:NEXUSLINK_USER  = $srv.username
+            $env:NEXUSLINK_TOKEN = $srv.password
+            return
+        }
+    }
+}
+
+$repoSource = if ($repoUrl -and $repoUrl -ne $env:NEXUSLINK_REPO_URL) { '--repo' } else { 'NEXUSLINK_REPO_URL' }
+if (-not $repoUrl) {
+    $settingsPath = Get-MavenSettingsPath
+    if ($settingsPath) {
+        $found = Get-MavenSettingsRepo $settingsPath
+        if ($found) {
+            Set-MavenSettingsCredentials $settingsPath $found.Id
+            $repoUrl = $found.Url
+            $repoSource = $settingsPath
+        }
+    }
+}
 
 # ---- cache management ---------------------------------------------------------------------------
 
@@ -194,7 +253,7 @@ function Fetch($url, $dest) {
 function Resolve-Version {
     $meta = Join-Path $cache '.metadata.xml'
     try { Fetch "$repoUrl/$GroupPath/$Artifact/maven-metadata.xml" $meta }
-    catch { Fail "could not read maven-metadata.xml from $repoUrl - check NEXUSLINK_REPO_URL and your credentials" }
+    catch { Fail "could not read maven-metadata.xml from $repoUrl (from $repoSource) - check the repository and your credentials" }
     $xml = [xml](Get-Content $meta)
     $tag = if ($version -eq 'LATEST') { $xml.metadata.versioning.latest } else { $xml.metadata.versioning.release }
     if (-not $tag) { $tag = ($xml.metadata.versioning.versions.version | Select-Object -Last 1) }
@@ -226,7 +285,7 @@ if ($version -in @('RELEASE', 'LATEST')) {
         # No repository, but this machine may have built the project - use that rather than failing.
         $fallback = Get-LocalJar $null
         if (-not $fallback) {
-            Fail 'set NEXUSLINK_REPO_URL to your repository, or run dist/publish.sh --local first (see --help)'
+            Fail 'no repository found in ~/.m2/settings.xml - set NEXUSLINK_REPO_URL or pass --repo, or run dist/publish.sh --local first (see --help)'
         }
         Write-Host 'nexuslink: no repository configured - running the local ~/.m2 build'
         if ($action -eq 'where') { Write-Output $fallback; exit 0 }
@@ -246,7 +305,7 @@ if ($update -or -not (Test-Path $jar)) {
     if ($offline) {
         if (-not (Test-Path $jar)) { Fail "$Artifact $version is not cached, and --offline was requested" }
     } else {
-        if (-not $repoUrl) { Fail 'set NEXUSLINK_REPO_URL to your repository (see --help)' }
+        if (-not $repoUrl) { Fail 'no repository found in ~/.m2/settings.xml - set NEXUSLINK_REPO_URL or pass --repo (see --help)' }
         $file = "$Artifact-$version-$Classifier.jar"
         if ($version -like '*-SNAPSHOT') {
             $snapshotFile = Resolve-SnapshotFile $version

@@ -315,6 +315,14 @@
                                     <input>${project.build.directory}/jpackage-input</input>
                                     <mainJar>nexuslink.jar</mainJar>
                                     <mainClass>com.nexuslink.app.Main</mainClass>
+                                    <!--
+                                      The application icon. jpackage takes one format per platform:
+                                      .ico on Windows, .icns on macOS, .png everywhere else — so the
+                                      path is a property the os profiles below set. Both files are
+                                      generated from nexuslink-ui/.../images/logo.svg; see
+                                      docs/PACKAGING.md for regenerating them.
+                                    -->
+                                    <icon>${jpackage.icon}</icon>
                                     <destination>${project.build.directory}/dist</destination>
                                 </configuration>
                             </execution>
@@ -322,6 +330,26 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+
+        <!--
+          The icon format jpackage will accept, per platform. macOS needs .icns, which only Apple's
+          tooling produces; until one is checked in, a mac build falls back to the .png and jpackage
+          uses its default icon rather than failing.
+        -->
+        <profile>
+            <id>icon-windows</id>
+            <activation><os><family>windows</family></os></activation>
+            <properties>
+                <jpackage.icon>${project.basedir}/../dist/icons/nexuslink.ico</jpackage.icon>
+            </properties>
+        </profile>
+        <profile>
+            <id>icon-other</id>
+            <activation><os><family>!windows</family></os></activation>
+            <properties>
+                <jpackage.icon>${project.basedir}/../dist/icons/nexuslink.png</jpackage.icon>
+            </properties>
         </profile>
     </profiles>
 </project>

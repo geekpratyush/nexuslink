@@ -2,6 +2,7 @@ package com.nexuslink.app;
 
 import com.nexuslink.ui.help.HelpDialog;
 import com.nexuslink.ui.main.MainWindow;
+import com.nexuslink.ui.util.AppIcons;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
@@ -15,13 +16,14 @@ public class NexusLinkLauncher extends Application {
     public void start(Stage stage) {
         MainWindow window = new MainWindow();
         stage.setTitle("NexusLink — Universal Connectivity Workbench");
+        AppIcons.apply(stage);          // task bar, alt-tab and window decoration all read this
         stage.setScene(window.createScene());
         // Open maximized: the workbench is a multi-pane tool — sidebar, object tree, editor, results
         // — and the scene's own 1180×760 is the restore size when the window is un-maximized.
         stage.setMaximized(true);
         stage.show();
 
-        // Demo/deep-link hooks (see RUN.md): open Help at a topic, or run a Help search.
+        // Demo/deep-link hooks (see docs/RUN.md): open Help at a topic, or run a Help search.
         String autoHelp = System.getProperty("nexuslink.autohelp");
         String autoSearch = System.getProperty("nexuslink.autosearch");
         if (autoSearch != null) Platform.runLater(() -> HelpDialog.openWithSearch(autoSearch));

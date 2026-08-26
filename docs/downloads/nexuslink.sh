@@ -44,6 +44,9 @@ OTHER
 
 CONFIGURATION  (environment, or KEY=VALUE lines in ~/.nexuslink/bootstrap.conf)
   NEXUSLINK_REPO_URL    Maven repository base, e.g. https://artifactory.corp/artifactory/libs-release
+                        Optional: with Maven already set up, the repository and its credentials are
+                        read from ~/.m2/settings.xml (a mirror of *, else the first profile
+                        repository, with the matching <server> for credentials).
   NEXUSLINK_VERSION     Version to run, or RELEASE / LATEST          (default: RELEASE)
   NEXUSLINK_USER        Repository username                          (optional)
   NEXUSLINK_TOKEN       Repository password or API token             (optional)
@@ -110,6 +113,74 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$CACHE"
+
+# ---- the repository, from Maven's own settings --------------------------------------------------
+# Where a machine already builds with Maven, the repository and its credentials are configured once
+# in settings.xml and nothing else should have to be set. Read them from there when neither --repo
+# nor NEXUSLINK_REPO_URL says otherwise: a mirror that covers everything wins, then the first
+# repository declared in a profile. Credentials come from the <server> whose id matches.
+
+# Prints "<id> <url>" for the repository Maven would use, or nothing.
+maven_settings_repo() {
+  local file
+  for file in "${MAVEN_SETTINGS:-$HOME/.m2/settings.xml}" "${M2_HOME:-/usr/share/maven}/conf/settings.xml"; do
+    [[ -r "$file" ]] || continue
+    local flat
+    flat="$(tr -d '\n\r' < "$file" | sed 's/>[[:space:]]*</></g')"
+
+    # a mirror of everything is what the machine is meant to go through
+    local block id url of
+    while IFS= read -r block; do
+      [[ -z "$block" ]] && continue
+      of="$(sed -n 's:.*<mirrorOf>\(.*\)</mirrorOf>.*:\1:p' <<< "$block")"
+      case ",$of," in
+        *,'*',*|*,external:'*',*|*,central,*) ;;
+        *) continue ;;
+      esac
+      id="$(sed -n 's:.*<id>\([^<]*\)</id>.*:\1:p' <<< "$block" | head -1)"
+      url="$(sed -n 's:.*<url>\([^<]*\)</url>.*:\1:p' <<< "$block" | head -1)"
+      [[ -n "$url" ]] && { printf '%s %s' "$id" "$url"; return 0; }
+    done < <(sed -e 's:<mirror>:\n<mirror>:g' <<< "$flat" | grep '<mirror>')
+
+    # otherwise the first repository a profile declares
+    while IFS= read -r block; do
+      [[ -z "$block" ]] && continue
+      id="$(sed -n 's:.*<id>\([^<]*\)</id>.*:\1:p' <<< "$block" | head -1)"
+      url="$(sed -n 's:.*<url>\([^<]*\)</url>.*:\1:p' <<< "$block" | head -1)"
+      [[ -n "$url" ]] && { printf '%s %s' "$id" "$url"; return 0; }
+    done < <(sed -e 's:<repository>:\n<repository>:g' <<< "$flat" | grep '<repository>')
+  done
+  return 1
+}
+
+# Fills NEXUSLINK_USER / NEXUSLINK_TOKEN from the <server> with this id, if they are not already set.
+maven_settings_credentials() {
+  local want="$1" file flat block id
+  [[ -z "$want" || -n "${NEXUSLINK_USER:-}" || -n "${NEXUSLINK_TOKEN:-}" ]] && return 0
+  for file in "${MAVEN_SETTINGS:-$HOME/.m2/settings.xml}"; do
+    [[ -r "$file" ]] || continue
+    flat="$(tr -d '\n\r' < "$file" | sed 's/>[[:space:]]*</></g')"
+    while IFS= read -r block; do
+      id="$(sed -n 's:.*<id>\([^<]*\)</id>.*:\1:p' <<< "$block" | head -1)"
+      [[ "$id" == "$want" ]] || continue
+      NEXUSLINK_USER="$(sed -n 's:.*<username>\([^<]*\)</username>.*:\1:p' <<< "$block" | head -1)"
+      NEXUSLINK_TOKEN="$(sed -n 's:.*<password>\([^<]*\)</password>.*:\1:p' <<< "$block" | head -1)"
+      export NEXUSLINK_USER NEXUSLINK_TOKEN
+      return 0
+    done < <(sed -e 's:<server>:\n<server>:g' <<< "$flat" | grep '<server>')
+  done
+  return 0
+}
+
+REPO_SOURCE="NEXUSLINK_REPO_URL"
+[[ -n "$REPO_URL" && "$REPO_URL" != "${NEXUSLINK_REPO_URL:-}" ]] && REPO_SOURCE="--repo"
+if [[ -z "$REPO_URL" ]]; then
+  if from_settings="$(maven_settings_repo)"; then
+    maven_settings_credentials "${from_settings%% *}"
+    REPO_URL="${from_settings#* }"
+    REPO_SOURCE="~/.m2/settings.xml"
+  fi
+fi
 
 # ---- local ~/.m2 --------------------------------------------------------------------------------
 # The developer loop: dist/publish.sh installs the build into ~/.m2, and this runs that copy with no
@@ -244,7 +315,7 @@ sha256_of() {
 resolve_version() {
   local meta="$CACHE/.metadata.xml"
   fetch "$REPO_URL/$GROUP_PATH/$ARTIFACT/maven-metadata.xml" "$meta" \
-    || die "could not read maven-metadata.xml from $REPO_URL — check NEXUSLINK_REPO_URL and your credentials"
+    || die "could not read maven-metadata.xml from $REPO_URL (from $REPO_SOURCE) — check the repository and your credentials"
   local tag="release"
   [[ "$VERSION" == "LATEST" ]] && tag="latest"
   local resolved
@@ -292,7 +363,7 @@ if [[ "$VERSION" == "RELEASE" || "$VERSION" == "LATEST" ]]; then
       # No repository, but this machine may have built the project — use that rather than failing.
       fallback="$(local_jar "" || true)"
       [[ -n "$fallback" ]] && { log "nexuslink: no repository configured — running the local ~/.m2 build"; JAR="$fallback"; }
-      [[ -z "$fallback" ]] && die "set NEXUSLINK_REPO_URL to your Artifactory repository, or run ./dist/publish.sh --local first (see --help)"
+      [[ -z "$fallback" ]] && die "no repository found in ~/.m2/settings.xml — set NEXUSLINK_REPO_URL or pass --repo, or run ./dist/publish.sh --local first (see --help)"
     fi
     if [[ -z "${JAR:-}" ]]; then
       VERSION="$(resolve_version)"
@@ -309,7 +380,7 @@ if [[ $UPDATE -eq 1 || ! -f "$JAR" ]]; then
   if [[ $OFFLINE -eq 1 ]]; then
     [[ -f "$JAR" ]] || die "$ARTIFACT $VERSION is not cached, and --offline was requested"
   else
-    [[ -z "$REPO_URL" ]] && die "set NEXUSLINK_REPO_URL to your Artifactory repository (see --help)"
+    [[ -z "$REPO_URL" ]] && die "no repository found in ~/.m2/settings.xml — set NEXUSLINK_REPO_URL or pass --repo (see --help)"
     file="$ARTIFACT-$VERSION-$CLASSIFIER.jar"
     if [[ "$VERSION" == *-SNAPSHOT ]]; then
       snapshot_file="$(resolve_snapshot_file "$VERSION" || true)"

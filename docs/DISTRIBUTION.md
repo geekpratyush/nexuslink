@@ -113,12 +113,26 @@ offers all three as downloads:
 They need **Java 21+** and nothing else.
 
 ```bash
-export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
 ./nexuslink.sh                 # downloads on the first run, then just runs
 ```
 
-To avoid even that, drop a `~/.nexuslink/bootstrap.conf` next to the script (an admin can ship one
-already filled in — the environment still overrides it):
+**On a machine where Maven already works, that is all there is to it.** The launcher resolves the
+repository in this order:
+
+1. `--repo <url>` on the command line.
+2. `NEXUSLINK_REPO_URL` in the environment.
+3. `~/.nexuslink/bootstrap.conf`, if your administrators ship one.
+4. **Maven's own `~/.m2/settings.xml`** — the `<mirror>` whose `<mirrorOf>` covers everything
+   (`*`, `external:*` or `central`), else the first `<repository>` a profile declares. Credentials
+   come from the `<server>` whose `<id>` matches, so a token already configured for Maven is reused
+   rather than repeated.
+
+Step 4 is why nothing has to be set in a corporate environment: the same settings that let `mvn`
+reach Artifactory let the launcher reach it. `MAVEN_SETTINGS` overrides which settings file is read.
+
+If you would rather pin the launcher explicitly — a machine with no Maven set-up, or a repository
+different from the build one — drop a `~/.nexuslink/bootstrap.conf` next to the script (an admin can
+ship one already filled in; the environment still overrides it):
 
 ```
 NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
@@ -139,7 +153,8 @@ NEXUSLINK_TOKEN=...
 | `nexuslink.sh --local` | Run the build installed in `~/.m2` by `publish.sh` — no repository needed. |
 | `nexuslink.sh --help` | The full usage text, from the script itself. |
 
-Everything is configurable by environment variable: `NEXUSLINK_REPO_URL`, `NEXUSLINK_VERSION`
+Everything is configurable by environment variable — none of it required when Maven is set up:
+`NEXUSLINK_REPO_URL`, `NEXUSLINK_VERSION`
 (`RELEASE`, `LATEST`, or an exact version), `NEXUSLINK_USER` / `NEXUSLINK_TOKEN`, `NEXUSLINK_HOME`
 (default `~/.nexuslink`), `NEXUSLINK_JAVA_OPTS`, and `JAVA_HOME`. Point `NEXUSLINK_HOME` at a
 relative path — `NEXUSLINK_HOME=./nexuslink-cache` — to keep the download in the current folder
@@ -175,7 +190,8 @@ Both halves were exercised against a real Maven deployment, not mocked:
   (window confirmed at 1920x1012 via `wmctrl`).
 - The failure paths were checked too: a tampered artifact is caught by the checksum and refused
   (exit 1, nothing cached), a missing version reports the URL it tried, `--offline` with an empty
-  cache says so, and a missing `NEXUSLINK_REPO_URL` explains what to set.
+  cache says so, and a repository that could be found neither in the environment nor in
+  `settings.xml` explains what to set.
 
 ## The GitHub Pages site
 

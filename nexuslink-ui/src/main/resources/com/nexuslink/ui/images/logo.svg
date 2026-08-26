@@ -15,15 +15,12 @@
   <rect x="1.5" y="1.5" width="509" height="509" rx="114.5" fill="none" stroke="#1E293B" stroke-width="3"/>
 
   <!-- the canopy: one console over everything below it -->
-  <path d="M 120 200 C 180 112 332 112 392 200" fill="none" stroke="#E31837"
-        stroke-width="24" stroke-linecap="round"/>
-
-  <!-- the link: an N drawn as three connected runs -->
-  <g fill="none" stroke="url(#blue)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 160 396 L 160 250"/>
-    <path d="M 160 250 L 352 396"/>
-    <path d="M 352 396 L 352 250"/>
+  <path d="M 116 196 C 178 100 334 100 396 196" fill="none" stroke="#E31837" stroke-width="36" stroke-linecap="round"/>
+  <g fill="none" stroke="url(#blue)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 158 400 L 158 246"/>
+    <path d="M 158 246 L 354 400"/>
+    <path d="M 354 400 L 354 246"/>
   </g>
-  <circle cx="160" cy="250" r="17" fill="#93C5FD"/>
-  <circle cx="352" cy="396" r="17" fill="#93C5FD"/>
+  <circle cx="158" cy="246" r="23" fill="#93C5FD"/>
+  <circle cx="354" cy="400" r="23" fill="#93C5FD"/>
 </svg>

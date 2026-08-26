@@ -209,9 +209,11 @@
   <div class="wrap reveal">
     <p class="eyebrow">Install</p>
     <h2>Run it straight from Artifactory</h2>
-    <p class="lede">Download one launcher, put it anywhere, run it. On the first run it fetches the
-      application from your organisation's repository and caches it; every run after that starts from
-      the local copy, offline. You need <strong>Java 21 or newer</strong> — nothing else.</p>
+    <p class="lede">Download one launcher, put it anywhere, run it. On a machine where Maven is
+      already set up — the usual case inside a company — there is <strong>nothing to configure</strong>:
+      the launcher reads the repository and its credentials from <code>~/.m2/settings.xml</code>. On the
+      first run it fetches the application and caches it; every run after that starts from the local
+      copy, offline. You need <strong>Java 21 or newer</strong> — nothing else.</p>
 
     <div class="downloads">
       <a class="dl" href="downloads/nexuslink.sh" download><strong>nexuslink.sh</strong><span>Linux and macOS</span></a>
@@ -224,15 +226,20 @@
 
     <h3>First run</h3>
 <pre><code><span class="c"># Linux / macOS</span>
-export NEXUSLINK_REPO_URL=https://artifactory.your-company.com/artifactory/libs-release-local
+chmod +x nexuslink.sh
 ./nexuslink.sh
 
 <span class="c"># Windows</span>
-set NEXUSLINK_REPO_URL=https://artifactory.your-company.com/artifactory/libs-release-local
 nexuslink.bat</code></pre>
-    <p>Ask whoever publishes NexusLink in your organisation for the repository URL. If they ship a
-      <code>~/.nexuslink/bootstrap.conf</code> (or <code>%USERPROFILE%\.nexuslink\bootstrap.conf</code>)
-      with the URL and credentials already in it, you just run the script.</p>
+    <p>That is the whole thing. The launcher looks for the repository in this order: <code>--repo</code>
+      on the command line, then <code>NEXUSLINK_REPO_URL</code>, then
+      <code>~/.nexuslink/bootstrap.conf</code> if your administrators ship one, and finally
+      <strong>Maven's own <code>settings.xml</code></strong> — the mirror that covers everything, or
+      else the first repository a profile declares, with credentials taken from the matching
+      <code>&lt;server&gt;</code>. If Maven can already reach your Artifactory, so can NexusLink.</p>
+    <p class="note">Only if this machine has no Maven set-up do you need to point the launcher
+      somewhere yourself: <code>./nexuslink.sh --repo https://artifactory.example.com/artifactory/libs-release</code>,
+      or export <code>NEXUSLINK_REPO_URL</code> once.</p>
 
     <h3>Everyday commands</h3>
 <pre><code>nexuslink                      <span class="c"># run; downloads only if this version is not cached</span>
@@ -248,9 +255,9 @@ nexuslink --help               <span class="c"># the full usage text</span></cod
     <h3>Settings</h3>
     <table>
       <tr><th>Variable</th><th>Meaning</th></tr>
-      <tr><td><code>NEXUSLINK_REPO_URL</code></td><td>The Maven repository to fetch from</td></tr>
+      <tr><td><code>NEXUSLINK_REPO_URL</code></td><td>The Maven repository to fetch from. Optional — without it the launcher reads <code>~/.m2/settings.xml</code>.</td></tr>
       <tr><td><code>NEXUSLINK_VERSION</code></td><td><code>RELEASE</code> (default), <code>LATEST</code>, or an exact version</td></tr>
-      <tr><td><code>NEXUSLINK_USER</code> / <code>NEXUSLINK_TOKEN</code></td><td>Repository credentials, if it needs them</td></tr>
+      <tr><td><code>NEXUSLINK_USER</code> / <code>NEXUSLINK_TOKEN</code></td><td>Repository credentials, if it needs them. Optional — otherwise taken from the <code>&lt;server&gt;</code> in <code>settings.xml</code>.</td></tr>
       <tr><td><code>NEXUSLINK_HOME</code></td><td>Where the cache lives (default <code>~/.nexuslink</code>). Set it to <code>./nexuslink-cache</code> to keep everything in the current folder.</td></tr>
       <tr><td><code>NEXUSLINK_JAVA_OPTS</code></td><td>Extra JVM options, e.g. <code>-Xmx2g</code></td></tr>
       <tr><td><code>JAVA_HOME</code></td><td>The JDK to run with, if not the one on <code>PATH</code></td></tr>
@@ -324,7 +331,7 @@ mvn -q -pl nexuslink-protocol-kafka test   <span class="c"># just the module you
     <h2>If something goes wrong</h2>
     <table>
       <tr><th>Message</th><th>What it means</th></tr>
-      <tr><td><code>set NEXUSLINK_REPO_URL…</code></td><td>The launcher does not know where to fetch from. Export the variable, or ask for the <code>bootstrap.conf</code>.</td></tr>
+      <tr><td><code>no repository found in ~/.m2/settings.xml</code></td><td>This machine has no Maven repository configured and no <code>NEXUSLINK_REPO_URL</code>. Pass <code>--repo &lt;url&gt;</code>, or ask for the <code>bootstrap.conf</code>.</td></tr>
       <tr><td><code>checksum mismatch</code></td><td>What arrived does not match the repository — usually a proxy interfering. Retry; if it persists, tell whoever maintains the repository. Nothing is cached.</td></tr>
       <tr><td><code>nothing cached … --offline</code></td><td>This machine has never run online. Run once with network access first.</td></tr>
       <tr><td><code>Java N found, but … needs 21</code></td><td>Install a newer JDK, or point <code>JAVA_HOME</code> at one you have.</td></tr>

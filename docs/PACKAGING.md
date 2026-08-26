@@ -95,6 +95,28 @@ Change `<type>` in the `jpackage` profile (in `nexuslink-app/pom.xml`) to a plat
 
 ---
 
+## The application icon
+
+The mark lives once, as SVG, at
+`nexuslink-ui/src/main/resources/com/nexuslink/ui/images/logo.svg`. Two consumers render from it:
+
+- **The running window** — JavaFX cannot load SVG, so the PNGs beside it (`icon-16.png` … 
+  `icon-512.png`) are what `AppIcons.apply(stage)` puts on the task bar, the alt-tab switcher and the
+  window decoration. `AppIconsResourceTest` fails the build if one goes missing.
+- **The packaged application** — `jpackage` takes one icon per platform: `dist/icons/nexuslink.ico`
+  on Windows, `dist/icons/nexuslink.png` elsewhere, selected by the `icon-windows` / `icon-other`
+  profiles. macOS wants an `.icns`, which only Apple's tooling produces; until one is checked in a
+  mac build falls back to the PNG and jpackage uses its own default rather than failing.
+
+To regenerate them after changing the mark, render the SVG at each size (any renderer will do — a
+headless browser screenshot is enough) and rebuild the `.ico` from the 512 px PNG:
+
+```bash
+python3 -c "from PIL import Image; Image.open('nexuslink-ui/src/main/resources/com/nexuslink/ui/images/icon-512.png').save('dist/icons/nexuslink.ico', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+```
+
+`docs/assets/` carries the same mark for the website and the README; keep the two in step.
+
 ## Notes & next steps
 
 - **Size:** the fat JAR is large because it bundles the AWS SDK, gRPC, Kafka, database drivers, JavaFX

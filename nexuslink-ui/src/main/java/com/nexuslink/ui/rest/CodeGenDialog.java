@@ -50,6 +50,7 @@ public final class CodeGenDialog {
         }
 
         Stage stage = new Stage();
+        com.nexuslink.ui.util.AppIcons.apply(stage);
         if (owner != null) stage.initOwner(owner);
         stage.setTitle("Generate code");
 

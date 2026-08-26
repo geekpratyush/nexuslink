@@ -9,6 +9,16 @@ records only work that is in the code and verified.
 
 ### Brand and the public site
 
+- **The launcher no longer needs to be told where Artifactory is.** Where Maven is already set up —
+  the normal case on a corporate machine — `nexuslink.sh` / `nexuslink.ps1` read the repository and
+  its credentials from `~/.m2/settings.xml`: the mirror whose `mirrorOf` covers everything, else the
+  first repository a profile declares, with the matching `<server>` for username and password. The
+  order is `--repo`, then `NEXUSLINK_REPO_URL`, then `bootstrap.conf`, then `settings.xml`, and the
+  error when nothing is found says so. `MAVEN_SETTINGS` overrides which file is read.
+- **The mark is drawn heavier** so it survives being scaled to a 16–32 px icon, and it is now the
+  **application icon**: `AppIcons` puts the rendered PNGs on every window, and `jpackage` stamps the
+  packaged app with `dist/icons/nexuslink.ico` on Windows and `nexuslink.png` elsewhere.
+
 - **A logo system** in `docs/assets/`: an icon mark — a red canopy over an `N` drawn as three linked
   runs, the whole product in one shape — plus light and dark full lockups carrying the wordmark and
   the tagline, and a favicon. Plain SVG with no embedded fonts, so it renders anywhere.
