@@ -19,13 +19,11 @@ records only work that is in the code and verified.
 - **A GitHub Pages site** in `docs/` — `.nojekyll`, a self-contained `index.html`, and
   `docs/downloads/` holding the three launchers, refreshed from `dist/` by `publish.sh`.
 
-- **Install from your own Artifactory, without the source.** `mvn -Pfatjar,fatjar-all-platforms,
-  publish … deploy` publishes the self-contained JAR as the `all` classifier; users get one script
-  (`dist/nexuslink.sh` / `dist/nexuslink.cmd`) that downloads it once, caches it under
-  `~/.nexuslink/runtime`, and runs offline thereafter. `--update`, `--offline`, `--version`,
-  `--list`, `--where`. Resolves `RELEASE`/`LATEST` and timestamped `-SNAPSHOT` filenames, verifies
-  the repository's `.sha256` or `.sha1`, and never leaves a partial download in the cache.
-  See `DISTRIBUTION.md`.
+- **Install from your own Artifactory, without the source.** The `publish` Maven profile attaches the
+  self-contained JAR as the `all` classifier and deploys it; the launchers download it once, cache it
+  under `~/.nexuslink/runtime`, and run offline thereafter. They resolve `RELEASE`/`LATEST` and
+  timestamped `-SNAPSHOT` filenames, verify the repository's `.sha256` or `.sha1`, and never leave a
+  partial download in the cache. See `DISTRIBUTION.md`.
 - The main window now opens **maximized**.
 
 ### Security and presentation of credentials
