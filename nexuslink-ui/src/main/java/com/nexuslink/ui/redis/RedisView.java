@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  * Redis client tab — connect with a {@code redis://} URI, browse keys (with typed value preview in
  * the details panel), and run commands from a console.
  */
-public final class RedisView extends BorderPane {
+public final class RedisView extends BorderPane implements com.nexuslink.ui.main.DemoConnectable {
 
     private final RedisService service = new RedisService();
     private final ResourceExplorerView explorer = new ResourceExplorerView("Keys");
@@ -169,6 +169,11 @@ public final class RedisView extends BorderPane {
             completionPopup.hide();
         });
         return item;
+    }
+
+    @Override
+    public void connectForDemo() {
+        connect();
     }
 
     private void connect() {

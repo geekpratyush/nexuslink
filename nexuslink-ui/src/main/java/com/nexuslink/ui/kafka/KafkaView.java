@@ -46,7 +46,7 @@ import java.util.function.Consumer;
  * Kafka client tab — connect to a broker (PLAINTEXT/SSL/SASL), browse the topic → partition tree,
  * produce records, and consume a live stream. Built on the Apache Kafka client.
  */
-public final class KafkaView extends BorderPane {
+public final class KafkaView extends BorderPane implements com.nexuslink.ui.main.DemoConnectable {
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
 
@@ -1447,6 +1447,11 @@ public final class KafkaView extends BorderPane {
         Window owner = getScene() == null ? null : getScene().getWindow();
         com.nexuslink.ui.diagnostics.DiagnosticsDialog.run(owner, "Broker " + host + ":" + port,
                 com.nexuslink.core.diagnostics.NetworkProbes.basicSteps(host, port, false, 3000));
+    }
+
+    @Override
+    public void connectForDemo() {
+        connect();
     }
 
     private void connect() {

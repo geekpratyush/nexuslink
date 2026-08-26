@@ -154,6 +154,20 @@ public final class MainWindow {
             for (String name : wanted.split(",")) openNamedTab(name.trim().toLowerCase(java.util.Locale.ROOT));
             // Select the first tab the hook opened, not the REST tab that was already there.
             if (workspace.getTabs().size() > before) workspace.getSelectionModel().select(before);
+
+            // NEXUSLINK_DEMO_CONNECT=1 additionally connects every opened view that knows how,
+            // using the defaults already in its connection bar — for screenshots against test-env.
+            if ("1".equals(System.getenv("NEXUSLINK_DEMO_CONNECT"))
+                    || System.getProperty("nexuslink.democonnect") != null) {
+                for (int i = before; i < workspace.getTabs().size(); i++) {
+                    javafx.scene.Node content = workspace.getTabs().get(i).getContent();
+                    if (content instanceof DemoConnectable view) {
+                        javafx.application.Platform.runLater(view::connectForDemo);
+                    } else if (content instanceof SqlClientView sql) {
+                        javafx.application.Platform.runLater(sql::runDemo);
+                    }
+                }
+            }
         }
 
         // Demo hook: auto-send the first request on startup (for screenshots/smoke test)

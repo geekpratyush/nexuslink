@@ -26,7 +26,7 @@ import java.util.function.Consumer;
  * (databases → collections → indexes, with collStats in the details panel) and run
  * find / aggregate / insert / update / delete operations using Extended-JSON.
  */
-public final class MongoClientView extends BorderPane {
+public final class MongoClientView extends BorderPane implements com.nexuslink.ui.main.DemoConnectable {
 
     private final MongoService service = new MongoService();
     private final MongoExplorer explorerModel = new MongoExplorer(service);
@@ -1733,6 +1733,11 @@ public final class MongoClientView extends BorderPane {
                 default -> "{}";
             });
         }
+    }
+
+    @Override
+    public void connectForDemo() {
+        connect();
     }
 
     private void connect() {
