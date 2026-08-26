@@ -187,10 +187,12 @@ public final class RedisView extends BorderPane {
         String connKey = "Redis@" + uri;
         String connTarget = uri.replaceAll(":[^:@/]+@", ":***@");
         task.setOnSucceeded(e -> {
+            // Name the product and version, not just "Redis": a Valkey or KeyDB server accepts a
+            // different command set, and the console's errors make more sense with that on screen.
+            String server = service.serverInfo().label();
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Connected (" + service.topology().label() + ") — "
-                    + task.getValue() + " key(s)");
-            logger.accept("Redis connected (" + service.topology().label() + ") — "
+            statusLabel.setText("Connected — " + server + " · " + task.getValue() + " key(s)");
+            logger.accept("Redis connected (" + service.topology().label() + ", " + server + ") — "
                     + task.getValue() + " keys");
             explorer.setExplorer(new RedisExplorer(service));
             explorer.load();

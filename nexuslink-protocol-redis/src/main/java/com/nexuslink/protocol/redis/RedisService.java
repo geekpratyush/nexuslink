@@ -10,6 +10,10 @@ import io.lettuce.core.ScoredValue;
 import io.lettuce.core.api.StatefulConnection;
 import io.lettuce.core.cluster.RedisClusterClient;
 import io.lettuce.core.cluster.api.sync.RedisClusterCommands;
+import io.lettuce.core.codec.StringCodec;
+import io.lettuce.core.protocol.CommandArgs;
+import io.lettuce.core.protocol.CommandType;
+import io.lettuce.core.protocol.ProtocolKeyword;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,37 +116,101 @@ public final class RedisService implements AutoCloseable {
         return redis.pubsubChannels();
     }
 
+    /**
+     * Runs one console command line against the server and renders the reply.
+     *
+     * <p>The command is <b>dispatched generically</b> rather than matched against a list we maintain:
+     * the argument list goes to the server as typed, and the server decides what it accepts. That is
+     * the only way a console can be correct across versions and flavours — {@code GETDEL} exists from
+     * 6.2, {@code FUNCTION} from 7.0, {@code OBJECT FREQ} only under an LFU policy, {@code JSON.SET}
+     * and {@code FT.SEARCH} only with the Redis Stack modules loaded, and managed services block
+     * {@code CONFIG} and {@code DEBUG} outright. An unknown command comes back as the server's own
+     * error, which says far more than a client-side "not supported" ever could.
+     *
+     * @return the reply rendered as text, or {@code ERR …} with the server's message
+     */
     public String execute(String commandLine) {
-        String[] p = commandLine.trim().split("\\s+");
-        if (p.length == 0 || p[0].isEmpty()) return "";
-        String cmd = p[0].toUpperCase();
+        List<String> args;
         try {
-            return switch (cmd) {
-                case "PING" -> redis.ping();
-                case "GET" -> nil(redis.get(p[1]));
-                case "SET" -> redis.set(p[1], rest(p, 2));
-                case "DEL" -> String.valueOf(redis.del(Arrays.copyOfRange(p, 1, p.length)));
-                case "EXISTS" -> String.valueOf(redis.exists(Arrays.copyOfRange(p, 1, p.length)));
-                case "TYPE" -> redis.type(p[1]);
-                case "TTL" -> String.valueOf(redis.ttl(p[1]));
-                case "EXPIRE" -> String.valueOf(redis.expire(p[1], Long.parseLong(p[2])));
-                case "KEYS" -> String.join("\n", redis.keys(p.length > 1 ? p[1] : "*"));
-                case "INCR" -> String.valueOf(redis.incr(p[1]));
-                case "DECR" -> String.valueOf(redis.decr(p[1]));
-                case "HSET" -> String.valueOf(redis.hset(p[1], p[2], rest(p, 3)));
-                case "HGET" -> nil(redis.hget(p[1], p[2]));
-                case "HGETALL" -> redis.hgetall(p[1]).toString();
-                case "LPUSH" -> String.valueOf(redis.lpush(p[1], Arrays.copyOfRange(p, 2, p.length)));
-                case "RPUSH" -> String.valueOf(redis.rpush(p[1], Arrays.copyOfRange(p, 2, p.length)));
-                case "LRANGE" -> String.join("\n", redis.lrange(p[1], Long.parseLong(p[2]), Long.parseLong(p[3])));
-                case "SADD" -> String.valueOf(redis.sadd(p[1], Arrays.copyOfRange(p, 2, p.length)));
-                case "SMEMBERS" -> String.join("\n", redis.smembers(p[1]));
-                case "DBSIZE" -> String.valueOf(redis.dbsize());
-                case "PUBLISH" -> String.valueOf(redis.publish(p[1], rest(p, 2)));
-                default -> "(command not supported in console: " + cmd + ")";
-            };
-        } catch (Exception e) {
+            args = RedisCommandLine.parse(commandLine);
+        } catch (RedisCommandLine.RedisCommandLineException e) {
             return "ERR " + e.getMessage();
+        }
+        if (args.isEmpty()) return "";
+        if (redis == null) return "ERR not connected";
+
+        String name = args.get(0).toUpperCase(java.util.Locale.ROOT);
+        try {
+            CommandArgs<String, String> commandArgs = new CommandArgs<>(StringCodec.UTF8);
+            // A multi-word command (CONFIG GET, OBJECT ENCODING, CLIENT LIST, XINFO STREAM) is one
+            // keyword plus arguments on the wire, so everything after the name is just an argument.
+            for (int i = 1; i < args.size(); i++) commandArgs.add(args.get(i));
+            Object reply = redis.dispatch(keyword(name), new RedisReplyOutput(StringCodec.UTF8), commandArgs);
+            return render(reply);
+        } catch (Exception e) {
+            String message = e.getMessage();
+            String rendered = message == null ? "ERR " + e.getClass().getSimpleName()
+                    : (message.startsWith("ERR") || message.contains("ERR ") ? message : "ERR " + message);
+            // "unknown command" is usually a version or flavour gap, not a typo — say which.
+            if (rendered.toLowerCase(java.util.Locale.ROOT).contains("unknown command")) {
+                String hint = serverInfo().versionHint(name);
+                if (!hint.isEmpty()) rendered = rendered + "\n(" + hint + ")";
+            }
+            return rendered;
+        }
+    }
+
+    /**
+     * A command keyword for any name — including module commands like {@code JSON.SET} that Lettuce's
+     * built-in {@link CommandType} enum has never heard of.
+     */
+    private static ProtocolKeyword keyword(String name) {
+        byte[] bytes = name.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        return new ProtocolKeyword() {
+            @Override public byte[] getBytes() { return bytes; }
+            @Override public String name() { return name; }
+            @Override public String toString() { return name; }
+        };
+    }
+
+    /**
+     * Renders a reply the way {@code redis-cli} does: a nil as {@code (nil)}, a list one element per
+     * line, a map as {@code key = value}, and anything else as its text.
+     */
+    private static String render(Object reply) {
+        if (reply == null) return "(nil)";
+        if (reply instanceof List<?> list) {
+            if (list.isEmpty()) return "(empty list or set)";
+            StringBuilder sb = new StringBuilder();
+            for (Object o : list) {
+                if (sb.length() > 0) sb.append('\n');
+                sb.append(render(o).replace("\n", "\n  "));
+            }
+            return sb.toString();
+        }
+        if (reply instanceof java.util.Map<?, ?> map) {
+            StringBuilder sb = new StringBuilder();
+            map.forEach((k, v) -> {
+                if (sb.length() > 0) sb.append('\n');
+                sb.append(k).append(" = ").append(render(v));
+            });
+            return sb.toString();
+        }
+        return String.valueOf(reply);
+    }
+
+    /**
+     * The server's own description of itself, from {@code INFO} — version, mode and flavour. Used to
+     * label the connection and to explain a command the server does not have.
+     */
+    public RedisServerInfo serverInfo() {
+        if (redis == null) return RedisServerInfo.unknown();
+        try {
+            return RedisServerInfo.parse(String.valueOf(
+                    redis.dispatch(keyword("INFO"), new RedisReplyOutput(StringCodec.UTF8),
+                            new CommandArgs<>(StringCodec.UTF8).add("server"))));
+        } catch (Exception e) {
+            return RedisServerInfo.unknown();
         }
     }
 

@@ -1195,6 +1195,19 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
 - **Excluded:** job/scheduler management (mission non-goal)
 
 ### 8.2 Redis Client (separate driver — not JDBC)
+- [x] **Server-aware console (the Redis equivalent of SQL dialects)** — the console used to match each
+      line against a hardcoded 24-command switch and answer *"(command not supported in console)"* for
+      everything else, which is wrong in principle: what a server accepts depends on its version
+      (`GETDEL` 6.2 · `FUNCTION`/`EXPIRETIME` 7.0 · hash TTLs 7.4), its flavour (Valkey, KeyDB,
+      Dragonfly), its modules (`JSON.*`, `FT.*`) and its host (managed services block `CONFIG`/`DEBUG`).
+      Commands are now **dispatched generically** — the server decides, and its own error comes back.
+      Supporting pieces: pure `RedisCommandLine` (redis-cli quoting/escapes, 8 tests), `RedisReplyOutput`
+      (a `CommandOutput` that accepts every RESP2/RESP3 reply shape — Lettuce's own `ObjectOutput`
+      throws on a top-level scalar, 10 tests) and pure `RedisServerInfo` (product/version/mode from
+      `INFO`, version gates that turn "unknown command" into "GETDEL needs Redis 6.2; this server
+      reports 6.0.16", 11 tests). The status bar now names the product and version.
+      **Live-verified** by `RedisConsoleLiveIT` against a real server: `STRLEN`, `OBJECT ENCODING`,
+      `COPY`, `MEMORY USAGE`, `CONFIG GET`, quoted values and list replies all work.
 - [x] `RedisService` — Lettuce client (`redis://` / `rediss://`); connect, SCAN keys, typed value read, command runner. **Live E2E verified** via `RedisLiveIT` against the local `test-env` stack.
 - [x] **Redis cluster + Sentinel** — pure `RedisTopology` (`of`/`seedUris`/`sentinelSeedUris`/`masterName`, 21 tests) adds a `redis-cluster://h1:6379,h2:6379` seed-list scheme (rewritten to one `redis://` per node, userinfo + `/db` carried onto each) driving a `RedisClusterClient`; `redis-sentinel://…#master` is parsed by Lettuce natively. `RedisService`'s command field is typed to the common supertype `RedisClusterCommands`, so every call site is unchanged in all three modes. `RedisSubscriber` resolves a cluster URI to its first seed and asks a real sentinel for the current master address. **Live-verified** by `RedisClusterLiveIT` (cross-slot keys + cluster-wide SCAN + pub/sub vs a cluster-enabled Redis) and `RedisSentinelLiveIT` (round-trip + master resolution + pub/sub vs a real sentinel).
 - [x] Data-type value rendering: String/Hash/List/Set/ZSet/Stream (in the details panel)
@@ -1230,6 +1243,16 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       (subscribe through the panel's control → publish → assert the row appears).
 
 ### 8.3 MongoDB Client (separate driver — not JDBC)
+- [x] **Deployment-aware commands (the Mongo equivalent of SQL dialects)** — pure `MongoServerInfo`
+      reads product, version and topology from the server's own `buildInfo` + `hello` (falling back to
+      `isMaster`), recognises the wire-compatible imitations (Amazon DocumentDB, Azure Cosmos DB,
+      FerretDB, Percona) and answers what the deployment can actually do. `collectionStats` now uses the
+      **`$collStats` aggregation stage on 6.2+** — where the `collStats` command is deprecated and
+      shared Atlas tiers refuse it — and the command on older servers, each falling back to the other;
+      user administration is refused with a plain explanation on deployments that have none; transactions
+      and change streams are reported as unavailable on a standalone whatever its version. The status
+      bar names product, version and topology. **10 unit tests + `MongoServerInfoLiveIT`** verified
+      against MongoDB 7.0 in `test-env`.
 > **Studio-3T-class goals:** schema diagram, Compass-style views, SQL queries — see below + Session 20.
 - [x] `MongoService` — `org.mongodb:mongodb-driver-sync` (Apache-2.0) in its own `nexuslink-protocol-mongo` module: connect, list dbs/collections, find, aggregate, count, insertOne, updateMany, deleteMany (Extended-JSON in/out) + `MongoQueryResult`
 - [x] **Connection-string parser** — pure driver-free `MongoConnectionString.parse(...)` for `mongodb://`

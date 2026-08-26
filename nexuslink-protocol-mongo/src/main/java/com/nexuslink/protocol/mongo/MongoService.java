@@ -27,6 +27,8 @@ public final class MongoService implements AutoCloseable {
 
     private MongoClient client;
     private String currentDb;
+    // Read once per connection: which product, version and topology we are actually talking to.
+    private MongoServerInfo serverInfo;
 
     /** Opens a client and verifies connectivity by listing database names. */
     public List<String> connect(String connectionString) {
@@ -407,6 +409,10 @@ public final class MongoService implements AutoCloseable {
 
     /** Users defined on {@code database}, rendered as "name — role@db, role@db". */
     public List<String> listUsers(String database) {
+        if (!serverInfo().supportsUserAdministration()) {
+            throw new UnsupportedOperationException(
+                    serverInfo().product() + " does not expose user administration through the driver");
+        }
         Document r = client.getDatabase(database).runCommand(new Document("usersInfo", 1));
         List<String> out = new ArrayList<>();
         for (Object o : (List<?>) r.getOrDefault("users", List.of())) {
@@ -460,8 +466,75 @@ public final class MongoService implements AutoCloseable {
         return out;
     }
 
-    /** Runs {@code collStats} and returns the headline figures used in the details panel. */
+    /**
+     * The deployment's own description of itself — product, version and topology — read once per
+     * connection from {@code buildInfo} and {@code hello}. Drives which commands this client uses.
+     */
+    public MongoServerInfo serverInfo() {
+        if (serverInfo != null) return serverInfo;
+        if (client == null) return MongoServerInfo.unknown();
+        Document build = null;
+        Document hello = null;
+        try {
+            build = client.getDatabase("admin").runCommand(new Document("buildInfo", 1));
+        } catch (RuntimeException ignored) {
+            // A locked-down deployment may refuse buildInfo; the version simply stays unknown.
+        }
+        try {
+            hello = client.getDatabase("admin").runCommand(new Document("hello", 1));
+        } catch (RuntimeException e) {
+            try {   // Pre-5.0 servers (and some imitations) only know the old name.
+                hello = client.getDatabase("admin").runCommand(new Document("isMaster", 1));
+            } catch (RuntimeException ignored) { }
+        }
+        serverInfo = MongoServerInfo.of(build, hello);
+        return serverInfo;
+    }
+
+    /**
+     * Collection statistics for the details panel.
+     *
+     * <p>Read with the {@code $collStats} aggregation stage on 6.2+, where the {@code collStats}
+     * command is deprecated and shared Atlas tiers refuse it outright; older servers get the command.
+     * If the preferred route fails the other one is tried, so a deployment that reports a version it
+     * does not honour still shows its numbers.
+     */
     public java.util.Map<String, String> collectionStats(String collection) {
+        if (serverInfo().prefersCollStatsAggregation()) {
+            try {
+                return collectionStatsViaAggregation(collection);
+            } catch (RuntimeException e) {
+                return collectionStatsViaCommand(collection);   // fall back to the deprecated command
+            }
+        }
+        try {
+            return collectionStatsViaCommand(collection);
+        } catch (RuntimeException e) {
+            return collectionStatsViaAggregation(collection);
+        }
+    }
+
+    /** {@code $collStats} — the supported route from 6.2 on. */
+    private java.util.Map<String, String> collectionStatsViaAggregation(String collection) {
+        Document stage = new Document("$collStats",
+                new Document("storageStats", new Document()).append("count", new Document()));
+        Document result = collection(collection).aggregate(List.of(stage)).first();
+        if (result == null) throw new IllegalStateException("$collStats returned nothing");
+        Document storage = (Document) result.getOrDefault("storageStats", new Document());
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        Object count = storage.get("count") != null ? storage.get("count") : result.get("count");
+        out.put("Documents", String.valueOf(count));
+        out.put("Storage size", humanBytes(toLong(storage.get("storageSize"))));
+        out.put("Data size", humanBytes(toLong(storage.get("size"))));
+        out.put("Avg doc size", humanBytes(toLong(storage.get("avgObjSize"))));
+        out.put("Indexes", String.valueOf(storage.get("nindexes")));
+        out.put("Total index size", humanBytes(toLong(storage.get("totalIndexSize"))));
+        out.put("Capped", String.valueOf(storage.getOrDefault("capped", false)));
+        return out;
+    }
+
+    /** The legacy {@code collStats} command, for servers older than 6.2. */
+    private java.util.Map<String, String> collectionStatsViaCommand(String collection) {
         Document stats = db().runCommand(new Document("collStats", collection));
         java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
         out.put("Documents", String.valueOf(stats.get("count")));
@@ -506,6 +579,7 @@ public final class MongoService implements AutoCloseable {
 
     @Override
     public void close() {
+        serverInfo = null;   // belongs to the connection being dropped
         if (client != null) {
             client.close();
             client = null;

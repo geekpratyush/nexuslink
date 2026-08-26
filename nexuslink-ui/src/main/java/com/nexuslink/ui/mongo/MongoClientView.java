@@ -389,6 +389,11 @@ public final class MongoClientView extends BorderPane {
                 service.authStatus().forEach((k, v) -> sb.append(k).append(": ").append(v).append("\n"));
                 who.setText(sb.toString().trim());
                 users.getItems().setAll(service.listUsers(userDb.getText().trim()));
+            } catch (UnsupportedOperationException unsupported) {
+                // A deployment that has no user administration at all — say so plainly rather than
+                // showing a driver error the user can do nothing about.
+                who.setText(unsupported.getMessage());
+                users.getItems().clear();
             } catch (Exception ex) {
                 who.setText("✖ " + ex.getMessage());
                 users.getItems().clear();
@@ -735,9 +740,14 @@ public final class MongoClientView extends BorderPane {
         };
         task.setOnSucceeded(e -> {
             List<String> dbs = task.getValue();
+            // Name the product, version and topology: a standalone has no transactions or change
+            // streams, and DocumentDB / Cosmos DB answer to a MongoDB version they don't fully honour.
+            var server = service.serverInfo();
             statusLabel.getStyleClass().setAll("status-2xx");
-            statusLabel.setText("Connected — " + dbs.size() + " database(s)");
-            logger.accept("Mongo connected — " + dbs.size() + " dbs");
+            statusLabel.setText("Connected — " + server.label() + " · " + dbs.size() + " database(s)");
+            logger.accept("Mongo connected — " + server.label() + " — " + dbs.size() + " dbs"
+                    + (server.limitations().isEmpty() ? ""
+                       : " (" + String.join("; ", server.limitations()) + ")"));
             explorer.setExplorer(explorerModel);
             explorer.load();
             connectBtn.setDisable(false);
