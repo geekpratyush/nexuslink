@@ -93,6 +93,14 @@ h2 { font-size:82px; line-height:1.06; letter-spacing:-.035em; font-weight:600; 
 .row.head { border-bottom-color:#334155; }
 .row.head div { font-size:22px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
 .fill { color:var(--red); font-family:var(--mono); }
+.slot {
+  border:2px dashed rgba(148,163,184,.55); border-radius:14px; display:flex; align-items:center;
+  justify-content:center; color:#93A6C4; font-size:22px; letter-spacing:.16em; text-transform:uppercase;
+  text-align:center; padding:0 20px;
+}
+.credit { font-size:30px; color:var(--muted); margin-top:10px; }
+.credit b { color:var(--fg); font-weight:600; }
+.divider { width:2px; background:rgba(148,163,184,.35); align-self:stretch; }
 .foot { position:absolute; left:0; right:0; bottom:54px; text-align:center;
   font-size:22px; letter-spacing:.28em; text-transform:uppercase; color:#5C6B85; z-index:1; }
 """
@@ -119,6 +127,35 @@ PROTOCOLS = [
 ]
 
 SLIDES_HTML = {
+"00-citi": page(f"""
+<div class="grid"></div>
+<div class="stage" style="text-align:center">
+  <div style="display:flex;justify-content:center;align-items:center;gap:56px;margin-bottom:56px">
+    <div class="icon" style="width:130px;height:130px">{MARK}</div>
+    <div class="divider" style="height:130px"></div>
+    <div class="slot" style="width:300px;height:130px">Citi logo<br>drop the approved asset here</div>
+  </div>
+  <h2>Built at Citi. Built for Citi.</h2>
+  <div class="sub" style="margin:30px auto 0">Not a licence to renew, not a vendor to review &mdash;
+  an internal engineering tool, written here, running on our own network.</div>
+</div>"""),
+
+"10-credits": page(f"""
+<div class="grid"></div>
+<div class="stage" style="text-align:center">
+  <div style="display:flex;justify-content:center;align-items:center;gap:48px;margin-bottom:52px">
+    <div class="icon" style="width:104px;height:104px">{MARK}</div>
+    <div class="divider" style="height:104px"></div>
+    <div class="slot" style="width:250px;height:104px">Citi logo</div>
+  </div>
+  <div class="eyebrow" style="margin-bottom:18px">Developed as part of</div>
+  <h2 style="font-size:64px">VPs &amp; SVPs who Code</h2>
+  <div class="credit" style="margin-top:44px">By</div>
+  <div style="font-size:46px;font-weight:600;letter-spacing:-.02em;margin-top:6px">Pratyush Ranjan Mishra</div>
+  <div class="tag" style="margin-top:46px">Nexus<span style="color:var(--red)">Link</span>
+    &nbsp;&middot;&nbsp; One Console &middot; Every Protocol</div>
+</div>"""),
+
 "01-title": page(f"""
 <div class="grid"></div>
 <div class="stage" style="text-align:center">
@@ -238,6 +275,22 @@ SLIDES_HTML = {
 
 # Overlays: transparent PNGs to lay over footage in Clipchamp.
 OVERLAY_HTML = {
+"cobrand-lockup": page(f"""
+<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+            display:flex;align-items:center;gap:52px;
+            background:rgba(10,17,40,.58);backdrop-filter:blur(24px);
+            border:1px solid rgba(148,163,184,.30);border-radius:28px;padding:52px 72px;
+            box-shadow:0 40px 120px rgba(0,0,0,.55)">
+  <div class="icon" style="width:120px;height:120px;flex:none">{MARK}</div>
+  <div>
+    <div style="font-size:70px;font-weight:600;letter-spacing:-.03em">Nexus<span style="color:#E31837">Link</span></div>
+    <div style="font-size:22px;letter-spacing:.26em;text-transform:uppercase;color:#93A6C4;margin-top:8px">
+      Built at Citi &middot; Built for Citi</div>
+  </div>
+  <div class="divider" style="height:120px"></div>
+  <div class="slot" style="width:240px;height:120px;flex:none">Citi logo</div>
+</div>""", cls="transparent"),
+
 "lower-third-blank": page("""
 <div style="position:absolute;left:120px;bottom:150px;display:flex;align-items:center;gap:26px;
             background:rgba(7,11,25,.72);backdrop-filter:blur(18px);

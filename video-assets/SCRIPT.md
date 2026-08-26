@@ -1,125 +1,146 @@
 # NexusLink — 3-minute video script
 
-Total run time **3:00**. Narration is written for a calm, unhurried read at roughly 145 words a
-minute — about 420 words. Read it slower than feels natural; the pauses are where the screenshots
-land.
+Total run time **3:00**. Narration reads at roughly 145 words a minute — about 400 words. Read it
+slower than feels natural; the pauses are where the product lands.
 
-Every asset named below is in this folder. Nothing here needs to be drawn, bought or invented.
+Six of the fourteen beats are **finished MP4 clips** in `motion/` — drop them straight on the
+timeline, no editing needed. The rest are stills with a Clipchamp pan-and-zoom on them.
+
+**Before you start:** drop your approved Citi logo into the three placeholder slots (see
+[README](README.md#the-citi-logo)), and fill in the figures on the cost slide.
 
 ---
 
-## Scene 1 — Open (0:00 – 0:12)
+## The timeline
 
-| | |
-|---|---|
-| **Visual** | `slides/01-title.png`. Slow zoom in, 105% → 100%. |
-| **On screen** | NexusLink · One Console · Every Protocol · Zero Context Switching |
-| **Audio** | Music starts alone for the first three seconds, then ducks under the voice. |
+| # | Start | Length | Asset | Kind |
+|---|---|---|---|---|
+| 1 | 0:00 | 6s | `motion/01-logo-reveal.mp4` | clip |
+| 2 | 0:06 | 8s | office footage + `overlays/cobrand-lockup.png` | stock + overlay |
+| 3 | 0:14 | 18s | `slides/02-problem.png` | still |
+| 4 | 0:32 | 6s | `motion/03-protocol-wall.mp4` | clip |
+| 5 | 0:38 | 28s | `motion/04-product-montage.mp4` | clip |
+| 6 | 1:06 | 5s | `motion/06-request-response.mp4` | clip |
+| 7 | 1:11 | 13s | `slides/05-shared.png` | still |
+| 8 | 1:24 | 13s | `slides/06-security.png` | still |
+| 9 | 1:37 | 11s | `slides/04-stack.png` | still |
+| 10 | 1:48 | 16s | `slides/07-cost.png` | still |
+| 11 | 2:04 | 16s | `slides/08-start.png` | still |
+| 12 | 2:20 | 10s | office footage + `overlays/frosted-strip.png` | stock + overlay |
+| 13 | 2:30 | 14s | `slides/09-close.png` | still |
+| 14 | 2:44 | 8s | `motion/05-credits.mp4` | clip |
+| 15 | 2:52 | 8s | `motion/02-built-at-citi.mp4` | clip |
+
+---
+
+## Scene 1 — Open (0:00 – 0:06) · `motion/01-logo-reveal.mp4`
 
 > **Narration.** This is NexusLink. One desktop workbench for every protocol our systems actually
-> run on — built in-house, for us.
+> run on.
 
 ---
 
-## Scene 2 — The problem (0:12 – 0:34)
+## Scene 2 — Built here (0:06 – 0:14) · office footage + `overlays/cobrand-lockup.png`
 
-| | |
-|---|---|
-| **Visual** | `slides/02-problem.png`. Hold. Let the three red figures land. |
-| **Transition in** | Cross dissolve, 0.4s |
+Stock office footage, muted, slowed to 0.5×, with the co-branding lockup floating over it. This is
+the "logo on frosted glass in the office" beat. Search terms are in the README.
+
+> **Narration.** Built at Citi, for Citi — by our own engineers, on our own network.
+
+---
+
+## Scene 3 — The problem (0:14 – 0:32) · `slides/02-problem.png`
+
+Hold. Let the three red figures land.
 
 > **Narration.** Think about how you test a single payment today. It leaves a REST endpoint. It
 > lands on a Kafka topic. It updates a row in Oracle, drops a document in Mongo, triggers an IBM MQ
-> message, and archives to S3. That is six different products, six logins, six sets of credentials —
-> to follow one transaction. And none of those tools can see what the others just did.
+> message, and archives to S3. Six products. Six logins. Six sets of credentials — to follow one
+> transaction. And none of them can see what the others just did.
 
 ---
 
-## Scene 3 — The answer (0:34 – 0:46)
-
-| | |
-|---|---|
-| **Visual** | `slides/03-one-console.png`. Optional: reveal the protocol chips left to right with a wipe. |
+## Scene 4 — The answer (0:32 – 0:38) · `motion/03-protocol-wall.mp4`
 
 > **Narration.** NexusLink replaces all of it with one window. Twenty-six protocols, one set of
-> habits, one place to look.
+> habits.
 
 ---
 
-## Scene 4 — The product, in use (0:46 – 1:46)
+## Scene 5 — The product (0:38 – 1:06) · `motion/04-product-montage.mp4`
 
-Sixty seconds of real screens. **Six to eight seconds each**, cross-dissolve between them, with a
-slow 3–4% zoom on each so nothing sits still. Drop `overlays/logo-bug.png` in the top-right for the
-whole sequence, and put a lower third on each screen (see *Lower thirds* below).
+Twenty-eight seconds of the real thing, already cut: the workbench with eight protocol tabs open,
+then REST, SQL, Kafka, MongoDB, IBM MQ, GraphQL and S3, each with a slow push-in and a
+cross-dissolve between them. **Connected, with live data** — real topics, real rows, real
+databases.
 
-| Time | Screenshot | Lower third |
-|---|---|---|
-| 0:46 | `screenshots/01-one-console.png` | *(no lower third — let the tab bar speak)* |
-| 0:50 | `screenshots/02-rest-client.png` | **REST & API testing** — collections, auth, assertions |
-| 0:57 | `screenshots/03-sql-workbench.png` | **SQL workbench** — query, edit, explain, export |
-| 1:02 | `screenshots/04-kafka.png` | **Kafka** — produce, consume, consumer lag, replay |
-| 1:10 | `screenshots/05-mongodb.png` | **MongoDB** — find, aggregate, change streams |
-| 1:18 | `screenshots/06-ibmmq.png` | **IBM MQ** — browse queues, put, replay the DLQ |
-| 1:26 | `screenshots/07-graphql.png` | **GraphQL** — introspection, variables, subscriptions |
-| 1:33 | `screenshots/08-s3.png` | **S3 & object storage** — browse, upload, presign |
-| 1:40 | `screenshots/10-sftp-commander.png` | **File transfer** — two-pane commander, queue, compare |
+Put `overlays/logo-bug.png` on a track above this clip for its whole length, and add a lower third
+per screen (see *Lower thirds*). The screens change every 3.4 seconds in this order:
 
-Open the sequence on `01-one-console.png` for four seconds — eight protocol tabs in a single
-window is the whole argument in one frame — then go through the individual screens.
+| Screen | Lower third |
+|---|---|
+| Eight tabs open | *(none — let the tab bar speak)* |
+| REST | **REST & API testing** — collections, auth, assertions |
+| SQL | **SQL workbench** — query, edit, explain, export |
+| Kafka | **Kafka** — topics, partitions, consumer lag, replay |
+| MongoDB | **MongoDB** — find, aggregate, change streams |
+| IBM MQ | **IBM MQ** — browse queues, put, replay the DLQ |
+| GraphQL | **GraphQL** — introspection, variables, subscriptions |
+| S3 | **S3 & object storage** — browse, upload, presign |
 
 > **Narration.** REST, with collections, enterprise authentication and assertions. A SQL workbench
-> that speaks the dialect your engine actually accepts. Kafka — produce, consume, watch consumer lag,
-> replay a topic. MongoDB, with aggregation and change streams. IBM MQ: browse the queue, put a
-> message, replay the dead-letter queue. GraphQL and gRPC. S3 and object storage. SFTP, with a
-> two-pane commander and a transfer queue. Every one of them, in the same window, with the same
-> keystrokes.
+> that speaks the dialect your engine actually accepts. Kafka — topics, partitions, consumer lag,
+> replay. MongoDB, with aggregation and change streams. IBM MQ: browse the queue, put a message,
+> replay the dead-letter queue. GraphQL. S3 and object storage. Every one of them in the same
+> window, with the same keystrokes.
 
 ---
 
-## Scene 5 — Why one tool beats six (1:46 – 2:02)
+## Scene 6 — A request, live (1:06 – 1:11) · `motion/06-request-response.mp4`
 
-| | |
-|---|---|
-| **Visual** | `slides/05-shared.png`. Hold. |
+The request in flight, then the response arriving — two real captures from one run, dissolved so
+the two-hundred lands on screen.
 
-> **Narration.** And because it is one tool, the tedious parts happen once. One encrypted vault for
-> credentials. One set of environment variables that resolve the same way in a URL, a broker or a
-> bucket name. One searchable history of everything you have run — that you can replay.
+> **Narration.** Send a request; the response, the timing and the payload come back in one place.
 
 ---
 
-## Scene 6 — Security posture (2:02 – 2:18)
+## Scene 7 — Why one tool beats six (1:11 – 1:24) · `slides/05-shared.png`
 
-| | |
-|---|---|
-| **Visual** | `slides/06-security.png`. Hold. |
+> **Narration.** Because it is one tool, the tedious parts happen once. One encrypted vault. One
+> set of environment variables that resolve the same in a URL, a broker or a bucket name. One
+> searchable history of everything you have run.
+
+---
+
+## Scene 8 — Security posture (1:24 – 1:37) · `slides/06-security.png`
 
 > **Narration.** It is offline-first. No account, no telemetry, nothing phoning home. It runs on an
 > air-gapped network, and it is distributed from the Artifactory we already control.
 
 ---
 
-## Scene 7 — The commercial case (2:18 – 2:36)
+## Scene 9 — The stack (1:37 – 1:48) · `slides/04-stack.png`
 
-| | |
-|---|---|
-| **Visual** | `slides/07-cost.png` — **fill in the figures before you present this.** |
+> **Narration.** Every hop of a transaction — database, broker, queue, API, object store — in one
+> window.
 
-> **Narration.** Then there is the licence line. Every one of those six tools is a per-seat renewal,
+---
+
+## Scene 10 — The commercial case (1:48 – 2:04) · `slides/07-cost.png`
+
+**Fill in the figures before you present this.**
+
+> **Narration.** Then there is the licence line. Every one of those tools is a per-seat renewal,
 > multiplied by the size of engineering. NexusLink is ours: no per-seat licence, no renewal, no
 > vendor review. Put our own contract numbers against that list and the saving speaks for itself.
 
-**Before you export:** the seats and cost columns are deliberately blank. Open
-`src/slides/07-cost.html`, replace the `&mdash;` cells with your real numbers, and re-run
+Open `src/slides/07-cost.html`, replace the `&mdash;` cells with real numbers, and re-run
 `python3 video-assets/src/make_slides.py`. Do not present invented figures.
 
 ---
 
-## Scene 8 — How easy it is to start (2:36 – 2:52)
-
-| | |
-|---|---|
-| **Visual** | `slides/08-start.png`, then optionally cut to `screenshots/02-rest-client.png` on the last line. |
+## Scene 11 — How easy it is to start (2:04 – 2:20) · `slides/08-start.png`
 
 > **Narration.** Starting takes a minute. Download one file for your platform and run it. It reads
 > the Artifactory settings already on your machine, downloads once, and opens. Every run after that
@@ -127,52 +148,53 @@ window is the whole argument in one frame — then go through the individual scr
 
 ---
 
-## Scene 9 — Close (2:52 – 3:00)
+## Scene 12 — People (2:20 – 2:30) · office footage + `overlays/frosted-strip.png`
 
-| | |
-|---|---|
-| **Visual** | `slides/09-close.png`. Slow zoom out. Music comes back up. |
+Developers at desks, collaborating — stock footage, muted, slowed slightly, with the gradient strip
+across the bottom so the closing line reads cleanly over it.
+
+> **Narration.** One console. Every protocol. However you work.
+
+---
+
+## Scene 13 — Close (2:30 – 2:44) · `slides/09-close.png`
 
 > **Narration.** Stop switching windows. Start shipping.
 
 ---
 
+## Scene 14 — Credits (2:44 – 2:52) · `motion/05-credits.mp4`
+
+> **Narration.** Developed as part of the VPs and SVPs who Code program, by Pratyush Ranjan Mishra.
+
+---
+
+## Scene 15 — Sign-off (2:52 – 3:00) · `motion/02-built-at-citi.mp4`
+
+No narration. Music comes back up and the clip fades out.
+
+---
+
 ## Lower thirds
 
-`overlays/lower-third-blank.png` is a frosted-glass plate with the logo and two lines of placeholder
-text. In Clipchamp, place it over the screenshot, then add two text boxes on top of it:
+`overlays/lower-third-blank.png` is a frosted plate with the logo and two lines of placeholder text.
+Place it over the montage, then add two text boxes on top:
 
-- **Title** — 44 px, semibold, white, positioned over `TITLE HERE`
-- **Subtitle** — 24 px, `#93A6C4`, positioned over `subtitle here`
+- **Title** — 44 px, semibold, white, over `TITLE HERE`
+- **Subtitle** — 24 px, `#93A6C4`, over `subtitle here`
 
-Build it once, then copy and paste it down the timeline and retype the words for each screen. Fade
-each one in over 0.3s, 1 second after its screenshot appears.
+Build it once, copy it down the timeline, retype the words. Fade each in over 0.3s, a second after
+its screen appears.
 
 ---
 
 ## Music and pacing
 
-- Pick something restrained from Clipchamp's stock library: **corporate / ambient / technology**,
-  90–110 bpm, no vocals, no drop. Search terms: *corporate inspiring*, *ambient technology*,
-  *minimal documentary*.
-- Set the music to about **-18 dB** under the narration, and let it play alone for the first three
-  seconds and the last five.
-- Cut on the beat where you can, especially through the screenshot montage in Scene 4.
-- Every transition should be a **cross dissolve of 0.3–0.5s**. Nothing spins, bounces or wipes in
-  from off-screen — the restraint is what makes it look expensive.
-
----
-
-## If you want a live-data version
-
-The screenshots show the product with nothing connected — clean, but quiet. For screens with real
-data in them (topics listed, rows returned, messages flowing), start the local test environment and
-re-shoot:
-
-```bash
-cd test-env && docker compose up -d          # Kafka, Mongo, Postgres, MinIO, …
-./video-assets/src/shoot.sh 04-kafka kafka 12
-```
-
-Then connect inside the app before the snapshot fires by raising the delay
-(`./video-assets/src/shoot.sh 04-kafka kafka 30`) and clicking Connect yourself while it counts down.
+- Clipchamp stock library: **corporate / ambient / technology**, 90–110 bpm, no vocals, no drop.
+  Search *corporate inspiring*, *ambient technology*, *minimal documentary*.
+- Music at about **−18 dB** under the narration. Let it play alone for the first three seconds and
+  the last eight, under the credits.
+- Every cut between stills: **cross dissolve, 0.3–0.5s**. The clips already fade in and out, so butt
+  them straight against their neighbours.
+- Nothing spins, bounces or slides. The restraint is what makes it read as an organisation video
+  rather than a slideshow.

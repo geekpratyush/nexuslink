@@ -43,23 +43,50 @@ public class NexusLinkLauncher extends Application {
      */
     private void scheduleScreenshot(Stage stage, String path) {
         double delay = Double.parseDouble(System.getProperty("nexuslink.screenshot.delay", "6"));
+        int frames = Integer.parseInt(System.getProperty("nexuslink.screenshot.frames", "1"));
+        double interval = Double.parseDouble(System.getProperty("nexuslink.screenshot.interval", "0.2"));
+
         javafx.animation.PauseTransition wait =
                 new javafx.animation.PauseTransition(javafx.util.Duration.seconds(delay));
         wait.setOnFinished(e -> {
-            int status = 0;
-            try {
-                javafx.scene.image.WritableImage image = stage.getScene().snapshot(null);
-                writePng(image, java.nio.file.Path.of(path));
-                System.out.println("screenshot: " + path
-                        + " (" + (int) image.getWidth() + "x" + (int) image.getHeight() + ")");
-            } catch (Exception ex) {
-                System.err.println("screenshot failed: " + ex);
-                status = 1;
+            if (frames <= 1) {
+                shoot(stage, path, -1);
+                Platform.exit();
+                System.exit(0);
+                return;
             }
-            Platform.exit();
-            System.exit(status);
+            // A burst: the same snapshot taken repeatedly while the UI is still changing, which is
+            // what turns a connect or a send into a few seconds of real motion.
+            javafx.animation.Timeline burst = new javafx.animation.Timeline();
+            for (int i = 0; i < frames; i++) {
+                int index = i;
+                burst.getKeyFrames().add(new javafx.animation.KeyFrame(
+                        javafx.util.Duration.seconds(interval * i), ev -> shoot(stage, path, index)));
+            }
+            burst.setOnFinished(ev -> {
+                System.out.println("screenshot: " + frames + " frames -> " + path);
+                Platform.exit();
+                System.exit(0);
+            });
+            burst.play();
         });
         wait.play();
+    }
+
+    /** Writes one frame. {@code index} < 0 writes {@code path} as given; otherwise path-NNN.png. */
+    private void shoot(Stage stage, String path, int index) {
+        try {
+            javafx.scene.image.WritableImage image = stage.getScene().snapshot(null);
+            String out = index < 0 ? path
+                    : path.replaceFirst("\\.png$", "") + String.format("-%03d.png", index);
+            writePng(image, java.nio.file.Path.of(out));
+            if (index < 0) {
+                System.out.println("screenshot: " + out
+                        + " (" + (int) image.getWidth() + "x" + (int) image.getHeight() + ")");
+            }
+        } catch (Exception ex) {
+            System.err.println("screenshot failed: " + ex);
+        }
     }
 
     /** Writes a JavaFX image as a PNG, pixel by pixel, so no JavaFX-Swing bridge is needed. */

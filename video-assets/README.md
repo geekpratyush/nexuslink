@@ -1,7 +1,8 @@
 # Video assets
 
-Everything needed to assemble a three-minute NexusLink video in Microsoft Clipchamp. All of it is
-PNG — drag the folder straight into Clipchamp's media panel and it will import.
+Everything needed to assemble a three-minute NexusLink video in Microsoft Clipchamp: six finished
+MP4 clips, eleven title cards, twenty-one screenshots of the running application and five
+transparent overlays. Drag the folder straight into Clipchamp's media panel and it will import.
 
 Start with [`SCRIPT.md`](SCRIPT.md): it is the shot list, the timings and the narration, scene by
 scene. This page is the inventory and the assembly notes.
@@ -12,15 +13,31 @@ scene. This page is the inventory and the assembly notes.
 
 | Folder | What it is | Size |
 |---|---|---|
-| `slides/` | Nine designed 1920×1080 title cards — the spine of the video | full-frame |
+| `motion/` | **Six finished MP4 clips** — drop them on the timeline as they are | 1920×1080, 30fps |
+| `slides/` | Eleven designed 1920×1080 title cards — the spine of the video | full-frame |
 | `screenshots/` | Twenty-one real screens of the running application, dark theme, 1920×1012 | full-frame |
 | `overlays/` | Transparent PNGs to lay **over** footage or screenshots | full-frame, alpha |
 | `src/` | The sources: slide HTML, the renderer, the screenshot harness | — |
+
+### Motion clips
+
+| File | Length | What it is |
+|---|---|---|
+| `01-logo-reveal.mp4` | 6s | The logo and tagline, pushed in slowly, fading up from black |
+| `02-built-at-citi.mp4` | 6s | "Built at Citi. Built for Citi." — the sign-off |
+| `03-protocol-wall.mp4` | 6s | The 26-protocol wall |
+| `04-product-montage.mp4` | 28s | **The centrepiece.** Eight real screens — connected, with live data — each pushed in and cross-dissolved. Ready to use as one clip. |
+| `05-credits.mp4` | 8s | VPs & SVPs who Code · Pratyush Ranjan Mishra |
+| `06-request-response.mp4` | 4.6s | A request in flight dissolving into the 200 OK and its payload — two real captures from one run |
+
+Rebuild them any time with `./video-assets/src/make_motion.sh` (needs `ffmpeg`).
 
 ### Slides
 
 | File | Use |
 |---|---|
+| `00-citi.png` | Built at Citi, built for Citi — with the logo slot |
+| `10-credits.png` | End credits — the program and the author, with the logo slot |
 | `01-title.png` | Opening card |
 | `02-problem.png` | Six tools to test one transaction |
 | `03-one-console.png` | The protocol wall — all 26 |
@@ -37,15 +54,15 @@ Twenty-one real captures of the running application, all 1920×1012, dark theme:
 
 | | |
 |---|---|
-| `01-one-console` | **The hero shot** — eight protocol tabs open in one window: REST, SQL, Kafka, Mongo, IBM MQ, GraphQL, S3, Redis |
+| `01-one-console` | **The hero shot** — eight protocol tabs open in one window (REST, SQL, Kafka, Mongo, IBM MQ, GraphQL, S3, Redis), four of them connected |
 | `02-rest-client` | REST, with a live `200 OK` and a real JSON response |
-| `03-sql-workbench` | SQL client — schema tree, editor, result grid |
-| `04-kafka` | Produce, consume, consumer lag, groups, cluster, schema registry |
-| `05-mongodb` | Query bar, operations, projection view |
+| `03-sql-workbench` | **Connected** — schema tree, query, and rows in the result grid |
+| `04-kafka` | **Connected** — five topics with partitions, produce/consume/lag/groups |
+| `05-mongodb` | **Connected** — MongoDB 7.0, database tree, query bar |
 | `06-ibmmq` | Queue manager, channel, browse and put |
 | `07-graphql` | Query editor, variables, introspection, subscriptions |
 | `08-s3` | Object storage explorer and commander |
-| `09-redis` | Console and pub/sub |
+| `09-redis` | **Connected** — Redis 7.4, keys listed, console and pub/sub |
 | `10-sftp-commander` | Two-pane commander with the transfer queue |
 | `11-grpc` | Service and method pickers, request JSON |
 | `12-ldap` | Search bar, filter builder, DIT tree |
@@ -70,8 +87,26 @@ no history, nothing from anyone's machine.
 | `lower-third-blank.png` | Frosted name plate, bottom left. Put your own text boxes over it — see SCRIPT.md. |
 | `frosted-panel.png` | Large centred frosted card with the logo and tagline. **This is the "logo on frosted glass in the office" shot** — put it over stock office footage. |
 | `frosted-strip.png` | Bottom gradient. Drop it under text that sits on busy footage so the words stay readable. |
+| `cobrand-lockup.png` | **NexusLink + Citi co-branding**, frosted, centred — the "logo on glass in the office" beat. Put it over stock office footage. |
 
 ---
+
+## The Citi logo
+
+Three assets carry a **placeholder slot** for the Citi logo, drawn as a dashed box at the right size
+and position: `slides/00-citi.png`, `slides/10-credits.png` and `overlays/cobrand-lockup.png`.
+
+They are deliberately empty. Reproducing a company's trademark from memory gets the proportions and
+the colour wrong, and co-branding is usually governed by brand rules anyway. Take the approved asset
+from Citi's brand portal and either:
+
+- **In Clipchamp** — drop the logo image on a track above the slide, positioned over the dashed box,
+  and it will cover it; or
+- **In the source** — put the file in `video-assets/src/`, replace the `<div class="slot">…</div>` in
+  `src/make_slides.py` with an `<img>` pointing at it, and re-run the renderer. Cleaner, because the
+  slot disappears rather than being covered.
+
+Check the placement against whatever internal branding guidance applies before you present.
 
 ## The office footage
 
@@ -93,8 +128,9 @@ without a single fabricated image. Keep the footage behind the panel dim — the
 
 1. **New project**, 16:9, 1080p.
 2. Drag this whole folder into the media panel.
-3. Lay the slides and screenshots on **track 1** in the order given in `SCRIPT.md`, each at the
-   duration in the timing column.
+3. Lay the clips, slides and screenshots on **track 1** in the order in `SCRIPT.md` — its timeline
+   table gives the start time and length of all fifteen beats. The MP4s already fade in and out, so
+   butt them straight against their neighbours; only the stills need transitions.
 4. Put the overlays on **track 2**, above the clips they belong to.
 5. Add text boxes on **track 3** for the lower-third words.
 6. Record the narration with Clipchamp's recorder, or use text-to-speech and paste the script in
@@ -126,6 +162,17 @@ Screenshots come from the application snapshotting its own scene:
 ./dist/publish.sh --local --host-only              # build the JAR once
 ./video-assets/src/shoot.sh 04-kafka kafka 10      # <name> <tab> <seconds-to-settle>
 ```
+
+To capture with **live data**, start the test environment first and add the demo-connect hook:
+
+```bash
+cd test-env && docker compose up -d postgres mongo kafka redis rabbitmq
+./video-assets/src/shoot.sh 04-kafka kafka 18 -Dnexuslink.democonnect=1
+```
+
+`-Dnexuslink.democonnect` connects every opened view that knows how, using the defaults already in
+its connection bar. That is how the Kafka, MongoDB, Redis and SQL screens in this folder come to show
+real topics, databases, keys and rows.
 
 The harness runs the app against a throwaway `user.home`, so captures always show a clean profile
 and can never include the operator's own connections or history. It reads the application's own
