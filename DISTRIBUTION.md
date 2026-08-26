@@ -8,7 +8,7 @@ refreshes only when they ask.
 ```
    you                          Artifactory                     a user's machine
  --------                      -------------                   ------------------
- mvn deploy   ------------->   nexuslink-app-      <---------   nexuslink.sh / .cmd
+ publish.sh   ------------->   nexuslink-app-      <---------   nexuslink.sh / .bat / .ps1
  (fat jar)                     1.2.0-all.jar                    downloads once, caches in
                                                                 ~/.nexuslink/runtime, then
                                                                 runs offline every time after
@@ -16,7 +16,62 @@ refreshes only when they ask.
 
 ---
 
-## 1. Publish (you, once per release)
+## 1. Publish — one command, same on a laptop and in a pipeline
+
+```bash
+./dist/publish.sh                          # build -> install to ~/.m2 -> deploy if a repo is configured
+./dist/publish.sh --local                  # local only, never deploy
+./dist/publish.sh --deploy                 # require a deploy; fail if no repository is configured
+./dist/publish.sh --version 1.2.0          # set the release version first
+./dist/publish.sh --host-only              # smaller jar, runs on the build OS only
+```
+
+It **always installs to `~/.m2` first**. That is what makes `nexuslink.sh --local` work on a
+developer machine, and in CI it proves the artifact builds before anything is published anywhere.
+Then, if a repository is configured, it deploys; if not, it says so and stops rather than failing.
+
+The repository is resolved from `--repo` / `--repo-id`, else `NEXUSLINK_REPO_URL` /
+`NEXUSLINK_REPO_ID`. Credentials come from `~/.m2/settings.xml` — never the command line.
+
+### In a pipeline
+
+Write a `settings.xml` from your CI secrets, then call the same script:
+
+```yaml
+# GitHub Actions
+- uses: actions/setup-java@v4
+  with: { java-version: '21', distribution: 'temurin' }
+- run: |
+    mkdir -p ~/.m2
+    cat > ~/.m2/settings.xml <<XML
+    <settings><servers><server>
+      <id>corp-artifactory</id>
+      <username>${{ secrets.ARTIFACTORY_USER }}</username>
+      <password>${{ secrets.ARTIFACTORY_TOKEN }}</password>
+    </server></servers></settings>
+    XML
+- run: ./dist/publish.sh --deploy --version ${{ github.ref_name }}
+  env:
+    NEXUSLINK_REPO_ID: corp-artifactory
+    NEXUSLINK_REPO_URL: https://artifactory.corp/artifactory/libs-release-local
+```
+
+```groovy
+// Jenkins
+withCredentials([usernamePassword(credentialsId: 'artifactory',
+                 usernameVariable: 'U', passwordVariable: 'P')]) {
+  writeFile file: "${env.HOME}/.m2/settings.xml", text: """
+    <settings><servers><server>
+      <id>corp-artifactory</id><username>${U}</username><password>${P}</password>
+    </server></servers></settings>"""
+  withEnv(["NEXUSLINK_REPO_ID=corp-artifactory",
+           "NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local"]) {
+    sh './dist/publish.sh --deploy'
+  }
+}
+```
+
+Under the hood it is still plain Maven, if you would rather call that directly:
 
 ```bash
 mvn -Pfatjar,fatjar-all-platforms,publish -pl nexuslink-app -am clean deploy \
@@ -46,8 +101,16 @@ find it; snapshots work too, and the scripts resolve their timestamped filenames
 
 ## 2. Run (your users, no source code)
 
-Hand them `dist/nexuslink.sh` (Linux/macOS) or `dist/nexuslink.cmd` (Windows) — one file — plus the
-repository URL. They need **Java 21+** and nothing else.
+Hand them one launcher — or point them at the **GitHub Pages site** (`docs/index.html`), which
+offers all three as downloads:
+
+| File | Platform |
+|---|---|
+| `dist/nexuslink.sh` | Linux and macOS |
+| `dist/nexuslink.bat` | Windows — command prompt or double-click |
+| `dist/nexuslink.ps1` | Windows — PowerShell (the `.bat` hands over to this; keep them together) |
+
+They need **Java 21+** and nothing else.
 
 ```bash
 export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
@@ -71,11 +134,16 @@ NEXUSLINK_TOKEN=...
 | `nexuslink.sh --version 1.2.0` | Run one specific version (several can sit side by side). |
 | `nexuslink.sh --list` | Show what is cached. |
 | `nexuslink.sh --where` | Print the JAR that would run, without running it. |
-| `nexuslink.sh --help` | The same summary, from the script itself. |
+| `nexuslink.sh --fresh` | Clear the cache, then download and run. For when a build looks wrong. |
+| `nexuslink.sh --clean` | Delete every cached build (add `--version` for just one). |
+| `nexuslink.sh --local` | Run the build installed in `~/.m2` by `publish.sh` — no repository needed. |
+| `nexuslink.sh --help` | The full usage text, from the script itself. |
 
 Everything is configurable by environment variable: `NEXUSLINK_REPO_URL`, `NEXUSLINK_VERSION`
 (`RELEASE`, `LATEST`, or an exact version), `NEXUSLINK_USER` / `NEXUSLINK_TOKEN`, `NEXUSLINK_HOME`
-(default `~/.nexuslink`), `NEXUSLINK_JAVA_OPTS`, and `JAVA_HOME`.
+(default `~/.nexuslink`), `NEXUSLINK_JAVA_OPTS`, and `JAVA_HOME`. Point `NEXUSLINK_HOME` at a
+relative path — `NEXUSLINK_HOME=./nexuslink-cache` — to keep the download in the current folder
+rather than the user's home directory.
 
 ## What the scripts do, and what they refuse to do
 
@@ -109,6 +177,20 @@ Both halves were exercised against a real Maven deployment, not mocked:
   (exit 1, nothing cached), a missing version reports the URL it tried, `--offline` with an empty
   cache says so, and a missing `NEXUSLINK_REPO_URL` explains what to set.
 
+## The GitHub Pages site
+
+`docs/` is ready to serve as a Pages site (Settings ▸ Pages ▸ *Deploy from a branch* ▸ `/docs`):
+
+- **`docs/.nojekyll`** — turns Jekyll off, so nothing is filtered or rewritten.
+- **`docs/index.html`** — a self-contained page (no external CSS or JS, light/dark aware) with the
+  pitch, the install steps, every launcher option, the settings table, and the documentation index.
+- **`docs/downloads/`** — copies of the three launchers, which the download buttons point at.
+  `dist/publish.sh` refreshes them from `dist/` on every run and tells you if they had drifted, so
+  the published scripts cannot silently fall behind the canonical ones.
+
+Verified by serving `docs/` over HTTP: the page and all three downloads return 200, and the HTML
+parses with no unclosed tags.
+
 ## Not done yet
 
 - **No code signing.** The JAR is verified against the repository's checksum, which proves it
@@ -117,5 +199,6 @@ Both halves were exercised against a real Maven deployment, not mocked:
 - **A JRE is still required** on the user's machine (Java 21+). The `jpackage` route in
   `PACKAGING.md` bundles one, at the cost of a per-OS build; that is the option to take if "no Java
   installed" is a hard requirement.
-- **The Windows `.cmd` has not been run on Windows** from here — it mirrors the bash script's logic
-  in PowerShell, but this machine is Linux, so it is unverified on the platform it targets.
+- **The Windows launchers have not been run on Windows** from here — `nexuslink.ps1` mirrors the bash
+  script's logic and `nexuslink.bat` is a thin wrapper around it, but this machine is Linux, so
+  neither is verified on the platform it targets.

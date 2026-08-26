@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NexusLink — Universal Connectivity Workbench</title>
+<meta name="description" content="One desktop tool for REST, SQL, MongoDB, Kafka, MQ, object storage, LDAP, SSH and more. Install with a single script from your own Artifactory.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2430; --muted: #5b6472; --line: #e2e6ee;
+    --card: #f7f9fc; --accent: #2f6fdd; --accent-fg: #ffffff; --code-bg: #f2f4f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171a21; --fg: #e4e8f0; --muted: #99a2b3; --line: #2c313c;
+      --card: #1e222b; --accent: #5b8def; --accent-fg: #0f1218; --code-bg: #12151b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  header { border-bottom: 1px solid var(--line); padding: 56px 0 40px; }
+  h1 { font-size: 2.4rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .tagline { color: var(--muted); font-size: 1.15rem; margin: 0 0 24px; max-width: 62ch; }
+  h2 { font-size: 1.5rem; margin: 48px 0 12px; letter-spacing: -0.01em; }
+  h3 { font-size: 1.1rem; margin: 28px 0 8px; }
+  p, li { max-width: 74ch; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; }
+  code { background: var(--code-bg); padding: 2px 5px; border-radius: 4px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 8px; }
+  .dl {
+    display: block; flex: 1 1 220px; padding: 16px 18px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--card); text-decoration: none; color: var(--fg);
+  }
+  .dl:hover { border-color: var(--accent); }
+  .dl strong { display: block; font-size: 1.05rem; margin-bottom: 2px; }
+  .dl span { color: var(--muted); font-size: 0.9rem; }
+  .cards { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0; }
+  .card { flex: 1 1 280px; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--card); }
+  .card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+  .note { border-left: 3px solid var(--accent); padding: 8px 0 8px 14px; color: var(--muted); margin: 18px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 64px; padding: 28px 0 56px; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>NexusLink</h1>
+  <p class="tagline">
+    One desktop workbench for the protocols an enterprise actually runs on — REST, SQL, MongoDB,
+    Redis, Kafka, MQTT, RabbitMQ, JMS, IBM MQ, Solace, SQS, Pub/Sub, Service Bus, S3, Azure Blob,
+    GCS, SFTP, FTP, LDAP, SNMP, SSH, gRPC, GraphQL, MCP — with one credential vault, one set of
+    environment variables and one request history across all of them.
+  </p>
+  <p class="tagline">
+    Offline-first: no account, no telemetry, no cloud dependency. It runs on an air-gapped network.
+  </p>
+</header>
+
+<h2 id="install">Install</h2>
+<p>
+  Download the launcher for your platform, put it anywhere, and run it. On the first run it fetches
+  the application from your organisation's repository and caches it; every run after that starts from
+  the local copy, offline. You need <strong>Java 21 or newer</strong> — nothing else.
+</p>
+
+<div class="downloads">
+  <a class="dl" href="downloads/nexuslink.sh" download>
+    <strong>nexuslink.sh</strong><span>Linux and macOS</span>
+  </a>
+  <a class="dl" href="downloads/nexuslink.bat" download>
+    <strong>nexuslink.bat</strong><span>Windows — command prompt or double-click</span>
+  </a>
+  <a class="dl" href="downloads/nexuslink.ps1" download>
+    <strong>nexuslink.ps1</strong><span>Windows — PowerShell (the .bat calls this)</span>
+  </a>
+</div>
+<p class="note">
+  On Windows keep <code>nexuslink.bat</code> and <code>nexuslink.ps1</code> next to each other — the
+  batch file hands over to the PowerShell script. On Linux and macOS, make it executable first:
+  <code>chmod +x nexuslink.sh</code>.
+</p>
+
+<h3>First run</h3>
+<pre><code># Linux / macOS
+export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
+./nexuslink.sh
+
+# Windows
+set NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
+nexuslink.bat</code></pre>
+<p>
+  Ask whoever publishes NexusLink in your organisation for the repository URL. If they ship a
+  <code>~/.nexuslink/bootstrap.conf</code> (or <code>%USERPROFILE%\.nexuslink\bootstrap.conf</code>)
+  with the URL and credentials already in it, you just run the script.
+</p>
+
+<h2 id="options">Every option</h2>
+<p>Run <code>nexuslink --help</code> to see this list from the script itself.</p>
+
+<table>
+  <tr><th>Option</th><th>What it does</th></tr>
+  <tr><td><em>(none)</em></td><td>Run. Downloads only if this version is not already cached.</td></tr>
+  <tr><td><code>--local</code></td><td>Run the build installed in <code>~/.m2</code> by <code>publish.sh</code> — no repository needed.</td></tr>
+  <tr><td><code>--offline</code></td><td>Never touch the network. Runs the newest cached build, or says there is none.</td></tr>
+  <tr><td><code>--version &lt;v&gt;</code></td><td>Run a specific version (<code>RELEASE</code>, <code>LATEST</code>, or e.g. <code>1.2.0</code>).</td></tr>
+  <tr><td><code>--repo &lt;url&gt;</code></td><td>Use this repository for one run.</td></tr>
+  <tr><td><code>--update</code></td><td>Download this version again, replacing the cached copy.</td></tr>
+  <tr><td><code>--fresh</code></td><td>Clear the cache first, then download and run. Use when a build looks wrong.</td></tr>
+  <tr><td><code>--list</code></td><td>Show what is cached, with sizes.</td></tr>
+  <tr><td><code>--clean</code></td><td>Delete every cached build. Add <code>--version</code> to delete just one.</td></tr>
+  <tr><td><code>--where</code></td><td>Print the jar that would run, and exit.</td></tr>
+  <tr><td><code>--help</code></td><td>The full usage text.</td></tr>
+</table>
+
+<h3>Settings</h3>
+<table>
+  <tr><th>Variable</th><th>Meaning</th></tr>
+  <tr><td><code>NEXUSLINK_REPO_URL</code></td><td>The Maven repository to fetch from</td></tr>
+  <tr><td><code>NEXUSLINK_VERSION</code></td><td><code>RELEASE</code> (default), <code>LATEST</code>, or an exact version</td></tr>
+  <tr><td><code>NEXUSLINK_USER</code> / <code>NEXUSLINK_TOKEN</code></td><td>Repository credentials, if it needs them</td></tr>
+  <tr><td><code>NEXUSLINK_HOME</code></td><td>Where the cache lives (default <code>~/.nexuslink</code>). Set it to <code>./nexuslink-cache</code> to keep everything in the current folder.</td></tr>
+  <tr><td><code>NEXUSLINK_JAVA_OPTS</code></td><td>Extra JVM options, e.g. <code>-Xmx2g</code></td></tr>
+  <tr><td><code>JAVA_HOME</code></td><td>The JDK to run with, if not the one on <code>PATH</code></td></tr>
+</table>
+
+<h2 id="publish">Publishing it (for whoever maintains the build)</h2>
+<p>One script does the right thing wherever it runs — a developer machine or a CI agent:</p>
+<pre><code>./dist/publish.sh                 # build, install to ~/.m2, and deploy if a repository is configured
+./dist/publish.sh --local         # local only
+./dist/publish.sh --deploy        # require a deploy; fail if no repository is configured
+./dist/publish.sh --version 1.2.0 # set the release version first</code></pre>
+<p>
+  It always installs to <code>~/.m2</code> first — that is what makes <code>nexuslink.sh --local</code>
+  work, and in CI it proves the artifact builds before anything is published. Credentials live in
+  <code>~/.m2/settings.xml</code> under a <code>&lt;server&gt;</code> id, never on the command line,
+  which is also how a CI agent supplies them.
+</p>
+
+<h2 id="what">What is inside</h2>
+<div class="cards">
+  <div class="card"><h3>HTTP &amp; APIs</h3><p>REST with collections and a runner, WebSocket, SSE, GraphQL, gRPC. Enterprise auth built in: OAuth 2.0 with PKCE, AWS SigV4, Digest, HMAC, NTLM, mTLS.</p></div>
+  <div class="card"><h3>Databases</h3><p>A JDBC workbench that generates the SQL your engine actually accepts, plus MongoDB with a Compass-class tree view, a mongosh-style shell, change streams and GridFS. Redis with a console that sends anything the server supports.</p></div>
+  <div class="card"><h3>Messaging</h3><p>Kafka with headers, tombstones, Avro decoding, consumer-group administration and replay. MQTT, RabbitMQ, JMS, IBM MQ, Solace, SQS/SNS, Pub/Sub, Service Bus.</p></div>
+  <div class="card"><h3>Files &amp; directories</h3><p>A two-pane commander over SFTP, FTP, S3, Azure Blob, GCS and MongoDB GridFS — with a transfer queue, directory compare and checksums. LDAP, SNMP and an SSH terminal.</p></div>
+  <div class="card"><h3>One workbench</h3><p>One encrypted vault, one set of <code>${VAR}</code> environments, one searchable history, and code generation — shared by every protocol rather than per-tool.</p></div>
+  <div class="card"><h3>Safe by default</h3><p>Credentials are never displayed in the clear, destructive statements are previewed and confirmed, and bulk writes count what they would touch before they run.</p></div>
+</div>
+
+<h2 id="docs">Documentation</h2>
+<p>Press <strong>F1</strong> in the application for the full help browser — it is searchable and
+covers every menu, submenu and client. In the repository:</p>
+<table>
+  <tr><th>Document</th><th>For</th></tr>
+  <tr><td><a href="README.md">docs/README.md</a></td><td>Index — which document answers which question</td></tr>
+  <tr><td><a href="ARCHITECTURE.md">docs/ARCHITECTURE.md</a></td><td>Module layout, layering, how to add a protocol</td></tr>
+  <tr><td><a href="CHANGELOG.md">docs/CHANGELOG.md</a></td><td>What has shipped, newest first</td></tr>
+  <tr><td><a href="../DISTRIBUTION.md">DISTRIBUTION.md</a></td><td>Publishing to Artifactory, and the bootstrap in detail</td></tr>
+  <tr><td><a href="../PACKAGING.md">PACKAGING.md</a></td><td>Fat JAR and native app-image packaging</td></tr>
+  <tr><td><a href="../RUN.md">RUN.md</a></td><td>Running from source</td></tr>
+</table>
+
+<h2 id="troubleshooting">If something goes wrong</h2>
+<table>
+  <tr><th>Message</th><th>What it means</th></tr>
+  <tr><td><code>set NEXUSLINK_REPO_URL…</code></td><td>The launcher does not know where to fetch from. Export the variable, or ask for the <code>bootstrap.conf</code>.</td></tr>
+  <tr><td><code>checksum mismatch</code></td><td>What arrived does not match the repository — usually a proxy interfering. Retry; if it persists, tell whoever maintains the repository. Nothing is cached.</td></tr>
+  <tr><td><code>nothing cached … --offline</code></td><td>This machine has never run online. Run once with network access first.</td></tr>
+  <tr><td><code>Java N found, but … needs 21</code></td><td>Install a newer JDK, or point <code>JAVA_HOME</code> at one you have.</td></tr>
+  <tr><td><code>Error in glXCreateNewContext</code></td><td>Not an error. JavaFX could not get a hardware graphics context and fell back to software rendering; the app runs normally.</td></tr>
+</table>
+
+<footer>
+  NexusLink — offline-first connectivity workbench. Built by Pratyush Ranjan Mishra.
+</footer>
+
+</div>
+</body>
+</html>

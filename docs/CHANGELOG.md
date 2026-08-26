@@ -9,6 +9,16 @@ records only work that is in the code and verified.
 
 ### Distribution and packaging
 
+- **`dist/publish.sh` — one publish command** that behaves the same on a laptop and in CI: build,
+  install to `~/.m2` always, then deploy if a repository is configured (`--local` never deploys,
+  `--deploy` insists on one). CI examples for GitHub Actions and Jenkins are in `DISTRIBUTION.md`.
+- **Three launchers**: `nexuslink.sh`, `nexuslink.bat` and `nexuslink.ps1`, with `--fresh`
+  (clear then re-download), `--clean` (empty the cache, or one version), `--local` (run the `~/.m2`
+  build with no repository at all) and a real `--help` listing every option and setting. Point
+  `NEXUSLINK_HOME` at a relative path to keep the download in the current folder.
+- **A GitHub Pages site** in `docs/` — `.nojekyll`, a self-contained `index.html`, and
+  `docs/downloads/` holding the three launchers, refreshed from `dist/` by `publish.sh`.
+
 - **Install from your own Artifactory, without the source.** `mvn -Pfatjar,fatjar-all-platforms,
   publish … deploy` publishes the self-contained JAR as the `all` classifier; users get one script
   (`dist/nexuslink.sh` / `dist/nexuslink.cmd`) that downloads it once, caches it under

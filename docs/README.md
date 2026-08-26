@@ -9,6 +9,7 @@ Start here — this page says which document answers which question.
 | Know how the code is laid out, and how to add a protocol | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Build a double-clickable JAR or a native app image | [`../PACKAGING.md`](../PACKAGING.md) |
 | Publish it to my company's Artifactory, so users install with one command | [`../DISTRIBUTION.md`](../DISTRIBUTION.md) |
+| Download a launcher, or read the public page | [`index.html`](index.html) — served by GitHub Pages from this folder |
 | See what shipped and when | [`CHANGELOG.md`](CHANGELOG.md) |
 | See what is planned and what is done | [`../TASKS.md`](../TASKS.md) and [`../.agent-os/specs/PROGRESS.md`](../.agent-os/specs/PROGRESS.md) |
 | Read the original product specification | [`../NexusLink_Specification.md`](../NexusLink_Specification.md) |
@@ -42,3 +43,13 @@ only documentation most users will ever open.
 These documents describe what the code does today, not what is planned. Roadmap items live in
 `TASKS.md` and the specs; anything written here as working has been run. Where a feature has a real
 limitation it is stated in place rather than omitted.
+
+## This folder is also the website
+
+`docs/` doubles as the GitHub Pages site (Settings ▸ Pages ▸ *Deploy from a branch* ▸ `/docs`):
+
+- `.nojekyll` disables Jekyll so every file is served as-is.
+- `index.html` is self-contained — no external CSS or JS, and it follows the reader's light/dark
+  preference.
+- `downloads/` holds the launcher scripts the page offers. They are copies; `dist/` is canonical, and
+  `dist/publish.sh` refreshes them on every run.

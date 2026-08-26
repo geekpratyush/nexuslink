@@ -5,7 +5,9 @@ a build tool, or an installer. You need **Java 21 or newer** and one script.
 
 ## First run
 
-Your admin gives you `nexuslink.sh` (Linux/macOS) or `nexuslink.cmd` (Windows) and a repository URL.
+Your admin gives you a launcher — `nexuslink.sh` (Linux/macOS), or `nexuslink.bat` and
+`nexuslink.ps1` together (Windows) — and a repository URL. They may also point you at an internal
+web page that offers all three as downloads.
 
 ```bash
 export NEXUSLINK_REPO_URL=https://artifactory.corp/artifactory/libs-release-local
@@ -28,9 +30,15 @@ run the script.
 | `nexuslink.sh --version 1.2.0` | Run one specific version. Several can sit side by side. |
 | `nexuslink.sh --list` | Show what is cached. |
 | `nexuslink.sh --where` | Print which file would run, without running it. |
-| `nexuslink.sh --help` | The same summary from the script itself. |
+| `nexuslink.sh --fresh` | Clear the cache, then download and run — for when a build looks wrong. |
+| `nexuslink.sh --clean` | Delete every cached build. Add `--version` to delete just one. |
+| `nexuslink.sh --local` | Run a build installed in `~/.m2` on this machine, with no repository. |
+| `nexuslink.sh --help` | The full usage text from the script itself. |
 
-On Windows use `nexuslink.cmd` with the same options.
+On Windows use `nexuslink.bat` (or `nexuslink.ps1` from PowerShell) with exactly the same options.
+
+To keep the download in the current folder rather than your home directory, point `NEXUSLINK_HOME`
+at a relative path: `NEXUSLINK_HOME=./nexuslink-cache ./nexuslink.sh`.
 
 ## Settings
 
