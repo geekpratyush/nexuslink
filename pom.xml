@@ -736,4 +736,34 @@
             </plugins>
         </pluginManagement>
     </build>
+    <profiles>
+        <!--
+          publish: where `mvn deploy` sends the build. Defined on the parent so a reactor build
+          (-am, which drags in the library modules) can deploy in one command. Point it at your own
+          Artifactory on the command line; credentials belong in ~/.m2/settings.xml under a <server>
+          whose <id> matches nexuslink.repo.id, never on the command line.
+
+            mvn -Pfatjar,fatjar-all-platforms,publish -pl nexuslink-app -am clean deploy \
+                -Dnexuslink.repo.id=corp-artifactory \
+                -Dnexuslink.repo.url=https://artifactory.corp/artifactory/libs-release-local
+        -->
+        <profile>
+            <id>publish</id>
+            <properties>
+                <nexuslink.repo.id>artifactory</nexuslink.repo.id>
+                <nexuslink.repo.url>http://localhost:8081/artifactory/libs-release-local</nexuslink.repo.url>
+                <nexuslink.snapshot.repo.url>${nexuslink.repo.url}</nexuslink.snapshot.repo.url>
+            </properties>
+            <distributionManagement>
+                <repository>
+                    <id>${nexuslink.repo.id}</id>
+                    <url>${nexuslink.repo.url}</url>
+                </repository>
+                <snapshotRepository>
+                    <id>${nexuslink.repo.id}</id>
+                    <url>${nexuslink.snapshot.repo.url}</url>
+                </snapshotRepository>
+            </distributionManagement>
+        </profile>
+    </profiles>
 </project>

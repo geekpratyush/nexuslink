@@ -53,6 +53,51 @@
 
     <profiles>
         <!--
+          publish: attaches the fat JAR as the "all" classifier so `mvn deploy` publishes it. The
+          repository itself is configured by the same-named profile on the parent pom.
+
+          publish: attaches the fat JAR as the "all" classifier and deploys it to a Maven repository
+          (Artifactory, Nexus, …), so end users can fetch it with dist/nexuslink.sh|cmd and never see
+          the source. Build and deploy in one go:
+
+            mvn -Pfatjar,fatjar-all-platforms,publish -pl nexuslink-app -am clean deploy \
+                -Dnexuslink.repo.id=corp-artifactory \
+                -Dnexuslink.repo.url=https://artifactory.corp/artifactory/libs-release-local
+
+          Credentials live in ~/.m2/settings.xml under a <server> whose <id> matches
+          nexuslink.repo.id — never on the command line.
+        -->
+        <profile>
+            <id>publish</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-fat-jar</id>
+                                <phase>package</phase>
+                                <goals><goal>attach-artifact</goal></goals>
+                                <configuration>
+                                    <artifacts>
+                                        <artifact>
+                                            <file>${project.build.directory}/nexuslink.jar</file>
+                                            <type>jar</type>
+                                            <!-- The bootstrap scripts fetch this classifier. -->
+                                            <classifier>all</classifier>
+                                        </artifact>
+                                    </artifacts>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!--
           fatjar: builds a single double-clickable uber JAR (target/nexuslink.jar) that runs on
           Windows / macOS (Intel + Apple Silicon) / Linux from one file. It bundles every dependency
           plus the JavaFX classes AND each platform's native libraries (the win/mac/mac-aarch64

@@ -23,6 +23,11 @@ normal `mvn install` / `mvn test` builds are unaffected.
 > **Java 21 or newer** runtime present. The only way to need *no* Java at all is the `jpackage`
 > route, which bundles its own runtime into the app (and is therefore OS-specific).
 
+> **Distributing it to a team?** See **`DISTRIBUTION.md`**: publish the fat JAR to your Artifactory
+> with `mvn -Pfatjar,fatjar-all-platforms,publish ... deploy`, and hand users `dist/nexuslink.sh` or
+> `dist/nexuslink.cmd`, which downloads it once, caches it under `~/.nexuslink`, and runs offline
+> thereafter — no source code, no build, one command.
+
 ---
 
 ## 1. Double-clickable fat JAR — one file, every desktop OS
