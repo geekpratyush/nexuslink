@@ -1581,11 +1581,16 @@ protocol clients from becoming thirteen codebases. **Start here.**
 - [ ] **10.2 SQL beyond parity** — `SQLX-1` (DML undo + blast radius) and `SQLX-2` shipped
 - [ ] **10.3 File transfer** — P1 complete (FileZilla/WinSCP parity)
 - [ ] **10.4 IBM MQ** — P1 complete (PCF layer, explorer, message browser, DLQ replay)
-- [ ] **10.5 Kafka** — P1 complete (config editing, headers, serdes, cluster panel)
+- [x] **10.5 Kafka** — **all 7 P1 shipped 2026-08-26**: KF-1 topic config editing (incremental, diff-previewed) ·
+      KF-2 cluster/broker panel · KF-3 produce with headers/partition/timestamp/tombstones · KF-4 headers and
+      tombstones on browse+consume · KF-5 Avro / JSON-Schema decoding via the registry · KF-6 consumer-group
+      administration · KF-7 seek by offset/timestamp and replay to another topic. P2/P3 remain — see the spec.
+      _Bug found by the live tests: `stopConsuming()` left the consumer in its group until the session
+      timeout, holding partitions after Stop._
 - [ ] **10.6 Remaining clients** — P1 complete per protocol
 
-**Recommended first build (2026-08-26):** §10.0 governed execution → `SQLX-1` DML undo → `MQ-5`+`MQ-2`
-(the MQ client is furthest from its parity target) → `MG-2`/`MG-3` (Mongo result views).
+**Next up (2026-08-26, after Mongo · REST · Kafka P1):** `MQ-5`+`MQ-2` (the IBM MQ client is now
+furthest from its parity target) → `FX-` file transfer P1 → `SQLX-1` DML undo → the `MSG-` per-protocol P1s.
 
 ---
 
