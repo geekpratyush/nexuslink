@@ -44,13 +44,18 @@ final class QueryBuilderDialog {
     private final CodeArea preview = SqlHighlighter.area();
 
     private final ColumnProvider columnProvider;
+    // The connected engine, so the preview shows SQL that database will actually accept — the row
+    // cap in particular is LIMIT, FETCH FIRST … ROWS ONLY or TOP (n) depending on it.
+    private final com.nexuslink.protocol.db.SqlDialect dialect;
     private final List<CheckBox> columnBoxes = new ArrayList<>();
     private final List<ConditionRow> rows = new ArrayList<>();
     // Columns of the currently selected table, shared by the column pickers, WHERE combos and ORDER BY.
     private List<String> currentColumns = new ArrayList<>();
 
-    QueryBuilderDialog(javafx.stage.Window owner, List<String> tables, ColumnProvider columnProvider) {
+    QueryBuilderDialog(javafx.stage.Window owner, List<String> tables, ColumnProvider columnProvider,
+                       com.nexuslink.protocol.db.SqlDialect dialect) {
         this.columnProvider = columnProvider;
+        this.dialect = dialect == null ? com.nexuslink.protocol.db.SqlDialect.GENERIC : dialect;
         if (owner != null) dialog.initOwner(owner);
         dialog.setTitle("Query Builder");
         dialog.setHeaderText("Assemble a SELECT visually — the SQL updates live below.");
@@ -176,7 +181,7 @@ final class QueryBuilderDialog {
     }
 
     private String buildSql() {
-        SqlQueryBuilder b = new SqlQueryBuilder().table(tableCombo.getValue());
+        SqlQueryBuilder b = new SqlQueryBuilder().dialect(dialect).table(tableCombo.getValue());
         for (CheckBox cb : columnBoxes) if (cb.isSelected()) b.column(cb.getText());
         for (ConditionRow r : rows) {
             Condition c = r.toCondition();

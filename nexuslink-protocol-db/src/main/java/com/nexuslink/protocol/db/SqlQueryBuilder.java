@@ -48,6 +48,7 @@ public final class SqlQueryBuilder {
     private String orderBy;
     private Direction orderDir = Direction.ASC;
     private Integer limit;
+    private SqlDialect dialect = SqlDialect.GENERIC;
 
     public SqlQueryBuilder table(String table) { this.table = table; return this; }
 
@@ -78,19 +79,29 @@ public final class SqlQueryBuilder {
         return this;
     }
 
+    /**
+     * The engine to generate for — it decides how identifiers are quoted and how the row cap is
+     * spelled ({@code LIMIT}, {@code FETCH FIRST … ROWS ONLY}, or a {@code TOP (n)} prefix).
+     * Defaults to {@link SqlDialect#GENERIC}.
+     */
+    public SqlQueryBuilder dialect(SqlDialect dialect) {
+        this.dialect = dialect == null ? SqlDialect.GENERIC : dialect;
+        return this;
+    }
+
     /** Builds the SELECT statement (no trailing semicolon). */
     public String build() {
         if (table == null || table.isBlank()) throw new IllegalStateException("a table is required");
 
-        StringBuilder sb = new StringBuilder("SELECT ");
+        StringBuilder sb = new StringBuilder("SELECT ").append(dialect.topPrefix(limit));
         if (columns.isEmpty()) {
             sb.append('*');
         } else {
             List<String> quoted = new ArrayList<>(columns.size());
-            for (String c : columns) quoted.add(quoteIdent(c));
+            for (String c : columns) quoted.add(dialect.quote(c));
             sb.append(String.join(", ", quoted));
         }
-        sb.append(" FROM ").append(quoteIdent(table.trim()));
+        sb.append(" FROM ").append(dialect.quote(table.trim()));
 
         if (!conditions.isEmpty()) {
             List<String> preds = new ArrayList<>(conditions.size());
@@ -98,16 +109,14 @@ public final class SqlQueryBuilder {
             sb.append(" WHERE ").append(String.join(" AND ", preds));
         }
         if (orderBy != null) {
-            sb.append(" ORDER BY ").append(quoteIdent(orderBy)).append(' ').append(orderDir.name());
+            sb.append(" ORDER BY ").append(dialect.quote(orderBy)).append(' ').append(orderDir.name());
         }
-        if (limit != null) {
-            sb.append(" LIMIT ").append(limit);
-        }
+        sb.append(dialect.limitClause(limit));
         return sb.toString();
     }
 
-    private static String renderCondition(Condition c) {
-        String col = quoteIdent(c.column().trim());
+    private String renderCondition(Condition c) {
+        String col = dialect.quote(c.column().trim());
         Operator op = c.operator();
         if (!op.takesValue()) {
             return col + " " + op.sql();
@@ -115,9 +124,9 @@ public final class SqlQueryBuilder {
         return col + " " + op.sql() + " " + literal(c.value());
     }
 
-    /** Double-quotes an identifier, doubling any embedded double-quotes. */
+    /** Double-quotes an identifier, doubling any embedded double-quotes (the ANSI default). */
     static String quoteIdent(String name) {
-        return "\"" + name.replace("\"", "\"\"") + "\"";
+        return SqlDialect.GENERIC.quote(name);
     }
 
     /**

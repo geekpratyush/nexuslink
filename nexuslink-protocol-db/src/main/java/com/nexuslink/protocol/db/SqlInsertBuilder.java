@@ -24,8 +24,15 @@ public final class SqlInsertBuilder {
 
     private String table;
     private final List<Assignment> assignments = new ArrayList<>();
+    private SqlDialect dialect = SqlDialect.GENERIC;
 
     public SqlInsertBuilder table(String table) { this.table = table; return this; }
+
+    /** The engine to generate for — it decides how identifiers are quoted. */
+    public SqlInsertBuilder dialect(SqlDialect dialect) {
+        this.dialect = dialect == null ? SqlDialect.GENERIC : dialect;
+        return this;
+    }
 
     /** Sets {@code column} to {@code value}, rendered as a number or an escaped string literal. */
     public SqlInsertBuilder value(String column, String value) {
@@ -54,10 +61,10 @@ public final class SqlInsertBuilder {
         List<String> cols = new ArrayList<>(assignments.size());
         List<String> vals = new ArrayList<>(assignments.size());
         for (Assignment a : assignments) {
-            cols.add(SqlQueryBuilder.quoteIdent(a.column()));
+            cols.add(dialect.quote(a.column()));
             vals.add(a.literal());
         }
-        return "INSERT INTO " + SqlQueryBuilder.quoteIdent(table.trim())
+        return "INSERT INTO " + dialect.quote(table.trim())
                 + " (" + String.join(", ", cols) + ") VALUES (" + String.join(", ", vals) + ")";
     }
 }

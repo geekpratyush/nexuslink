@@ -13,6 +13,7 @@ import com.nexuslink.protocol.db.JdbcExplorer;
 import com.nexuslink.protocol.db.JdbcService;
 import com.nexuslink.protocol.db.JdbcTlsParams;
 import com.nexuslink.protocol.db.JdbcTlsSpec;
+import com.nexuslink.protocol.db.SqlDialect;
 import com.nexuslink.protocol.db.CallResult;
 import com.nexuslink.protocol.db.ColumnAggregates;
 import com.nexuslink.protocol.db.CallableSpec;
@@ -514,7 +515,7 @@ public final class SqlClientView extends BorderPane {
                 String id = node.id();
                 String table = id.startsWith("view:") ? id.substring("view:".length())
                                                        : id.substring("table:".length());
-                setEditorText("SELECT * FROM " + table + " LIMIT 100;");
+                setEditorText(dialect().selectAll(table, 100));
                 runQuery();
             }
         });
@@ -736,7 +737,8 @@ public final class SqlClientView extends BorderPane {
             statusLabel.getStyleClass().setAll("meta-label");
             statusLabel.setText("Query builder ready");
             QueryBuilderDialog dialog = new QueryBuilderDialog(
-                    getScene() == null ? null : getScene().getWindow(), tables, this::loadColumnsFor);
+                    getScene() == null ? null : getScene().getWindow(), tables, this::loadColumnsFor,
+                    dialect());
             dialog.showAndBuild().ifPresent(sql -> { setEditorText(sql); runQuery(); });
         });
         listTask.setOnFailed(e -> {
@@ -865,7 +867,7 @@ public final class SqlClientView extends BorderPane {
         String kind = view ? "view" : "table";
 
         MenuItem select = menuItem("Generate SELECT", () -> {
-            setEditorText("SELECT * FROM " + name + " LIMIT 100;");
+            setEditorText(dialect().selectAll(name, 100));
             runQuery();
         });
         MenuItem ddl = menuItem("View / export DDL…", () -> generateStructure(List.of(name)));
@@ -888,12 +890,16 @@ public final class SqlClientView extends BorderPane {
 
         Menu delete = new Menu("Delete");
         if (!view) {
-            delete.getItems().add(menuItem("Truncate — delete every row…", () -> previewAndApply(
-                    "TRUNCATE TABLE " + quoteIdent(name) + ";",
-                    "Delete every row of table \u201C" + name + "\u201D?", this::refreshExplorer, true)));
+            SqlDialect d = dialect();
+            delete.getItems().add(menuItem(d.supportsTruncate()
+                            ? "Truncate — delete every row…"
+                            : "Delete every row…",   // SQLite has no TRUNCATE; it gets an unfiltered DELETE
+                    () -> previewAndApply(d.truncateTable(name),
+                            "Delete every row of table \u201C" + name + "\u201D?",
+                            this::refreshExplorer, true)));
         }
         delete.getItems().add(menuItem("Drop " + kind + "…", () -> previewAndApply(
-                "DROP " + (view ? "VIEW" : "TABLE") + " " + quoteIdent(name) + ";",
+                dialect().dropObject(view ? "VIEW" : "TABLE", name),
                 "Drop " + kind + " \u201C" + name + "\u201D?", this::refreshExplorer, true)));
 
         return new ContextMenu(select, ddl, copy, new SeparatorMenuItem(), create, alter, delete);
@@ -917,7 +923,7 @@ public final class SqlClientView extends BorderPane {
         alter.getItems().add(menuItem("Edit this " + kind + "'s source…", () -> editDefinition(name, false)));
 
         MenuItem drop = menuItem("Drop " + kind + "…", () -> previewAndApply(
-                "DROP " + (function ? "FUNCTION" : "PROCEDURE") + " " + quoteIdent(name) + ";",
+                dialect().dropObject(function ? "FUNCTION" : "PROCEDURE", name),
                 "Drop " + kind + " \u201C" + name + "\u201D?", this::refreshExplorer, true));
 
         return new ContextMenu(run, source, copy, new SeparatorMenuItem(), create, alter,
@@ -938,7 +944,7 @@ public final class SqlClientView extends BorderPane {
         alter.getItems().add(menuItem("Rename column…", () -> renameColumnDialog(table, col)));
 
         MenuItem drop = menuItem("Drop column…", () -> previewAndApply(
-                "ALTER TABLE " + quoteIdent(table) + " DROP COLUMN " + quoteIdent(col) + ";",
+                dialect().dropColumn(table, col),
                 "Drop column \u201C" + col + "\u201D from \u201C" + table + "\u201D?",
                 this::refreshExplorer, true));
 
@@ -964,14 +970,13 @@ public final class SqlClientView extends BorderPane {
         if (!service.isConnected()) { statusLabel.setText("Connect to a database first"); return; }
         statusLabel.getStyleClass().setAll("meta-label");
         statusLabel.setText("Loading the definition of " + name + "…");
+        SqlDialect dialect = dialect();
         Task<String> task = new Task<>() {
             @Override protected String call() {
                 if (view) {
                     String ddl = "";
                     try { ddl = service.exportSchema(List.of(name)); } catch (Exception ignored) { }
-                    return ddl.isBlank()
-                            ? "CREATE OR REPLACE VIEW " + quoteIdent(name) + " AS\nSELECT * FROM \u2026;\n"
-                            : ddl;
+                    return ddl.isBlank() ? dialect.createOrReplaceView(name, "SELECT * FROM \u2026") + "\n" : ddl;
                 }
                 return service.routineSource(name);
             }
@@ -1026,8 +1031,7 @@ public final class SqlClientView extends BorderPane {
             String n = name.getText().trim();
             String sql = body.getText().trim();
             if (n.isBlank() || sql.isBlank()) { statusLabel.setText("A view needs a name and a SELECT"); return; }
-            if (sql.endsWith(";")) sql = sql.substring(0, sql.length() - 1);
-            previewAndApply("CREATE VIEW " + quoteIdent(n) + " AS\n" + sql + ";",
+            previewAndApply(dialect().createOrReplaceView(n, sql),
                     "Create view \u201C" + n + "\u201D?", this::refreshExplorer);
         });
     }
@@ -1042,7 +1046,7 @@ public final class SqlClientView extends BorderPane {
         d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
             String nn = newName.getText().trim();
             if (nn.isBlank() || nn.equals(table)) return;
-            previewAndApply("ALTER TABLE " + quoteIdent(table) + " RENAME TO " + quoteIdent(nn) + ";",
+            previewAndApply(dialect().renameTable(table, nn),
                     "Rename table \u201C" + table + "\u201D to \u201C" + nn + "\u201D?", this::refreshExplorer);
         });
     }
@@ -1183,7 +1187,7 @@ public final class SqlClientView extends BorderPane {
         String text = switch (shape) {
             case "insert" -> ResultGridExporter.toInsertStatements(
                     editTable == null ? "TABLE" : editTable, columns,
-                    clicked == null ? rows : List.of(clicked));
+                    clicked == null ? rows : List.of(clicked), dialect());
             case "markdown" -> ResultGridExporter.toMarkdown(columns, rows);
             default -> ResultGridExporter.toCsv(columns, rows);
         };
@@ -1307,8 +1311,21 @@ public final class SqlClientView extends BorderPane {
         javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
     }
 
-    private static String quoteIdent(String name) {
-        return "\"" + name.replace("\"", "\"\"") + "\"";
+    /**
+     * The dialect of the connected database, decided from the JDBC URL — everything this view
+     * generates (row caps, renames, truncates, view replacement, identifier quoting) goes through it,
+     * because none of that is portable: {@code LIMIT} is a syntax error on Oracle, SQL Server renames
+     * via {@code sp_rename}, MySQL quotes with backticks, SQLite has no {@code TRUNCATE}.
+     */
+    private SqlDialect dialect() {
+        // The live connection wins: the URL field may have been edited since connecting.
+        if (service.isConnected() && service.url() != null) return service.dialect();
+        return SqlDialect.forUrl(urlField.getText() == null ? "" : urlField.getText().trim());
+    }
+
+    /** Quotes an identifier for the connected database. */
+    private String quoteIdent(String name) {
+        return dialect().quote(name);
     }
 
     /**
@@ -1627,7 +1644,7 @@ public final class SqlClientView extends BorderPane {
 
         if (d.showAndWait().orElse(ButtonType.CANCEL) != next) return;
 
-        SqlInsertBuilder ins = new SqlInsertBuilder().table(editTable);
+        SqlInsertBuilder ins = new SqlInsertBuilder().dialect(dialect()).table(editTable);
         int chosen = 0;
         for (int i = 0; i < currentColumns.size(); i++) {
             if (!include.get(i).isSelected()) continue;
@@ -1977,8 +1994,7 @@ public final class SqlClientView extends BorderPane {
         d.getDialogPane().setContent(g);
         d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
             if (name.getText().isBlank() || type.getText().isBlank()) return;
-            previewAndApply("ALTER TABLE " + quoteIdent(table) + " ADD COLUMN "
-                            + quoteIdent(name.getText().trim()) + " " + type.getText().trim() + ";",
+            previewAndApply(dialect().addColumn(table, name.getText().trim(), type.getText().trim()),
                     "Add column “" + name.getText().trim() + "” to “" + table + "”?");
         });
     }
@@ -1993,8 +2009,7 @@ public final class SqlClientView extends BorderPane {
         d.showAndWait().filter(b -> b == ButtonType.OK).ifPresent(b -> {
             String nn = newName.getText().trim();
             if (nn.isBlank() || nn.equals(column)) return;
-            previewAndApply("ALTER TABLE " + quoteIdent(table) + " RENAME COLUMN "
-                            + quoteIdent(column) + " TO " + quoteIdent(nn) + ";",
+            previewAndApply(dialect().renameColumn(table, column, nn),
                     "Rename column “" + column + "” to “" + nn + "”?");
         });
     }
@@ -2876,13 +2891,14 @@ public final class SqlClientView extends BorderPane {
                              String tableName, boolean wholeTable) {
         List<String> columns = gridColumnNames();
         List<List<String>> shown = new ArrayList<>(sortedRows);
+        SqlDialect exportDialect = dialect();
 
         Task<String> task = new Task<>() {
             @Override protected String call() {
                 List<String> cols = columns;
                 List<List<String>> rows = shown;
                 if (wholeTable && editTable != null) {
-                    QueryResult all = service.execute("SELECT * FROM " + editTable);
+                    QueryResult all = service.execute("SELECT * FROM " + exportDialect.quote(editTable));
                     if (all.failed()) throw new IllegalStateException(all.errorMessage());
                     cols = all.columns();
                     rows = all.rows();
@@ -2890,7 +2906,7 @@ public final class SqlClientView extends BorderPane {
                 String content = switch (format) {
                     case CSV -> ResultGridExporter.toCsv(cols, rows);
                     case JSON -> ResultGridExporter.toJson(cols, rows);
-                    case INSERT -> ResultGridExporter.toInsertStatements(tableName, cols, rows);
+                    case INSERT -> ResultGridExporter.toInsertStatements(tableName, cols, rows, exportDialect);
                     case XML -> ResultGridExporter.toXml(cols, rows);
                     case HTML -> ResultGridExporter.toHtml(
                             tableName == null || tableName.isBlank() ? "Query results" : tableName, cols, rows);

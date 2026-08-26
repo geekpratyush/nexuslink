@@ -1133,6 +1133,17 @@ stays green without the stack. See `test-env/README.md`; one-shot runner: `test-
       user ticks a confirmation box**. Also fixed: browsing during a reconnect NPE'd on a null
       connection — metadata lookups now raise a plain "Not connected". **18 new tests**
 
+- [x] **Dialect-correct generated SQL** — every statement the workbench writes for you now goes through
+      pure `SqlDialect` (chosen from the JDBC URL: Postgres · MySQL/MariaDB · Oracle · SQL Server ·
+      SQLite · H2 · Db2 · ANSI fallback), because none of it was portable. Browsing a table is
+      `FETCH FIRST n ROWS ONLY` on Oracle/Db2 and `SELECT TOP (n)` on SQL Server, not `LIMIT`;
+      identifiers quote with backticks on MySQL and brackets on SQL Server; SQLite empties a table with
+      `DELETE` (no TRUNCATE) and Db2 needs `TRUNCATE … IMMEDIATE`; renames go through `sp_rename` on
+      SQL Server; `ADD COLUMN` is `ADD (col type)` on Oracle and `ADD col type` on SQL Server;
+      view replacement is `CREATE OR ALTER VIEW` on SQL Server and a plain `CREATE VIEW` on SQLite.
+      Wired through the schema-tree actions, double-click/Generate SELECT, in-grid update/delete/insert,
+      the visual query builder's live preview, whole-table export and copy-as-INSERT. **22 new tests**
+
 #### 8.1.3 SQL Developer parity — **audit + backlog: `.agent-os/specs/2026-08-25-sql-developer-parity/`**
 > Full capability table and prioritised gaps live in the spec. Summary of what remains:
 

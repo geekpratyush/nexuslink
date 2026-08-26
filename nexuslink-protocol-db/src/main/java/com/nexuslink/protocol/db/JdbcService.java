@@ -225,6 +225,12 @@ public final class JdbcService implements AutoCloseable {
         }
     }
 
+    /** The URL of the current (or most recent) connection, or {@code null} before the first connect. */
+    public String url() { return url; }
+
+    /** The SQL dialect of the connected database, decided from its URL. */
+    public SqlDialect dialect() { return SqlDialect.forUrl(url); }
+
     /** How this connection surfaces printed output, decided from its URL. */
     public ServerOutput serverOutputMode() { return ServerOutput.forUrl(url); }
 

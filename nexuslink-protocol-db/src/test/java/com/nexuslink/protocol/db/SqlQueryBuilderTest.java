@@ -143,4 +143,34 @@ class SqlQueryBuilderTest {
     private static String cond(String col, Operator op, String val) {
         return new SqlQueryBuilder().table("t").where(col, op, val).build();
     }
+
+    @Test
+    void oracleCapsRowsWithFetchFirstInsteadOfLimit() {
+        String sql = new SqlQueryBuilder().dialect(SqlDialect.ORACLE)
+                .table("orders").limit(100).build();
+        assertEquals("SELECT * FROM \"orders\" FETCH FIRST 100 ROWS ONLY", sql);
+    }
+
+    @Test
+    void sqlServerCapsRowsWithATopPrefix() {
+        String sql = new SqlQueryBuilder().dialect(SqlDialect.SQLSERVER)
+                .table("orders").limit(10).build();
+        assertEquals("SELECT TOP (10) * FROM [orders]", sql);
+    }
+
+    @Test
+    void identifiersFollowTheDialectThroughoutTheStatement() {
+        String sql = new SqlQueryBuilder().dialect(SqlDialect.MYSQL)
+                .table("orders").column("qty")
+                .where("qty", SqlQueryBuilder.Operator.GT, "5")
+                .orderBy("qty", SqlQueryBuilder.Direction.DESC)
+                .build();
+        assertEquals("SELECT `qty` FROM `orders` WHERE `qty` > 5 ORDER BY `qty` DESC", sql);
+    }
+
+    @Test
+    void theDefaultDialectStillProducesAnsiLimitSql() {
+        assertEquals("SELECT * FROM \"orders\" LIMIT 5",
+                new SqlQueryBuilder().table("orders").limit(5).build());
+    }
 }

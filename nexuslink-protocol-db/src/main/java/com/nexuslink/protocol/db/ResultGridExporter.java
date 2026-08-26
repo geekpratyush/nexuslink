@@ -60,10 +60,16 @@ public final class ResultGridExporter {
      * single-quoted with embedded quotes doubled; a null cell becomes a bare {@code NULL}.
      */
     public static String toInsertStatements(String table, List<String> columns, List<List<String>> rows) {
+        return toInsertStatements(table, columns, rows, SqlDialect.GENERIC);
+    }
+
+    /** As above, quoting identifiers the way {@code dialect}'s engine expects. */
+    public static String toInsertStatements(String table, List<String> columns, List<List<String>> rows,
+                                            SqlDialect dialect) {
         String target = table == null || table.isBlank() ? "TABLE" : table.trim();
         StringBuilder sb = new StringBuilder();
         for (List<String> row : rows) {
-            SqlInsertBuilder insert = new SqlInsertBuilder().table(target);
+            SqlInsertBuilder insert = new SqlInsertBuilder().table(target).dialect(dialect);
             for (int c = 0; c < columns.size(); c++) {
                 String cell = c < row.size() ? row.get(c) : null;
                 if (cell == null) insert.valueNull(columns.get(c));

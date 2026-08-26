@@ -87,4 +87,18 @@ class SqlInsertBuilderTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new SqlInsertBuilder().table("t").value("  ", "1"));
     }
+
+    @Test
+    void identifiersAreQuotedForTheChosenDialect() {
+        String sql = new SqlInsertBuilder().dialect(SqlDialect.MYSQL)
+                .table("people").value("name", "ada").build();
+        assertEquals("INSERT INTO `people` (`name`) VALUES ('ada')", sql);
+    }
+
+    @Test
+    void sqlServerUsesBrackets() {
+        String sql = new SqlInsertBuilder().dialect(SqlDialect.SQLSERVER)
+                .table("people").value("name", "ada").build();
+        assertEquals("INSERT INTO [people] ([name]) VALUES ('ada')", sql);
+    }
 }
